@@ -122,3 +122,10 @@ here may be forgotten next session.
   `docs/DOC-STYLE.md` (Brad, 2026-11-12).
 - The license is MIT (Brad, 2026-11-12).
 - Commit and push before deploying anywhere (from ECTLogger and MEPN).
+- The main session is the project manager: it plans, splits the work, hands each task to a
+  subagent on the latest Haiku, Sonnet, or Opus with an effort level fit for the task
+  (Haiku for mechanical work, Sonnet for routine code and research, Opus for hard design or
+  review), and checks what comes back before it lands (Brad, 2026-11-12).
+- The colors are red and black, with light and dark modes. Primary is the same crimson in
+  both modes; dark mode doesn't swap it for a lighter red (Brad, 2026-11-12).
+- An entry panel, such as the PIN keypad, is centered on the screen (Brad, 2026-11-12).

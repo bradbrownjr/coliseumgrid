@@ -22,6 +22,7 @@ server there, it listens on all addresses (Vite's `--host`), not only `localhost
 | Command | What it does |
 |---|---|
 | `node tools/check-docs.ts` | The writing-rules check (see "The docs check"). |
+| `node tools/check-palette.ts` | The palette contrast check. Reads `tools/palette.json`; exits non-zero on any failing row (see `DESIGN.md`, "Colors"). |
 
 M1 adds `pnpm dev`, `pnpm build`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, and
 `pnpm check` (all of them, in that order), and this table describes each.
@@ -63,6 +64,31 @@ Brad wants current libraries to avoid known vulnerabilities (2026-11-12).
   to hold `bcrypt` back.)
 - A new dependency needs a reason: what it does that the platform or an existing dependency
   doesn't, and its last release date.
+
+## Theme
+
+MUI 9.5.0, checked 2026-11-12. The color values and rules are in
+[`DESIGN.md`](DESIGN.md), "Colors".
+
+- One theme holds both schemes: `createTheme({ colorSchemes: { light, dark }, cssVariables: {
+  colorSchemeSelector: '.mode-%s' } })`. The default mode is the system setting. Switch with
+  `useColorScheme()`; `mode` is `undefined` on the first render.
+  (<https://mui.com/material-ui/customization/dark-mode/>)
+- To force the TV route dark, wrap it in an element with the class `mode-dark`, which matches
+  the selector `.mode-%s`.
+  (<https://mui.com/material-ui/customization/css-theme-variables/configuration/>)
+- Custom tokens (`win`, `loss`, `upNext`, `focusRing`) are added by module augmentation of
+  `Palette` and `PaletteOptions`, plus `import type {} from
+  '@mui/material/themeCssVarsAugmentation'`. A custom color needs `main`, `light`, `dark`,
+  and `contrastText` set by hand. Components read them as `theme.vars.palette.x`.
+  (<https://mui.com/material-ui/customization/palette/> and
+  <https://mui.com/material-ui/customization/css-theme-variables/usage/>)
+- MUI's default `contrastThreshold` is 3, so set `contrastText` explicitly for every color.
+  (<https://mui.com/material-ui/customization/palette/>)
+- In styles, use `theme.applyStyles('dark', ...)` instead of checking `palette.mode`.
+  (<https://mui.com/material-ui/customization/dark-mode/>)
+- From M1, the theme file in `packages/client` must take its values from `tools/palette.json`,
+  or `check-palette` must read the theme, so the two can't drift.
 
 ## Tests
 

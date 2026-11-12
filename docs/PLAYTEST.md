@@ -19,6 +19,21 @@ Android TV stick.
   `DESIGN.md`.
 - Type the join address and code with the remote. How long does it take?
 
+### Colors on the TV and projector (after M3)
+
+Why: `tools/check-palette.ts` computes contrast from the hex values. It can't see a TV or
+projector washed out by room light.
+
+- Show the Display screen on the real TV with the lights on and with them off. Can you read
+  the handles, the "Up next" marker, and the "Winner" and "Out" labels from where players
+  sit?
+- Do the crimson buttons and the red text (`primary.light`) look different from the magenta
+  error color?
+- Show it on the projector, if one is used. Is gold (win) still clearly different from gray
+  (loss)?
+- Ask a red-green color blind person, if one is around, to point out the winner and the
+  next match.
+
 ### The travel router (after M3)
 
 Why: devices reconnect by address, so the laptop's address has to stay the same.

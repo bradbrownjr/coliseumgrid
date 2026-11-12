@@ -43,14 +43,18 @@ Tasks:
   `ghcr.io/bradbrownjr/coliseumgrid:edge` from the default branch.
 - The server serves the built client and answers `GET /api/health`.
 - Pick the QR code library (see `PLAN.md` section 9).
+- The MUI theme from `DESIGN.md` "Colors": both color schemes, the dark-mode red-text
+  overrides, the button edge, the custom tokens, and the TV route forced dark.
+  `check-palette` reads the theme's values.
 
 Acceptance checks:
 
 - `pnpm check` and `pnpm build` pass locally and in CI.
 - CI fails when `pnpm audit` finds a high or critical advisory.
 - `docker run` on the image serves the client and `/api/health`.
+- `node tools/check-palette.ts` passes as part of `pnpm check`.
 
-**Docs:** `DEVELOPMENT.md` (requirements, commands, layout), `PLAN.md` section 9.
+**Docs:** `DEVELOPMENT.md` (requirements, commands, layout, theme), `DESIGN.md` (colors), `PLAN.md` section 9.
 
 ## M2 Players and sign-up
 
