@@ -1,4 +1,4 @@
-// Palette contrast check for ColiseumGrid. Reads tools/palette.json; exits 1 on any failing row.
+// Palette contrast check for ColiseumGrid. Reads packages/client/src/theme/palette.ts; exits 1 on any failing row.
 // Usage: node tools/check-palette.ts (rules: docs/DESIGN.md, "Colors")
 // Contrast: WCAG 2.2 relative luminance and contrast ratio
 //   https://www.w3.org/TR/WCAG22/#dfn-relative-luminance
@@ -10,26 +10,23 @@
 //   applied in linear RGB, as DaltonLens does: https://daltonlens.org/opensource-cvd-simulation/
 // Hue separation: CIE76 delta E in CIELAB (D65)
 //   http://brucelindbloom.com/index.html?Eqn_DeltaE_CIE76.html
-import { readFileSync } from 'node:fs';
 import process from 'node:process';
+import { PALETTE } from '../packages/client/src/theme/palette.ts';
 type Rgb = [number, number, number];
 type Matrix = readonly [Rgb, Rgb, Rgb];
 interface Swatch {
   main: string;
-  light: string;
   dark?: string;
   contrastText: string;
 }
 const GROUPS = ['primary', 'secondary', 'error', 'warning', 'info', 'success', 'win', 'loss', 'upNext'] as const;
 interface Scheme extends Record<(typeof GROUPS)[number], Swatch> {
+  primary: Swatch & { light: string };
   background: { default: string; paper: string };
   text: { primary: string; secondary: string };
   focusRing: string;
 }
-const P = JSON.parse(readFileSync(new URL('./palette.json', import.meta.url), 'utf8')) as Record<
-  'light' | 'dark',
-  Scheme
->;
+const P: Record<'light' | 'dark', Scheme> = PALETTE;
 
 // Color-vision simulations; null means no simulation.
 const M: Record<'normal' | 'protan' | 'deutan', Matrix | null> = {

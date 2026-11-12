@@ -1,7 +1,9 @@
 # Logo
 
 The ColiseumGrid mark: a two-tier coliseum with a tournament bracket rising from its edges
-to one winner at the top, under a pennant. The app doesn't use these files yet.
+to one winner at the top, under a pennant. The client bundles them: `logo.svg` and
+`logo-dark.svg` in the app bar and on the Sign-up and Display screens, `icon.svg` and
+`icon-dark.svg` as the favicons.
 
 | File | What it is | Use it for |
 |---|---|---|

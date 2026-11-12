@@ -17,8 +17,8 @@ are in [`DOC-STYLE.md`](DOC-STYLE.md). Several rules here are carried over from 
 ## Colors
 
 The palette is red and black, in light and dark modes (Brad, 2026-11-12). The values live in
-[`tools/palette.json`](../tools/palette.json); `node tools/check-palette.ts` checks their
-contrast. The table below is the same data.
+[`packages/client/src/theme/palette.ts`](../packages/client/src/theme/palette.ts), which the
+theme imports; `node tools/check-palette.ts` imports the same file and checks the contrast. The table below is the same data.
 
 | Token | Light | Dark |
 |---|---|---|
@@ -79,7 +79,8 @@ contrast. The table below is the same data.
 - **Dark-mode overrides.** The theme sets `primary.light` for the text, outline, and
   selected states of `MuiButton` (text and outlined), `MuiLink`, `MuiIconButton`, `MuiTab`
   (selected text and indicator), `MuiCheckbox`, `MuiRadio`, and `MuiSwitch` (checked),
-  `MuiChip` (outlined), and `MuiOutlinedInput` and `MuiInputLabel` (focused).
+  `MuiChip` (outlined), and `MuiOutlinedInput` and `MuiInputLabel` (focused). A selected
+  `MuiToggleButton` gets the same, with a `primary.light` border.
 - **The TV route is always dark.** See `DEVELOPMENT.md`, "Theme".
 
 ### Why

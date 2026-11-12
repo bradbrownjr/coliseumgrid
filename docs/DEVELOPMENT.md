@@ -4,13 +4,13 @@ How to work on ColiseumGrid. The design is in [`PLAN.md`](PLAN.md); the writing 
 [`DOC-STYLE.md`](DOC-STYLE.md).
 
 M1 builds the workspace. So far it has `packages/core` (a seeded random source),
-`packages/server` (the health route and the static file server), and the checks. The client
-comes next.
+`packages/server` (the health route and the static file server), `packages/client` (the
+theme and three placeholder screens), and the checks.
 
 ## Requirements
 
 - **Node 26.** The version is in `.nvmrc`. Node runs TypeScript directly (type stripping),
-  so `core` and `server` have no build step.
+  so `core` and `server` have no build step; only the client is built (by Vite).
 - **pnpm 12.** The exact version is `packageManager` in the root `package.json`
   (`pnpm@12.18.0`).
 
@@ -26,14 +26,14 @@ Run `pnpm install` once first.
 | Command | What it does |
 |---|---|
 | `pnpm lint` | Oxlint over the whole repo. `packages/core/src` also bans `Math.random`, Node and server imports, and DOM, Node, and network globals. |
-| `pnpm typecheck` | `tsc` in every package, then `tools/`. `core` is checked twice: its source with ES2022 types only, its tests with Node types. |
+| `pnpm typecheck` | `tsc` in every package, then `tools/`. `core` is checked twice: its source with ES2022 types only, its tests with Node types. `client` is checked twice too: the app with DOM types, `vite.config.ts` with Node types. |
 | `pnpm test` | Vitest in every package (`vitest run`). |
 | `pnpm check:docs` | The writing-rules check (see "The docs check"). Same as `node tools/check-docs.ts`. |
-| `pnpm check:palette` | The palette contrast check. Reads `tools/palette.json`; exits non-zero on any failing row (see `DESIGN.md`, "Colors"). |
+| `pnpm check:palette` | The palette contrast check. Imports `packages/client/src/theme/palette.ts`; exits non-zero on any failing row (see `DESIGN.md`, "Colors"). |
 | `pnpm check` | `lint`, `typecheck`, `test`, `check:docs`, and `check:palette`, in that order, stopping at the first failure. Run it before every commit. |
-| `pnpm build` | Runs each package's `build` script, if it has one. Only the client will have one. |
-| `pnpm dev` | Runs each package's `dev` script in parallel. Today that is the server with `node --watch`; the client adds its own. |
-| `pnpm start` | Starts the server once (`node src/main.ts`), serving `packages/client/dist` when it exists. |
+| `pnpm build` | Runs each package's `build` script, if it has one. Only the client has one: `vite build` into `packages/client/dist`. |
+| `pnpm dev` | Runs each package's `dev` script in parallel: the server with `node --watch` on port 3000, and the client's Vite dev server on port 5173, on all addresses. Open the Vite address; it forwards `/api` to the server on `localhost:3000`. |
+| `pnpm start` | Starts the server once (`node src/main.ts`), serving the built client from `packages/client/dist`. Run `pnpm build` first. The app is then on port 3000. |
 
 Also run `pnpm audit --audit-level high` before a milestone is done; CI fails on it.
 
@@ -47,6 +47,7 @@ A bad value stops it with a message.
 | `HOST` | `0.0.0.0` | The address to listen on. The default is every address, so tablets and a TV can reach it. |
 | `PORT` | `3000` | The port to listen on, a whole number from 0 to 65535. |
 | `COLISEUMGRID_MODE` | `offline` | `offline` or `online` (see `PLAN.md` section 8). Nothing reads it yet; later milestones use it. |
+| `CLIENT_DIST` | `packages/client/dist` | The folder of built client files to serve. The default is found from the server package's location, so it works from any working directory. Read in `src/main.ts`, not by `loadConfig`. Without an `index.html` there, the server answers only `/api`. |
 
 ## Layout
 
@@ -54,7 +55,7 @@ A bad value stops it with a message.
 |---|---|
 | `packages/core` | `@coliseumgrid/core`: rules shared by the browser and the server (see `PLAN.md` section 9). Today it holds the seeded random source. |
 | `packages/server` | `@coliseumgrid/server`: `src/app.ts` builds the Fastify app (`buildApp`), `src/config.ts` reads the settings, `src/main.ts` starts it. |
-| `packages/client` | The Host, Sign-up, and Display screens. Not added yet. |
+| `packages/client` | `@coliseumgrid/client`: Vite, React, and MUI. `src/theme/` holds the palette and the theme, `src/pages/` the Host (`/host`), Sign-up (`/signup`), and Display (`/display`) screens, `src/components/` shared pieces, `test/` the Vitest tests. `/` goes to `/host`. |
 | `tools/` | Scripts run by hand or in CI, type-checked by `tools/tsconfig.json`. |
 | `docs/` | The docs listed in `DOC-STYLE.md`, "Where things go". |
 
@@ -108,12 +109,52 @@ MUI 9.5.0, checked 2026-11-12. The color values and rules are in
   (<https://mui.com/material-ui/customization/palette/>)
 - In styles, use `theme.applyStyles('dark', ...)` instead of checking `palette.mode`.
   (<https://mui.com/material-ui/customization/dark-mode/>)
-- From M1, the theme file in `packages/client` must take its values from `tools/palette.json`,
-  or `check-palette` must read the theme, so the two can't drift.
+- The palette lives in `packages/client/src/theme/palette.ts`, a plain `as const` object with
+  no imports. The theme and `tools/check-palette.ts` both import it, so the two can't drift.
+  Its tests check that every color has a `contrastText` and that the dark overrides use
+  `primary.light`.
+- `win`, `loss`, and `upNext` have one color each in the palette; the theme uses it for their
+  `light` and `dark` slots too.
+- Each override in `components.ts` is scoped with `theme.applyStyles('dark', ...)`, which
+  produces `*:where(.mode-dark) &`. That also matches inside the TV route's `mode-dark`
+  wrapper.
+- Roboto comes from `@fontsource/roboto` (300, 400, 500, 700), imported in `main.tsx`. The
+  `<weight>.css` files carry a `unicode-range` per subset; the `latin-<weight>.css` files
+  don't, so don't import both kinds.
+- The logo SVGs and favicons are imported through Vite from `assets/logo`, so the build
+  bundles them. Nothing loads from a CDN (`CLAUDE.md`, rule 3). After `pnpm build`, `grep -rE
+  'https?://' packages/client/dist` should find only XML namespace URLs (w3.org), the
+  placeholder base `http://localhost` that React Router uses to parse paths, and text inside
+  React, React Router, and MUI error messages; none of these is requested.
+- The Display page never calls `setMode`, so it can't change the host's choice.
+
+## Docker
+
+The image is the online deployment (`PLAN.md` section 8): the server and the built client,
+on Node 26 alpine, running as the non-root `node` user.
+
+```sh
+docker build -t coliseumgrid .
+docker run --rm -p 3000:3000 -v coliseumgrid-data:/data coliseumgrid
+```
+
+The image sets `COLISEUMGRID_MODE=online`, `PORT=3000`, and
+`CLIENT_DIST=/app/packages/client/dist`. `/data` will hold the database and uploaded
+graphics, so mount a volume there.
+
+`.github/workflows/docker.yml` is the Docker check. It builds the image, runs it, waits for
+`/api/health` to return `{"status":"ok"}`, and fetches `/` to confirm it is the client's
+HTML. Only then, and only on the default branch, does it push
+`ghcr.io/bradbrownjr/coliseumgrid:edge` and a `sha-` tag. Pull requests build and test
+without pushing. The dev box has no Docker, so this CI job is the only place the image runs.
+
+The Dockerfile installs pnpm with `npm install --global pnpm@<version>`, because Node 26 has
+no corepack. Keep that version in step with `packageManager` in `package.json`.
 
 ## Tests
 
-- Vitest for `core` and `server`. Server tests build the app with `buildApp` and call
+- Vitest for `core`, `server`, and `client`. Client tests need no DOM: they build the theme and
+  call its overrides. Server tests build the app with `buildApp` and call
   `app.inject`, so they open no port. Formats are tested with seeded randomness and fixed
   results, across every player count the roadmap names.
 - Playwright for screens, printing, and the offline check. A PDF or print layout isn't

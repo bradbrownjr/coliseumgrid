@@ -3,6 +3,7 @@
 //   HOST                default 0.0.0.0
 //   PORT                default 3000
 //   COLISEUMGRID_MODE   offline (default) or online
+//   CLIENT_DIST         the built client to serve; default packages/client/dist
 
 import { fileURLToPath } from 'node:url';
 import { buildApp } from './app.ts';
@@ -16,7 +17,8 @@ try {
   process.exit(1);
 }
 
-const clientDist = fileURLToPath(new URL('../../client/dist', import.meta.url));
+// The default is found from this file, not the working directory, so it works from any folder.
+const clientDist = process.env['CLIENT_DIST'] || fileURLToPath(new URL('../../client/dist', import.meta.url));
 const app = await buildApp({ clientDist, logger: true });
 await app.listen({ host: config.host, port: config.port });
 console.log(`coliseumgrid server (${config.mode} mode) listening on ${config.host}:${config.port}`);
