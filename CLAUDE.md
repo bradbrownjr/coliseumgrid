@@ -111,7 +111,9 @@ here may be forgotten next session.
 - Players are identified by a handle only. The optional PIN is 4 digits, suggested
   automatically so choosing one never holds up the sign-up line, changeable by the player,
   and printed small in a corner of the name tag (Brad, 2026-11-12).
-- Vulgar handles are filtered the way Pattern Break filters names (Brad, 2026-11-12).
+- Vulgar handles are filtered the way Pattern Break filters names, tightened for handles:
+  capital letters inside a handle count as word breaks (`BigAss` fails), and common
+  spelled-by-sound variants are on the lists (Brad, 2026-11-12).
 - Build on existing UI frameworks; this project uses MUI (Brad, 2026-11-12).
 - It runs offline from a laptop (Windows or Fedora) and online from a Docker image (Brad,
   2026-11-12).

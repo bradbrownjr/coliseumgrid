@@ -45,6 +45,42 @@ const BAD = [
   'KKK',
   'PISS',
   'TWAT',
+  'KUNT',
+  'CNUT',
+  'PHUCK',
+  'PHUK',
+  'FUK',
+  'FUQ',
+  'SHEIT',
+  'SHYT',
+  'SHIIT',
+  'BIATCH',
+  'BIOTCH',
+  'AZZ',
+  'PR0N',
+  'PRON',
+  'B00B',
+  'B00BS',
+  'BOOB',
+  'BOOBS',
+];
+
+// Capital-letter joins: only as typed, since lower-casing removes the word breaks.
+const BAD_CAMEL = [
+  'BigAss',
+  'MyDick',
+  'XXAssXX',
+  'BigCock',
+  'MyCum',
+  'xXAssXx',
+  'BigAzz',
+  'MrKunt',
+  'TheTits',
+  'BigBoobs',
+  'MyPron',
+  'A55Man',
+  'FatAss',
+  'ISeeSex',
 ];
 
 const INNOCENT = [
@@ -96,6 +132,58 @@ const INNOCENT = [
   'XXX',
   'HELLO',
   'DAMN',
+  'PRONTO',
+  'CANUTE',
+  'SCUNTHORPE',
+  'CASSIDY',
+  'CLASSIC',
+  'BASSIST',
+  'SHUTTLECOCK',
+  'COCKATOO',
+  'MACARTHUR',
+  'MCDONALD',
+  'DESHAWN',
+  'LEBRON',
+  'JOJO',
+  'PACMAN',
+  'SPONGEBOB',
+  'BIGBOSS',
+  'PROGAMER',
+  'PHUKET',
+  'FUKUDA',
+  'JAZZ',
+];
+
+// Mixed-case innocents: the capitals here must not make a bad word.
+const INNOCENT_CAMEL = [
+  'ClassAct',
+  'GrassHopper',
+  'Peacock',
+  'Hancock',
+  'MacArthur',
+  'McDonald',
+  'DeShawn',
+  'LeBron',
+  'JoJo',
+  'PacMan',
+  'SpongeBob',
+  'BigBoss',
+  'ProGamer',
+  'Pronto',
+  'Canute',
+  'Scunthorpe',
+  'Cassidy',
+  'Classic',
+  'Bassist',
+  'Shuttlecock',
+  'Cockatoo',
+  'Dickens',
+  'Sussex',
+  'Assassin',
+  'R2D2',
+  'KC1JMH',
+  'JazzBand',
+  'MrBassman',
 ];
 
 /** "Fuck" style: first letter up, the rest down. */
@@ -122,6 +210,27 @@ describe('isVulgar', () => {
     });
   });
 
+  it('splits at capital letters and refuses the joins', () => {
+    for (const name of BAD_CAMEL) expect(isVulgar(name), name).toBe(true);
+  });
+
+  it('passes innocent handles that use capitals', () => {
+    for (const name of INNOCENT_CAMEL) expect(isVulgar(name), name).toBe(false);
+  });
+
+  it('accepts the known cost: PeaCock fails, Peacock and PEACOCK pass', () => {
+    expect(isVulgar('PeaCock')).toBe(true);
+    expect(isVulgar('Peacock')).toBe(false);
+    expect(isVulgar('PEACOCK')).toBe(false);
+  });
+
+  it('splits only where a lowercase letter or digit meets a capital', () => {
+    expect(handleReadings('CLASS').camel).toBe('CLASS');
+    expect(handleReadings('class').camel).toBe('CLASS');
+    expect(handleReadings('BigAss').camel).toBe('BIG ASS');
+    expect(handleReadings('A55Man').camel).toBe('ASS MAN');
+  });
+
   it('reads an underscore and the digits with no letter look-alike as marks', () => {
     expect(isVulgar('A_S_S')).toBe(true);
     expect(isVulgar('ass_man')).toBe(true);
@@ -139,13 +248,13 @@ describe('isVulgar', () => {
 
 describe('handleReadings', () => {
   it('reads look-alikes as letters and joins runs of single letters, not words', () => {
-    expect(handleReadings('A55-MAN')).toEqual({ spaced: 'ASS MAN', joined: 'ASS MAN' });
-    expect(handleReadings('A S S')).toEqual({ spaced: 'A S S', joined: 'ASS' });
-    expect(handleReadings('PUSH IT')).toEqual({ spaced: 'PUSH IT', joined: 'PUSH IT' });
+    expect(handleReadings('A55-MAN')).toEqual({ spaced: 'ASS MAN', joined: 'ASS MAN', camel: 'ASS MAN' });
+    expect(handleReadings('A S S')).toEqual({ spaced: 'A S S', joined: 'ASS', camel: 'A S S' });
+    expect(handleReadings('PUSH IT')).toEqual({ spaced: 'PUSH IT', joined: 'PUSH IT', camel: 'PUSH IT' });
   });
 
   it('gives the same readings in any case', () => {
     expect(handleReadings('a55-Man')).toEqual(handleReadings('A55-MAN'));
-    expect(handleReadings('a.S.s')).toEqual({ spaced: 'A S S', joined: 'ASS' });
+    expect(handleReadings('a.S.s')).toEqual({ spaced: 'A S S', joined: 'ASS', camel: 'A S S' });
   });
 });

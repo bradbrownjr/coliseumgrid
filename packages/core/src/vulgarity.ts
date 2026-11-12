@@ -7,10 +7,14 @@
 // "Scunthorpe problem" (Wikipedia, "Scunthorpe problem": broad rules "may result in false
 // positives affecting many innocent phrases"). So a root that sits inside common words
 // (ASS in CLASS and CUTLASS, TIT in TITLE) counts only as a whole word, and only a root that
-// rarely does (FUCK) counts anywhere. Each pattern runs on two readings of the handle: with
-// look-alike digits read as letters (A55 as ASS) and marks as spaces, and the same with runs
-// of single letters joined, so A.S.S and F U C K fail too. Whole words are never joined, or
-// PUSH IT would read as PUSHIT. The innocent handles in test/vulgarity.test.ts are the check
+// rarely does (FUCK) counts anywhere. Each pattern runs on three readings of the handle: with
+// look-alike digits read as letters (A55 as ASS) and marks as spaces, the same with runs
+// of single letters joined (so A.S.S and F U C K fail too), and the same split at capital
+// letters, so BigAss reads as BIG ASS (Brad, 2026-11-12). Only a lowercase letter or digit
+// followed by a capital starts a new word (as does the last capital of a run before a
+// capitalized word, XXAss), so an all-caps handle is never split letter by
+// letter. The cost is that PeaCock fails while Peacock passes. Whole words are never joined,
+// or PUSH IT would read as PUSHIT. The innocent handles in test/vulgarity.test.ts are the check
 // against false matches.
 //
 // The lists are English only and catch obvious cases; they are not a promise that no rude
@@ -20,7 +24,13 @@
 const ANYWHERE = new RegExp(
   [
     'F+U+C+K',
+    'FUQ',
+    'PH+U+C+K',
     'SH+I+T',
+    'SHEIT',
+    'SHYT',
+    'B+I+[AO]+T+C+H',
+    'CNUT',
     '(?<!S)C+U+N+T',
     'N+I+G+G',
     'NIGLET',
@@ -64,12 +74,18 @@ const WORD = new RegExp(
     'COCK',
     'CUM',
     'SEXY?',
+    'KUNTS?',
+    'FUK+',
+    'PHUK+',
+    'AZZ(?:ES)?',
+    'PRON',
     'ANAL',
     'ANUS',
     'RAPED?',
     'RAPES',
     'HOMO',
     'BOOBS?',
+    'BOOBIES',
     'WANK',
     'NAZIS?',
     'SPERM',
@@ -88,13 +104,12 @@ const LOOKALIKES: Record<string, string> = {
 };
 
 /**
- * The two readings the filter checks: look-alikes as letters and marks as spaces
- * ("A55-MAN" as "ASS MAN"), and that with runs of single letters joined ("A S S" as "ASS").
- * Both are in capitals, so the case a handle was typed in doesn't matter.
+ * The three readings the filter checks: look-alikes as letters and marks as spaces
+ * ("A55-MAN" as "ASS MAN"), and that with runs of single letters joined ("A S S" as "ASS"), and split at capitals ("BigAss" as "BIG ASS").
+ * All are in capitals, so the case a handle was typed in doesn't matter.
  */
-export function handleReadings(handle: string): { spaced: string; joined: string } {
-  let spaced = '';
-  for (const c of handle.toUpperCase()) spaced += LOOKALIKES[c] ?? (c >= 'A' && c <= 'Z' ? c : ' ');
+export function handleReadings(handle: string): { spaced: string; joined: string; camel: string } {
+  const spaced = spacedReading(handle);
   const words: string[] = [];
   let letters = '';
   for (const word of spaced.split(' ')) {
@@ -107,11 +122,20 @@ export function handleReadings(handle: string): { spaced: string; joined: string
     if (word) words.push(word);
   }
   if (letters) words.push(letters);
-  return { spaced, joined: words.join(' ') };
+  // A capital run ends where a capital starts a lowercase word, so XXAssXX splits to XX Ass XX.
+  // Splitting happens before the look-alikes, so the capitals are still there to split at.
+  const camel = spacedReading(handle.replace(/([a-z0-9])(?=[A-Z])|([A-Z])(?=[A-Z][a-z])/g, '$1$2 '));
+  return { spaced, joined: words.join(' '), camel };
+}
+
+function spacedReading(handle: string): string {
+  let spaced = '';
+  for (const c of handle.toUpperCase()) spaced += LOOKALIKES[c] ?? (c >= 'A' && c <= 'Z' ? c : ' ');
+  return spaced;
 }
 
 /** True when the filter finds an obvious vulgarity in `handle`. */
 export function isVulgar(handle: string): boolean {
-  const { spaced, joined } = handleReadings(handle);
-  return ANYWHERE.test(spaced) || ANYWHERE.test(joined) || WORD.test(spaced) || WORD.test(joined);
+  const { spaced, joined, camel } = handleReadings(handle);
+  return [spaced, joined, camel].some((r) => ANYWHERE.test(r) || WORD.test(r));
 }

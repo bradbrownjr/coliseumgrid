@@ -82,7 +82,10 @@ Host screens need a host session.
   count anywhere in a handle, roots that count only as a whole word (to avoid blocking
   innocent words like "class"), and two readings of each handle (look-alike digits read as
   letters, and runs of single letters joined, so `A.S.S` fails). Its tests of innocent names
-  come with it. The port changes it for mixed case and the longer length.
+  come with it. The port changes it for mixed case and the longer length, and tightens it
+  (Brad, 2026-11-12): a third reading splits the handle at capital letters, so `BigAss`
+  reads as "Big Ass" and fails, and the lists gain common spelled-by-sound variants. The
+  cost is that `PeaCock` fails while `Peacock` passes.
 - The host can rename a player and merge two players into one.
 
 ### PINs
