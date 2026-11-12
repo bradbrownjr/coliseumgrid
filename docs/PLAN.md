@@ -76,7 +76,7 @@ Host screens need a host session.
 
 ### Handles
 
-- 2 to 16 characters: letters, digits, spaces, and `. - _`. Shown as typed, compared
+- 2 to 16 characters (Brad, 2026-11-12): letters, digits, spaces, and `. - _`. Shown as typed, compared
   without regard to case, so `Zap` and `ZAP` are the same player.
 - The vulgarity filter is a port of Pattern Break's `packages/core/src/name.ts`: roots that
   count anywhere in a handle, roots that count only as a whole word (to avoid blocking

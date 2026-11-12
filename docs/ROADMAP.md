@@ -56,7 +56,9 @@ Acceptance checks:
 Tasks:
 
 - Join codes and QR codes, device roles, device tokens, and unpairing (`PLAN.md` section 3).
-- Host sign-in for both modes.
+- Host sign-in for both modes. Until then the host's actions (the player list's add, rename,
+  merge, and PIN reset) answer any device on the network, by Brad's choice for LAN testing
+  (2026-11-12). This task closes them in both modes.
 - WebSocket updates from the server to every paired screen.
 - The Display screen's frame: event name, "Up next", the timer.
 
@@ -172,5 +174,4 @@ Acceptance checks:
 These need Brad's answer before the work that depends on them. Don't guess.
 
 - **Heat tie-breaks** (M5): best single finish, then a tie-break race? Or shared place?
-- **Handle length** (M2): 2 to 16 characters is the plan's starting point.
 - **Default points table** (M5): 4, 3, 2, 1 is the plan's starting point.
