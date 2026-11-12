@@ -27,7 +27,8 @@ Run `pnpm install` once first.
 |---|---|
 | `pnpm lint` | Oxlint over the whole repo. `packages/core/src` also bans `Math.random`, imports of Node built-ins (with or without `node:`), `ws`, and server packages, and DOM, Node, and network globals, read bare or through `globalThis`. A scratch import of a Node built-in also fails `typecheck`, because core has no Node types. |
 | `pnpm typecheck` | `tsc` in every package, then `tools/`. `core` is checked twice: its source with ES2022 types only, its tests with Node types. `client` is checked twice too: the app with DOM types, `vite.config.ts` with Node types. |
-| `pnpm test` | Vitest in every package (`vitest run`). |
+| `pnpm test` | Vitest in every package (`vitest run`). In `core` it runs the `node` project only. |
+| `pnpm test:browser` | The `core` `browser` project: the handle rules and the vulgarity filter in headless Chromium. Not part of `pnpm check`; CI runs it as its own job. Once per machine, run `pnpm --filter @coliseumgrid/core exec playwright install chromium`. |
 | `pnpm check:docs` | The writing-rules check (see "The docs check"). Same as `node tools/check-docs.ts`. |
 | `pnpm check:palette` | The palette contrast check. Imports `packages/client/src/theme/palette.ts`; exits non-zero on any failing row (see `DESIGN.md`, "Colors"). |
 | `pnpm check` | `lint`, `typecheck`, `test`, `check:docs`, and `check:palette`, in that order, stopping at the first failure. Run it before every commit. |
@@ -46,15 +47,27 @@ A bad value stops it with a message.
 |---|---|---|
 | `HOST` | `0.0.0.0` | The address to listen on. The default is every address, so tablets and a TV can reach it. |
 | `PORT` | `3000` | The port to listen on, a whole number from 0 to 65535. |
-| `COLISEUMGRID_MODE` | `offline` | `offline` or `online` (see `PLAN.md` section 8). Nothing reads it yet; later milestones use it. |
+| `COLISEUMGRID_MODE` | `offline` | `offline` or `online` (see `PLAN.md` section 8). Online turns on the rate limits on `POST /api/signup/claim`; later milestones add more. |
+| `DATA_DIR` | `data` | The folder that holds the database file `coliseumgrid.db`. Absolute, or relative to the working directory (the server turns it into an absolute path at startup). The server creates it if it is missing. The Docker image sets `/data`. |
+| `TRUSTED_PROXY` | none | The reverse proxy's IP address. Only a request whose direct peer is this address may name the client in `X-Forwarded-For`, and only the last entry is used (`CLAUDE.md`, rule 6). Without it, the client is the socket address. Set it online, behind the proxy; without it every player shares the proxy's address and its rate limit. |
 | `CLIENT_DIST` | `packages/client/dist` | The folder of built client files to serve: absolute, or relative to the working directory. The default is found from the server package's location, so it works from any working directory. Read in `src/main.ts`, not by `loadConfig`. Without an `index.html` there, the server answers only `/api`. |
+
+### Database
+
+`packages/server/src/database.ts` opens the SQLite file with `node:sqlite` (`DatabaseSync`;
+Node 26's docs name the class `Database` and call `DatabaseSync` a deprecated alias, but
+`@types/node` 26.6.6 declares only `DatabaseSync`). The file is in WAL mode. The schema
+version is `PRAGMA user_version`, and the schema is the ordered `MIGRATIONS` list: version N
+means the first N entries have run, each once, in a transaction. To change the schema, add an
+entry at the end; never edit one that has shipped. Tests use `':memory:'`. A database written
+by a newer server is refused at startup.
 
 ## Layout
 
 | Path | What it holds |
 |---|---|
 | `packages/core` | `@coliseumgrid/core`: rules shared by the browser and the server (see `PLAN.md` section 9). Today it holds the seeded random source. |
-| `packages/server` | `@coliseumgrid/server`: `src/app.ts` builds the Fastify app (`buildApp`), `src/config.ts` reads the settings, `src/main.ts` starts it. |
+| `packages/server` | `@coliseumgrid/server`: `src/app.ts` builds the Fastify app (`buildApp`), `src/config.ts` reads the settings, `src/main.ts` starts it, `src/database.ts` holds the schema, `src/players-routes.ts` the players API, `src/pin-hash.ts` PIN hashing (scrypt), `src/client-ip.ts` and `src/rate-limit.ts` the online limits. |
 | `packages/client` | `@coliseumgrid/client`: Vite, React, and MUI. `src/theme/` holds the palette and the theme, `src/pages/` the Host (`/host`), Sign-up (`/signup`), and Display (`/display`) screens, `src/components/` shared pieces, `test/` the Vitest tests. `/` goes to `/host`. |
 | `tools/` | Scripts run by hand or in CI, type-checked by `tools/tsconfig.json`. |
 | `docs/` | The docs listed in `DOC-STYLE.md`, "Where things go". |
@@ -139,8 +152,8 @@ docker run --rm -p 3000:3000 -v coliseumgrid-data:/data coliseumgrid
 ```
 
 The image sets `COLISEUMGRID_MODE=online`, `PORT=3000`, and
-`CLIENT_DIST=/app/packages/client/dist`. `/data` will hold the database and uploaded
-graphics, so mount a volume there.
+`CLIENT_DIST=/app/packages/client/dist`. It also sets `DATA_DIR=/data`, which holds the
+database (and later uploaded graphics), so mount a volume there.
 
 `.github/workflows/docker.yml` is the Docker check. It builds the image, runs it, waits for
 `/api/health` to return `{"status":"ok"}`, and fetches `/` to confirm it is the client's
@@ -157,6 +170,9 @@ no corepack. Keep that version in step with `packageManager` in `package.json`.
   call its overrides. Server tests build the app with `buildApp` and call
   `app.inject`, so they open no port. Formats are tested with seeded randomness and fixed
   results, across every player count the roadmap names.
+- `core` has two Vitest projects (`packages/core/vitest.config.ts`): `node` runs every test, and
+  `browser` runs `vulgarity.test.ts` and `handle.test.ts` in headless Chromium through
+  `@vitest/browser-playwright`, so the filter is proven in the build the client ships.
 - Playwright for screens, printing, and the offline check. A PDF or print layout isn't
   verified until its pages have been rasterized and looked at (the MEPN lesson: an earlier
   check there confirmed only that a download fired, and two broken exports shipped).

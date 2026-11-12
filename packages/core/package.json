@@ -10,7 +10,8 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json",
-    "test": "vitest run"
+    "test": "vitest run --project node",
+    "test:browser": "vitest run --project browser"
   },
   "devDependencies": {
     "@vitest/browser-playwright": "5.1.0",

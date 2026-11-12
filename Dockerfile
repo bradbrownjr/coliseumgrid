@@ -28,7 +28,8 @@ LABEL org.opencontainers.image.title="ColiseumGrid" \
 ENV NODE_ENV=production \
     COLISEUMGRID_MODE=online \
     PORT=3000 \
-    CLIENT_DIST=/app/packages/client/dist
+    CLIENT_DIST=/app/packages/client/dist \
+    DATA_DIR=/data
 WORKDIR /app
 COPY --from=build /src/package.json /src/pnpm-workspace.yaml ./
 COPY --from=build /src/node_modules node_modules
