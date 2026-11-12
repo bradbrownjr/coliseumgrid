@@ -11,5 +11,9 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json",
     "test": "vitest run"
+  },
+  "devDependencies": {
+    "@vitest/browser-playwright": "5.1.0",
+    "playwright": "1.65.0"
   }
 }
