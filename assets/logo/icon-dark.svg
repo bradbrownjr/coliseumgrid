@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <title>ColiseumGrid</title>
+  <mask id="cg-icon-dark-arches">
+    <rect width="512" height="512" fill="#fff"/>
+    <path d="M98 448V412A36 36 0 0 1 170 412V448ZM220 448V412A36 36 0 0 1 292 412V448ZM342 448V412A36 36 0 0 1 414 412V448ZM98 338V284A36 36 0 0 1 170 284V338ZM220 332V284A36 36 0 0 1 292 284V332ZM342 338V284A36 36 0 0 1 414 284V338Z"/>
+  </mask>
+  <g fill="#EDE6E6">
+    <rect x="24" y="456" width="464" height="32" rx="16"/>
+    <path mask="url(#cg-icon-dark-arches)" d="M48 444V360Q256 328 464 360V444ZM48 336V232Q256 200 464 232V336Q256 304 48 336Z"/>
+  </g>
+  <path fill="none" stroke="#FF6060" stroke-width="40" d="M92 210V168H196V201M420 210V168H316V201M144 168V104H368V168M256 104V20"/>
+  <path fill="#FF6060" d="M276 20L360 48L276 76Z"/>
+</svg>
