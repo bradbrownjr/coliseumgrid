@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>coliseumgrid</Name>
+  <Repository>ghcr.io/bradbrownjr/coliseumgrid:edge</Repository>
+  <Registry>https://github.com/bradbrownjr/coliseumgrid/pkgs/container/coliseumgrid</Registry>
+  <Network>bridge</Network>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/bradbrownjr/coliseumgrid/issues</Support>
+  <Project>https://github.com/bradbrownjr/coliseumgrid</Project>
+  <Overview>ColiseumGrid runs in-person video game tournaments: kids sign up with a gamer handle on a tablet, the host runs brackets and race heats from a laptop, and a TV shows who plays next. This image serves the app and keeps its database in the data path; create that folder and give it to uid 1000 first (chown 1000:1000). Online mode turns on rate limits for a server reachable from the internet; offline mode is for a home or venue network. Until host sign-in arrives, the host page answers any device that can reach it, so keep it off the internet. See docs/DEVELOPMENT.md in the repository.</Overview>
+  <Category>Games:</Category>
+  <WebUI>http://[IP]:[PORT:3000]/host</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/bradbrownjr/coliseumgrid/HEAD/deploy/unraid/coliseumgrid.xml</TemplateURL>
+  <Config Name="Web UI port" Target="3000" Default="3000" Mode="tcp" Description="Port for the host, sign-up, and display pages." Type="Port" Display="always" Required="true" Mask="false">3000</Config>
+  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/coliseumgrid" Mode="rw" Description="The database. Must be writable by uid 1000." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/coliseumgrid</Config>
+  <Config Name="Mode" Target="COLISEUMGRID_MODE" Default="online" Mode="" Description="online behind a reverse proxy on the internet; offline on a home or venue network." Type="Variable" Display="always" Required="true" Mask="false">online</Config>
+  <Config Name="Trust proxy" Target="TRUSTED_PROXY" Default="" Mode="" Description="The reverse proxy's address, so rate limits count each player's IP. Leave empty without a proxy." Type="Variable" Display="always" Required="false" Mask="false"></Config>
+</Container>

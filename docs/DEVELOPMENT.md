@@ -161,6 +161,9 @@ HTML. Only then, and only on the default branch, does it push
 `ghcr.io/bradbrownjr/coliseumgrid:edge` and a `sha-` tag. Pull requests build and test
 without pushing. The dev box has no Docker, so this CI job is the only place the image runs.
 
+`deploy/unraid/coliseumgrid.xml` is the Unraid template, following Pattern Break's. Its
+data folder must belong to uid 1000 (`chown 1000:1000`), since the image runs as `node`.
+
 The Dockerfile installs pnpm with `npm install --global pnpm@<version>`, because Node 26 has
 no corepack. Keep that version in step with `packageManager` in `package.json`.
 
