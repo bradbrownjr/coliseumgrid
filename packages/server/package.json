@@ -1,0 +1,21 @@
+{
+  "name": "@coliseumgrid/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "The Fastify server: the API and the built client.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "node --watch src/main.ts",
+    "start": "node src/main.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fastify/static": "10.1.10",
+    "fastify": "5.12.8"
+  }
+}

@@ -3,14 +3,16 @@
 How to work on ColiseumGrid. The design is in [`PLAN.md`](PLAN.md); the writing rules are in
 [`DOC-STYLE.md`](DOC-STYLE.md).
 
-M1 builds the workspace. Until then, the only code is the docs check.
+M1 builds the workspace. So far it has `packages/core` (a seeded random source),
+`packages/server` (the health route and the static file server), and the checks. The client
+comes next.
 
 ## Requirements
 
 - **Node 26.** The version is in `.nvmrc`. Node runs TypeScript directly (type stripping),
   so `core` and `server` have no build step.
-- **pnpm 12.** From M1, the exact version is in `packageManager` in the root
-  `package.json`.
+- **pnpm 12.** The exact version is `packageManager` in the root `package.json`
+  (`pnpm@12.18.0`).
 
 ### On the dev box
 
@@ -19,22 +21,41 @@ server there, it listens on all addresses (Vite's `--host`), not only `localhost
 
 ## Commands
 
+Run `pnpm install` once first.
+
 | Command | What it does |
 |---|---|
-| `node tools/check-docs.ts` | The writing-rules check (see "The docs check"). |
-| `node tools/check-palette.ts` | The palette contrast check. Reads `tools/palette.json`; exits non-zero on any failing row (see `DESIGN.md`, "Colors"). |
+| `pnpm lint` | Oxlint over the whole repo. `packages/core/src` also bans `Math.random`, Node and server imports, and DOM, Node, and network globals. |
+| `pnpm typecheck` | `tsc` in every package, then `tools/`. `core` is checked twice: its source with ES2022 types only, its tests with Node types. |
+| `pnpm test` | Vitest in every package (`vitest run`). |
+| `pnpm check:docs` | The writing-rules check (see "The docs check"). Same as `node tools/check-docs.ts`. |
+| `pnpm check:palette` | The palette contrast check. Reads `tools/palette.json`; exits non-zero on any failing row (see `DESIGN.md`, "Colors"). |
+| `pnpm check` | `lint`, `typecheck`, `test`, `check:docs`, and `check:palette`, in that order, stopping at the first failure. Run it before every commit. |
+| `pnpm build` | Runs each package's `build` script, if it has one. Only the client will have one. |
+| `pnpm dev` | Runs each package's `dev` script in parallel. Today that is the server with `node --watch`; the client adds its own. |
+| `pnpm start` | Starts the server once (`node src/main.ts`), serving `packages/client/dist` when it exists. |
 
-M1 adds `pnpm dev`, `pnpm build`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, and
-`pnpm check` (all of them, in that order), and this table describes each.
+Also run `pnpm audit --audit-level high` before a milestone is done; CI fails on it.
+
+### Server settings
+
+The server reads these environment variables at startup (`packages/server/src/config.ts`).
+A bad value stops it with a message.
+
+| Variable | Default | What it does |
+|---|---|---|
+| `HOST` | `0.0.0.0` | The address to listen on. The default is every address, so tablets and a TV can reach it. |
+| `PORT` | `3000` | The port to listen on, a whole number from 0 to 65535. |
+| `COLISEUMGRID_MODE` | `offline` | `offline` or `online` (see `PLAN.md` section 8). Nothing reads it yet; later milestones use it. |
 
 ## Layout
 
 | Path | What it holds |
 |---|---|
-| `packages/core` | Rules shared by the browser and the server (see `PLAN.md` section 9). From M1. |
-| `packages/server` | The Fastify server. From M1. |
-| `packages/client` | The Host, Sign-up, and Display screens. From M1. |
-| `tools/` | Scripts run by hand or in CI. |
+| `packages/core` | `@coliseumgrid/core`: rules shared by the browser and the server (see `PLAN.md` section 9). Today it holds the seeded random source. |
+| `packages/server` | `@coliseumgrid/server`: `src/app.ts` builds the Fastify app (`buildApp`), `src/config.ts` reads the settings, `src/main.ts` starts it. |
+| `packages/client` | The Host, Sign-up, and Display screens. Not added yet. |
+| `tools/` | Scripts run by hand or in CI, type-checked by `tools/tsconfig.json`. |
 | `docs/` | The docs listed in `DOC-STYLE.md`, "Where things go". |
 
 ## TypeScript
@@ -92,7 +113,8 @@ MUI 9.5.0, checked 2026-11-12. The color values and rules are in
 
 ## Tests
 
-- Vitest for `core` and `server`. Formats are tested with seeded randomness and fixed
+- Vitest for `core` and `server`. Server tests build the app with `buildApp` and call
+  `app.inject`, so they open no port. Formats are tested with seeded randomness and fixed
   results, across every player count the roadmap names.
 - Playwright for screens, printing, and the offline check. A PDF or print layout isn't
   verified until its pages have been rasterized and looked at (the MEPN lesson: an earlier

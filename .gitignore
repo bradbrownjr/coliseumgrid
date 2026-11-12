@@ -12,3 +12,5 @@ data/
 *.db-shm
 .DS_Store
 Thumbs.db
+*.tsbuildinfo
+.vitest/

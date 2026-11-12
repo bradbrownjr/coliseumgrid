@@ -12,58 +12,78 @@
 //   http://brucelindbloom.com/index.html?Eqn_DeltaE_CIE76.html
 import { readFileSync } from 'node:fs';
 import process from 'node:process';
-const P = JSON.parse(readFileSync(new URL('./palette.json', import.meta.url)));
+type Rgb = [number, number, number];
+type Matrix = readonly [Rgb, Rgb, Rgb];
+interface Swatch {
+  main: string;
+  light: string;
+  dark?: string;
+  contrastText: string;
+}
+const GROUPS = ['primary', 'secondary', 'error', 'warning', 'info', 'success', 'win', 'loss', 'upNext'] as const;
+interface Scheme extends Record<(typeof GROUPS)[number], Swatch> {
+  background: { default: string; paper: string };
+  text: { primary: string; secondary: string };
+  focusRing: string;
+}
+const P = JSON.parse(readFileSync(new URL('./palette.json', import.meta.url), 'utf8')) as Record<
+  'light' | 'dark',
+  Scheme
+>;
 
-const M = {
+// Color-vision simulations; null means no simulation.
+const M: Record<'normal' | 'protan' | 'deutan', Matrix | null> = {
   normal: null,
   protan: [[0.152286, 1.052583, -0.204868], [0.114503, 0.786281, 0.099216], [-0.003882, -0.048116, 1.051998]],
   deutan: [[0.367322, 0.860646, -0.227968], [0.280085, 0.672501, 0.047413], [-0.011820, 0.042940, 0.968881]],
 };
-const hex2 = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
-const toLin = c => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
-const clamp = x => Math.min(1, Math.max(0, x));
-const lin = (h, sim) => {
-  const l = hex2(h).map(toLin);
-  if (!M[sim]) return l;
-  return M[sim].map(r => clamp(r[0] * l[0] + r[1] * l[1] + r[2] * l[2]));
+type Sim = keyof typeof M;
+const SIMS = Object.keys(M) as Sim[];
+const hex2 = (h: string): Rgb => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255) as Rgb;
+const toLin = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+const clamp = (x: number) => Math.min(1, Math.max(0, x));
+const lin = (h: string, sim: Sim): Rgb => {
+  const l = hex2(h).map(toLin) as Rgb;
+  const m = M[sim];
+  if (!m) return l;
+  return m.map(r => clamp(r[0] * l[0] + r[1] * l[1] + r[2] * l[2])) as Rgb;
 };
-const lum = l => 0.2126 * l[0] + 0.7152 * l[1] + 0.0722 * l[2];
-const ratio = (a, b, sim) => {
-  const [x, y] = [lum(lin(a, sim)), lum(lin(b, sim))].sort((p, q) => q - p);
+const lum = (l: Rgb) => 0.2126 * l[0] + 0.7152 * l[1] + 0.0722 * l[2];
+const ratio = (a: string, b: string, sim: Sim) => {
+  const [x, y] = [lum(lin(a, sim)), lum(lin(b, sim))].sort((p, q) => q - p) as [number, number];
   return (x + 0.05) / (y + 0.05);
 };
-const lab = l => {
+const lab = (l: Rgb): Rgb => {
   const X = (0.4124 * l[0] + 0.3576 * l[1] + 0.1805 * l[2]) / 0.95047;
   const Y = 0.2126 * l[0] + 0.7152 * l[1] + 0.0722 * l[2];
   const Z = (0.0193 * l[0] + 0.1192 * l[1] + 0.9505 * l[2]) / 1.08883;
-  const f = t => (t > 216 / 24389 ? Math.cbrt(t) : (24389 / 27 * t + 16) / 116);
+  const f = (t: number) => (t > 216 / 24389 ? Math.cbrt(t) : (24389 / 27 * t + 16) / 116);
   return [116 * f(Y) - 16, 500 * (f(X) - f(Y)), 200 * (f(Y) - f(Z))];
 };
-const dE = (a, b, sim) => {
+const dE = (a: string, b: string, sim: Sim) => {
   const [p, q] = [lab(lin(a, sim)), lab(lin(b, sim))];
   return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
 };
-
 let fails = 0;
-const out = [];
+const out: string[] = [];
 // info = true: reported but not a requirement (see the note at the call site).
-const row = (mode, label, fg, bg, min, info = false) => {
-  const r = Object.keys(M).map(s => ratio(fg, bg, s));
+const row = (mode: string, label: string, fg: string, bg: string, min: number, info = false) => {
+  const r = SIMS.map(s => ratio(fg, bg, s));
   const ok = r.map(x => (x >= min ? 'ok' : info ? 'info' : 'FAIL'));
   if (ok.includes('FAIL')) fails++;
   out.push(`${mode.padEnd(5)} ${label.padEnd(44)} ${fg} on ${bg}  min ${min}  ` +
-    r.map((x, i) => `${Object.keys(M)[i]} ${x.toFixed(2).padStart(5)} ${ok[i].padEnd(4)}`).join('  '));
+    r.map((x, i) => `${SIMS[i]} ${x.toFixed(2).padStart(5)} ${(ok[i] ?? '').padEnd(4)}`).join('  '));
 };
 
-for (const mode of ['light', 'dark']) {
+for (const mode of ['light', 'dark'] as const) {
   const p = P[mode];
-  const bgs = [['default', p.background.default], ['paper', p.background.paper]];
+  const bgs = [['default', p.background.default], ['paper', p.background.paper]] as const;
   out.push(`\n== ${mode} ==`);
   for (const [n, bg] of bgs) {
     row(mode, `text.primary / bg.${n}`, p.text.primary, bg, 4.5);
     row(mode, `text.secondary / bg.${n}`, p.text.secondary, bg, 4.5);
   }
-  for (const k of ['primary', 'secondary', 'error', 'warning', 'info', 'success', 'win', 'loss', 'upNext']) {
+  for (const k of GROUPS) {
     row(mode, `${k}.contrastText / ${k}.main`, p[k].contrastText, p[k].main, 4.5);
     for (const [n, bg] of bgs) {
       // Dark-mode crimson is only a fill behind a text label. Understanding 1.4.11 says a
@@ -85,13 +105,13 @@ for (const mode of ['light', 'dark']) {
   // The ring is drawn with outline-offset so a strip of page background separates it from a
   // filled button; the ring is then judged against the background only.
   if (mode === 'dark') out.push(`${mode.padEnd(5)} delta E76 primary.light vs error: ` +
-    Object.keys(M).map(s => `${s} ${dE(p.primary.light, p.error.main, s).toFixed(1)}`).join('  '));
+    SIMS.map(s => `${s} ${dE(p.primary.light, p.error.main, s).toFixed(1)}`).join('  '));
   out.push(`${mode.padEnd(5)} delta E76 primary vs error:   ` +
-    Object.keys(M).map(s => `${s} ${dE(p.primary.main, p.error.main, s).toFixed(1)}`).join('  '));
+    SIMS.map(s => `${s} ${dE(p.primary.main, p.error.main, s).toFixed(1)}`).join('  '));
   out.push(`${mode.padEnd(5)} delta E76 win vs loss:        ` +
-    Object.keys(M).map(s => `${s} ${dE(p.win.main, p.loss.main, s).toFixed(1)}`).join('  '));
+    SIMS.map(s => `${s} ${dE(p.win.main, p.loss.main, s).toFixed(1)}`).join('  '));
   out.push(`${mode.padEnd(5)} delta E76 primary vs upNext:  ` +
-    Object.keys(M).map(s => `${s} ${dE(p.primary.main, p.upNext.main, s).toFixed(1)}`).join('  '));
+    SIMS.map(s => `${s} ${dE(p.primary.main, p.upNext.main, s).toFixed(1)}`).join('  '));
 }
 out.push(`\n${fails} failing rows`);
 console.log(out.join('\n'));

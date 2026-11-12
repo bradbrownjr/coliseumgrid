@@ -1,0 +1,15 @@
+{
+  "name": "@coliseumgrid/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Rules shared by the browser and the server. No DOM, Node, or network imports.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json",
+    "test": "vitest run"
+  }
+}

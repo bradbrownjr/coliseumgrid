@@ -1,0 +1,27 @@
+{
+  "name": "coliseumgrid",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "packageManager": "pnpm@12.18.0",
+  "engines": {
+    "node": ">=26"
+  },
+  "scripts": {
+    "lint": "oxlint",
+    "typecheck": "pnpm -r --if-present typecheck && tsc -p tools/tsconfig.json",
+    "test": "pnpm -r --if-present test",
+    "check:docs": "node tools/check-docs.ts",
+    "check:palette": "node tools/check-palette.ts",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm check:docs && pnpm check:palette",
+    "dev": "pnpm -r --parallel --if-present dev",
+    "start": "pnpm --filter @coliseumgrid/server start",
+    "build": "pnpm -r --if-present build"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "oxlint": "1.93.0",
+    "typescript": "7.0.2",
+    "vitest": "5.1.0"
+  }
+}

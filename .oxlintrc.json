@@ -1,0 +1,47 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import"],
+  "categories": {
+    "correctness": "error"
+  },
+  "ignorePatterns": ["**/dist/**", "**/coverage/**"],
+  "overrides": [
+    {
+      "files": ["packages/core/src/**"],
+      "rules": {
+        "no-restricted-properties": [
+          "error",
+          {
+            "object": "Math",
+            "property": "random",
+            "message": "Math.random is banned in core: take a RandomSource from the caller so results can be fixed in tests."
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^(node:|fastify|@fastify/)",
+                "message": "packages/core is portable: no Node or server imports (CLAUDE.md, rule 4)."
+              }
+            ]
+          }
+        ],
+        "no-restricted-globals": [
+          "error",
+          { "name": "window", "message": "No DOM in packages/core (CLAUDE.md, rule 4)." },
+          { "name": "document", "message": "No DOM in packages/core (CLAUDE.md, rule 4)." },
+          { "name": "navigator", "message": "No DOM in packages/core (CLAUDE.md, rule 4)." },
+          { "name": "location", "message": "No DOM in packages/core (CLAUDE.md, rule 4)." },
+          { "name": "process", "message": "No Node in packages/core (CLAUDE.md, rule 4)." },
+          { "name": "Buffer", "message": "No Node in packages/core (CLAUDE.md, rule 4)." },
+          { "name": "require", "message": "No Node in packages/core (CLAUDE.md, rule 4)." },
+          { "name": "fetch", "message": "No network in packages/core (CLAUDE.md, rule 4)." },
+          { "name": "XMLHttpRequest", "message": "No network in packages/core (CLAUDE.md, rule 4)." },
+          { "name": "WebSocket", "message": "No network in packages/core (CLAUDE.md, rule 4)." }
+        ]
+      }
+    }
+  ]
+}
