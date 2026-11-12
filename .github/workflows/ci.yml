@@ -9,8 +9,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      # The pnpm version comes from "packageManager" in package.json.
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
-      # M1 replaces this with pnpm install, pnpm check, pnpm build, and pnpm audit.
-      - run: node tools/check-docs.ts
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm build
+      # Fails on a high or critical advisory (docs/DEVELOPMENT.md, "Dependencies").
+      - run: pnpm audit --audit-level high

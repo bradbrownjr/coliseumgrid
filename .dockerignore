@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/coverage
+**/*.tsbuildinfo
+.git
+.claude
+.github
+.vitest
+**/.vitest
+docs
+data
+*.db
+.env
+.env.*

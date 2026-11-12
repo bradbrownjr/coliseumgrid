@@ -1,0 +1,91 @@
+name: Docker image
+
+# Builds the online image (see Dockerfile and docs/DEVELOPMENT.md, "Docker").
+#   pull request            builds and smoke-tests, does not push
+#   push to default branch  smoke-tests, then pushes edge and sha-<short sha>
+# The repository's default branch is not necessarily called main, so the push case compares
+# the branch with github.event.repository.default_branch.
+
+on:
+  pull_request:
+  push:
+
+env:
+  IMAGE: ghcr.io/bradbrownjr/coliseumgrid
+
+jobs:
+  image:
+    # A push to any other branch or a tag is skipped; pull requests cover branches.
+    if: github.event_name != 'push' || github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Log in to ghcr.io
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Work out tags and labels
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=edge
+            type=sha,format=short
+
+      # Loads the image into the local Docker so the smoke test can run it. No push yet.
+      - name: Build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: coliseumgrid:smoke
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # The Docker check for M1: the image starts, answers /api/health, and serves the client.
+      - name: Smoke test
+        run: |
+          docker run -d --name smoke -p 3000:3000 coliseumgrid:smoke
+          ok=0
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3000/api/health | grep -q '"status":"ok"'; then ok=1; break; fi
+            sleep 1
+          done
+          if [ "$ok" != 1 ]; then
+            echo "/api/health never returned status ok"
+            docker logs smoke
+            exit 1
+          fi
+          curl -fsS http://127.0.0.1:3000/ > index.html
+          if ! grep -q 'id="root"' index.html; then
+            echo "/ did not return the client's HTML with its root element"
+            cat index.html
+            docker logs smoke
+            exit 1
+          fi
+          docker rm -f smoke
+
+      # The layers are cached from the build above, so this only tags and pushes.
+      - name: Push
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
