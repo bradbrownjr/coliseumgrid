@@ -11,8 +11,8 @@ to one winner at the top, under a pennant. The app doesn't use these files yet.
 | `icon-dark.svg` | Same icon in the dark colors | Favicon and tab on a dark background |
 | `concept-a.webp` | The original concept image | Reference only; don't ship it |
 
-The icon drops to three arches per tier and two bracket levels, uses strokes twice as thick,
-and leaves off the ball on top of the pole.
+The icon drops to three arches per tier and two bracket levels, uses strokes two and a half
+times as thick, and leaves off the ball on top of the pole.
 
 ## Colors
 
@@ -40,6 +40,8 @@ pairs, checked 2026-11-12 with the WCAG 2.2 contrast formula:
 ## Where it came from
 
 The concept was made with an AI image generator (nexarc, OpenAI gpt-image-2.5-sunburst,
-2026-11-12) and is kept as `concept-a.webp`. The SVGs were redrawn by hand from it: made
-symmetric, with even arches, one stroke width per file, and bracket lines thick enough to
+2026-11-12) and is kept as `concept-a.webp`. The SVGs were redrawn by hand from it and
+checked side by side with it in a browser. They keep its raised center block, its larger
+center arch, and its bracket legs running behind the building. They differ in being exactly
+symmetric, with one stroke width per file and bracket lines thicker than the concept's so they
 read at 32 px.
