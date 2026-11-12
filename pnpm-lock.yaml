@@ -181,6 +181,9 @@ importers:
 
   packages/client:
     dependencies:
+      '@coliseumgrid/core':
+        specifier: workspace:*
+        version: link:../core
       '@emotion/react':
         specifier: 11.14.0
         version: 11.14.0(@types/react@19.3.0)(react@19.3.1)
@@ -230,6 +233,9 @@ importers:
 
   packages/server:
     dependencies:
+      '@coliseumgrid/core':
+        specifier: workspace:*
+        version: link:../core
       '@fastify/rate-limit':
         specifier: 11.2.2
         version: 11.2.2

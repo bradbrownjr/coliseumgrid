@@ -1,0 +1,72 @@
+import type { ApiErrorCode, HandleRefusal } from '@coliseumgrid/core';
+import { describe, expect, it } from 'vitest';
+import { ERROR_WORDS, HANDLE_REFUSAL_WORDS, failureWords, isApiErrorCode, isHandleRefusal } from '../src/api/errors.ts';
+
+// A Record over the union makes these lists fail to compile when core adds a code the
+// screens have no words for.
+const API_CODES: Record<ApiErrorCode, true> = {
+  refused: true,
+  taken: true,
+  'bad-pin': true,
+  'wrong-pin': true,
+  'not-found': true,
+  'too-many-tries': true,
+  'bad-request': true,
+};
+const REFUSALS: Record<HandleRefusal, true> = {
+  'too-short': true,
+  'too-long': true,
+  'bad-characters': true,
+  'not-allowed': true,
+};
+
+describe('error words', () => {
+  it.each(Object.keys(API_CODES) as ApiErrorCode[])('has words for the API code %s', (code) => {
+    expect(failureWords({ error: code }).length).toBeGreaterThan(0);
+    expect(isApiErrorCode(code)).toBe(true);
+  });
+
+  it.each(Object.keys(REFUSALS) as HandleRefusal[])('has words for the refusal %s', (reason) => {
+    expect(failureWords({ error: 'refused', reason }).length).toBeGreaterThan(0);
+    expect(isHandleRefusal(reason)).toBe(true);
+  });
+
+  it('has words for a call that got no usable answer', () => {
+    expect(failureWords({ error: 'failed' })).toBe('Something went wrong. Try again.');
+  });
+
+  it('has no words that the API does not send', () => {
+    expect(Object.keys(ERROR_WORDS).sort()).toEqual([...Object.keys(API_CODES), 'failed'].sort());
+    expect(Object.keys(HANDLE_REFUSAL_WORDS).sort()).toEqual(Object.keys(REFUSALS).sort());
+  });
+
+  it('says what to do next for each refusal', () => {
+    expect(failureWords({ error: 'refused', reason: 'not-allowed' })).toBe('Pick another handle');
+    expect(failureWords({ error: 'refused', reason: 'too-short' })).toBe('Use at least 2 letters or numbers');
+    expect(failureWords({ error: 'refused', reason: 'too-long' })).toBe('Use 16 letters or numbers at most');
+    expect(failureWords({ error: 'refused', reason: 'bad-characters' })).toBe('Use letters, numbers, spaces, . - or _');
+  });
+
+  it('uses the sign-up words for the other codes', () => {
+    expect(failureWords({ error: 'taken' })).toBe('That handle is taken.');
+    expect(failureWords({ error: 'wrong-pin' })).toBe("That PIN doesn't match. Try again.");
+    expect(failureWords({ error: 'too-many-tries' })).toBe('Too many tries. Ask the host.');
+  });
+
+  it('falls back to a plain line for a refusal with no reason', () => {
+    expect(failureWords({ error: 'refused' })).toBe('Pick another handle');
+  });
+
+  it('keeps the writing rules for screen text', () => {
+    for (const words of [...Object.values(ERROR_WORDS), ...Object.values(HANDLE_REFUSAL_WORDS)]) {
+      expect(words).not.toMatch(/[\u2014]|\p{Extended_Pictographic}/u);
+    }
+  });
+
+  it('does not treat other strings as codes', () => {
+    expect(isApiErrorCode('failed')).toBe(false);
+    expect(isApiErrorCode('toString')).toBe(false);
+    expect(isApiErrorCode(7)).toBe(false);
+    expect(isHandleRefusal('toString')).toBe(false);
+  });
+});

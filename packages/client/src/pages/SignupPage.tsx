@@ -1,28 +1,53 @@
-import Container from '@mui/material/Container';
-import Typography from '@mui/material/Typography';
-import { Logo } from '../components/Logo.tsx';
+import { useCallback, useState } from 'react';
+import { ClaimStep } from './signup/ClaimStep.tsx';
+import { DoneStep } from './signup/DoneStep.tsx';
+import { HandleStep } from './signup/HandleStep.tsx';
+import { PinStep } from './signup/PinStep.tsx';
+import { TakenStep } from './signup/TakenStep.tsx';
 
-/** Entry panels are centered on the screen (docs/DESIGN.md, "Sign-up"). */
+type Step =
+  | { name: 'handle' }
+  | { name: 'taken'; handle: string }
+  | { name: 'pin'; handle: string; suggestedPin: string }
+  | { name: 'claim'; handle: string }
+  | { name: 'done'; handle: string; pin: string };
+
+/** One task per screen (docs/DESIGN.md, "Sign-up"): handle, then PIN, then done. */
 export function SignupPage() {
-  return (
-    <Container
-      component="main"
-      maxWidth="sm"
-      sx={{
-        minHeight: '100dvh',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 2,
-        textAlign: 'center',
-      }}
-    >
-      <Logo size={12} />
-      <Typography variant="h3" component="h1">
-        Sign up
-      </Typography>
-      <Typography>Players will pick a handle here. That comes next.</Typography>
-    </Container>
-  );
+  const [step, setStep] = useState<Step>({ name: 'handle' });
+  const restart = useCallback(() => setStep({ name: 'handle' }), []);
+  const taken = useCallback((handle: string) => setStep({ name: 'taken', handle }), []);
+  const done = useCallback((handle: string, pin: string) => setStep({ name: 'done', handle, pin }), []);
+
+  switch (step.name) {
+    case 'handle':
+      return (
+        <HandleStep
+          onAvailable={(handle, suggestedPin) => setStep({ name: 'pin', handle, suggestedPin })}
+          onTaken={taken}
+        />
+      );
+    case 'taken':
+      return (
+        <TakenStep
+          handle={step.handle}
+          onItsMe={() => setStep({ name: 'claim', handle: step.handle })}
+          onPickAnother={restart}
+        />
+      );
+    case 'pin':
+      return (
+        <PinStep
+          handle={step.handle}
+          suggestedPin={step.suggestedPin}
+          onDone={done}
+          onTaken={taken}
+          onPickAnother={restart}
+        />
+      );
+    case 'claim':
+      return <ClaimStep handle={step.handle} onDone={done} onPickAnother={restart} />;
+    case 'done':
+      return <DoneStep handle={step.handle} pin={step.pin} onNext={restart} />;
+  }
 }
