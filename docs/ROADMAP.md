@@ -65,6 +65,9 @@ Tasks:
 - Handle rules and the vulgarity filter in `packages/core`, ported from Pattern Break's
   `name.ts` with its innocent-name tests (see `PLAN.md` section 4).
 - PIN suggestion, hashing, and checking.
+- When the server first imports `packages/core`, add `"@coliseumgrid/core": "workspace:*"` to
+  the server's `package.json`. The Docker image installs only the server's declared
+  dependencies, so an undeclared import works locally and fails in the image.
 - Database tables for players and events.
 - The Sign-up screen: handle, PIN, done. The host's player list: add, rename, merge, reset
   PIN.

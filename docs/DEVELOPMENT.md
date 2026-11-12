@@ -25,7 +25,7 @@ Run `pnpm install` once first.
 
 | Command | What it does |
 |---|---|
-| `pnpm lint` | Oxlint over the whole repo. `packages/core/src` also bans `Math.random`, Node and server imports, and DOM, Node, and network globals. |
+| `pnpm lint` | Oxlint over the whole repo. `packages/core/src` also bans `Math.random`, imports of Node built-ins (with or without `node:`), `ws`, and server packages, and DOM, Node, and network globals, read bare or through `globalThis`. A scratch import of a Node built-in also fails `typecheck`, because core has no Node types. |
 | `pnpm typecheck` | `tsc` in every package, then `tools/`. `core` is checked twice: its source with ES2022 types only, its tests with Node types. `client` is checked twice too: the app with DOM types, `vite.config.ts` with Node types. |
 | `pnpm test` | Vitest in every package (`vitest run`). |
 | `pnpm check:docs` | The writing-rules check (see "The docs check"). Same as `node tools/check-docs.ts`. |
@@ -47,7 +47,7 @@ A bad value stops it with a message.
 | `HOST` | `0.0.0.0` | The address to listen on. The default is every address, so tablets and a TV can reach it. |
 | `PORT` | `3000` | The port to listen on, a whole number from 0 to 65535. |
 | `COLISEUMGRID_MODE` | `offline` | `offline` or `online` (see `PLAN.md` section 8). Nothing reads it yet; later milestones use it. |
-| `CLIENT_DIST` | `packages/client/dist` | The folder of built client files to serve. The default is found from the server package's location, so it works from any working directory. Read in `src/main.ts`, not by `loadConfig`. Without an `index.html` there, the server answers only `/api`. |
+| `CLIENT_DIST` | `packages/client/dist` | The folder of built client files to serve: absolute, or relative to the working directory. The default is found from the server package's location, so it works from any working directory. Read in `src/main.ts`, not by `loadConfig`. Without an `index.html` there, the server answers only `/api`. |
 
 ## Layout
 

@@ -156,8 +156,10 @@ export const components: Components<Theme> = {
   },
   MuiInputLabel: {
     styleOverrides: {
-      root: ({ theme, ownerState }) =>
-        ownerState.color === 'primary' ? darkRed(theme, (red) => ({ [FOCUSED]: { color: red } })) : null,
+      // Matched by class: TextField hands `color` to its FormControl, not to the InputLabel, so
+      // the label's ownerState has no `color`. FormLabel adds the class from the form context.
+      root: ({ theme }) =>
+        darkRed(theme, (red) => ({ '&.MuiFormLabel-colorPrimary': { [FOCUSED]: { color: red } } })),
     },
   },
 };

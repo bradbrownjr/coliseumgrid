@@ -15,14 +15,31 @@
             "object": "Math",
             "property": "random",
             "message": "Math.random is banned in core: take a RandomSource from the caller so results can be fixed in tests."
-          }
+          },
+          { "object": "globalThis", "property": "window", "message": "No DOM, Node, or network in packages/core (CLAUDE.md, rule 4)." },
+          { "object": "globalThis", "property": "document", "message": "No DOM, Node, or network in packages/core (CLAUDE.md, rule 4)." },
+          { "object": "globalThis", "property": "navigator", "message": "No DOM, Node, or network in packages/core (CLAUDE.md, rule 4)." },
+          { "object": "globalThis", "property": "location", "message": "No DOM, Node, or network in packages/core (CLAUDE.md, rule 4)." },
+          { "object": "globalThis", "property": "process", "message": "No DOM, Node, or network in packages/core (CLAUDE.md, rule 4)." },
+          { "object": "globalThis", "property": "Buffer", "message": "No DOM, Node, or network in packages/core (CLAUDE.md, rule 4)." },
+          { "object": "globalThis", "property": "require", "message": "No DOM, Node, or network in packages/core (CLAUDE.md, rule 4)." },
+          { "object": "globalThis", "property": "fetch", "message": "No DOM, Node, or network in packages/core (CLAUDE.md, rule 4)." },
+          { "object": "globalThis", "property": "XMLHttpRequest", "message": "No DOM, Node, or network in packages/core (CLAUDE.md, rule 4)." },
+          { "object": "globalThis", "property": "WebSocket", "message": "No DOM, Node, or network in packages/core (CLAUDE.md, rule 4)." },
+          { "object": "globalThis", "property": "crypto", "message": "No DOM, Node, or network in packages/core (CLAUDE.md, rule 4)." },
+          { "object": "globalThis", "property": "localStorage", "message": "No DOM, Node, or network in packages/core (CLAUDE.md, rule 4)." },
+          { "object": "globalThis", "property": "sessionStorage", "message": "No DOM, Node, or network in packages/core (CLAUDE.md, rule 4)." },
+          { "object": "globalThis", "property": "self", "message": "No DOM, Node, or network in packages/core (CLAUDE.md, rule 4)." },
+          { "object": "globalThis", "property": "global", "message": "No DOM, Node, or network in packages/core (CLAUDE.md, rule 4)." }
         ],
+        // The Node built-in names below come from require('node:module').builtinModules (minus
+        // underscore-prefixed ones); node:-only modules are caught by the "node:" prefix.
         "no-restricted-imports": [
           "error",
           {
             "patterns": [
               {
-                "regex": "^(node:|fastify|@fastify/)",
+                "regex": "^(node:|(assert|async_hooks|buffer|child_process|cluster|console|constants|crypto|dgram|diagnostics_channel|dns|domain|events|fs|http|http2|https|inspector|module|net|os|path|perf_hooks|process|punycode|querystring|readline|repl|stream|string_decoder|sys|timers|tls|trace_events|tty|url|util|v8|vm|wasi|worker_threads|zlib)(/|$)|fastify|@fastify/|ws$|undici|node-fetch|axios)",
                 "message": "packages/core is portable: no Node or server imports (CLAUDE.md, rule 4)."
               }
             ]
@@ -39,7 +56,12 @@
           { "name": "require", "message": "No Node in packages/core (CLAUDE.md, rule 4)." },
           { "name": "fetch", "message": "No network in packages/core (CLAUDE.md, rule 4)." },
           { "name": "XMLHttpRequest", "message": "No network in packages/core (CLAUDE.md, rule 4)." },
-          { "name": "WebSocket", "message": "No network in packages/core (CLAUDE.md, rule 4)." }
+          { "name": "WebSocket", "message": "No network in packages/core (CLAUDE.md, rule 4)." },
+          { "name": "crypto", "message": "No Node or Web Crypto in packages/core: take randomness from the caller (CLAUDE.md, rule 4)." },
+          { "name": "localStorage", "message": "No DOM in packages/core (CLAUDE.md, rule 4)." },
+          { "name": "sessionStorage", "message": "No DOM in packages/core (CLAUDE.md, rule 4)." },
+          { "name": "self", "message": "No DOM in packages/core (CLAUDE.md, rule 4)." },
+          { "name": "global", "message": "No Node in packages/core (CLAUDE.md, rule 4)." }
         ]
       }
     }

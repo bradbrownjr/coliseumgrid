@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.ts';
@@ -86,9 +86,37 @@ describe('with a built client', () => {
     }
   });
 
+  it('answers HEAD for a client route like GET', async () => {
+    const res = await app.inject({ method: 'HEAD', url: '/host' });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toContain('text/html');
+  });
+
+  it('answers HEAD for an unknown /api path with a 404', async () => {
+    const res = await app.inject({ method: 'HEAD', url: '/api/nope' });
+    expect(res.statusCode).toBe(404);
+    expect(res.headers['content-type']).toContain('application/json');
+  });
+
   it('does not send the page for a POST to an unknown path', async () => {
     const res = await app.inject({ method: 'POST', url: '/host' });
     expect(res.statusCode).toBe(404);
     expect(res.headers['content-type']).toContain('application/json');
+  });
+});
+
+describe('with a relative clientDist', () => {
+  it('resolves it against the working directory', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'coliseumgrid-rel-'));
+    await writeFile(join(dir, 'index.html'), INDEX);
+    const app = await buildApp({ clientDist: relative(process.cwd(), dir) });
+    try {
+      const res = await app.inject({ url: '/host' });
+      expect(res.statusCode).toBe(200);
+      expect(res.body).toBe(INDEX);
+    } finally {
+      await app.close();
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
