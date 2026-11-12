@@ -66,8 +66,8 @@ contrast. The table below is the same data.
   outlines, links, icons, and selected states use `primary.light` (`#FF6060`).
 - **Dark mode never shows a selected or active state by a crimson fill alone.** Add a
   `primary.light` outline, indicator, or icon.
-- **Contained buttons in dark mode get a 1px `primary.light` border**, so they stand out for
-  red-blind viewers, especially on the TV.
+- **Contained buttons in dark mode have no extra border** (Brad, 2026-11-12). The text label
+  identifies the button.
 - **Error is magenta, not red**, so it stays distinct from the crimson brand.
 - **Win is gold and loss is gray, each with an icon or the word** ("Winner", "Out"). Never
   red against green.
@@ -93,8 +93,7 @@ contrast. The table below is the same data.
   (<https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html>). `primary.light`
   passes. Crimson stays as a fill because success criterion 1.4.11 asks 3:1 for a control's
   boundary, but its Understanding page says a control identified by its text label needs no
-  such boundary (<https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html>). The
-  button edge above adds a second cue anyway.
+  such boundary (<https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html>).
 
 ### What the check covers
 

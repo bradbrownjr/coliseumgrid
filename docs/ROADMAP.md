@@ -44,7 +44,7 @@ Tasks:
 - The server serves the built client and answers `GET /api/health`.
 - Pick the QR code library (see `PLAN.md` section 9).
 - The MUI theme from `DESIGN.md` "Colors": both color schemes, the dark-mode red-text
-  overrides, the button edge, the custom tokens, and the TV route forced dark.
+  overrides, the custom tokens, and the TV route forced dark.
   `check-palette` reads the theme's values.
 
 Acceptance checks:

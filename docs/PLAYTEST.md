@@ -32,7 +32,8 @@ projector washed out by room light.
 - Show it on the projector, if one is used. Is gold (win) still clearly different from gray
   (loss)?
 - Ask a red-green color blind person, if one is around, to point out the winner and the
-  next match.
+  next match, and the crimson buttons on the dark background. If the buttons are hard to
+  find, add a `primary.light` border to contained buttons in dark mode.
 
 ### The travel router (after M3)
 
