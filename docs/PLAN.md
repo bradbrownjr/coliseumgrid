@@ -105,7 +105,9 @@ Host screens need a host session.
 Planned in M2 (2026-11-12). Bodies are JSON. Every response lists its fields; a player
 leaves the server as `{ "id": number, "handle": string }` and nothing more (`CLAUDE.md`,
 rule 1). Errors are `{ "error": code }`, plus `"reason"` for a refused handle. The
-client turns codes into words; the server never sends sentences.
+client turns codes into words; the server never sends sentences. Any route can also answer
+`{ "error": "not-found" }` for an unknown path and 500 `{ "error": "server-error" }` for a
+fault.
 
 Sign-up (tablet):
 

@@ -95,9 +95,18 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
   const { players, trustedProxy } = options;
   const online = options.mode === 'online';
 
-  // Failed PINs per handle, online only. Wrong PINs are counted here rather than by
-  // @fastify/rate-limit because that counts requests, and a right PIN should cost nothing.
+  // Claim attempts per handle, online only. Counted here rather than by @fastify/rate-limit
+  // because a right PIN should cost nothing: an attempt is reserved before the PIN is checked
+  // and cleared when it is right. Reserving first matters because the check awaits a hash;
+  // counting after it would let every request that arrives meanwhile through.
   const wrongPins = online ? new FailureLimiter(CLAIM_MAX_WRONG_PER_HANDLE, CLAIM_WINDOW_MS) : undefined;
+
+  /** Clears the count for a stored handle (its key is derived the same way as on sign-up). */
+  const forget = (handle: string | undefined): void => {
+    if (handle === undefined) return;
+    const check = checkHandle(handle);
+    if (check.ok) wrongPins?.clear(check.key);
+  };
 
   if (online) await app.register(rateLimit, { global: false });
 
@@ -196,15 +205,15 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
     async (request, reply) => {
       const check = checkHandle(request.body.handle);
       if (!check.ok) return refuse(reply, check.reason);
-      if (wrongPins?.isBlocked(check.key)) return fail(reply, 429, 'too-many-tries');
       const player = players.getByKey(check.key);
       if (!player) return fail(reply, 404, 'not-found');
+      // No await between here and the reservation, so concurrent claims each take their own slot.
+      if (wrongPins && !wrongPins.tryAttempt(check.key)) return fail(reply, 429, 'too-many-tries');
       // A string that can't be a PIN is wrong without paying for a hash.
       const right = isValidPin(request.body.pin) && (await verifyPin(request.body.pin, player.pinHash));
-      if (!right) {
-        wrongPins?.recordFailure(check.key);
-        return fail(reply, 401, 'wrong-pin');
-      }
+      if (!right) return fail(reply, 401, 'wrong-pin');
+      // Earlier mistypes don't carry over to the player's next sign-in.
+      wrongPins?.clear(check.key);
       return { player: { id: player.id, handle: player.handle } };
     },
   );
@@ -269,9 +278,15 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
       if (!players.get(id)) return fail(reply, 404, 'not-found');
       const check = checkHandle(request.body.handle);
       if (!check.ok) return refuse(reply, check.reason);
+      const before = players.get(id);
       const result = players.rename(id, check.handle, check.key);
       if (result === 'taken') return fail(reply, 409, 'taken');
       if (result === 'not-found') return fail(reply, 404, 'not-found');
+      // A count belongs to a handle meaning one player. Clear the old key so the next player
+      // to take it starts fresh, and the new key so the renamed player isn't locked by a
+      // stranger's earlier tries.
+      forget(before?.handle);
+      wrongPins?.clear(check.key);
       return { player: result };
     },
   );
@@ -298,6 +313,8 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
       if (!merged || !kept) return fail(reply, 404, 'not-found');
       // Nothing else references a player yet. When matches do, move them to `kept` here first.
       players.delete(id);
+      // The merged handle no longer means this player, so its count goes with it.
+      forget(merged.handle);
       return { player: kept };
     },
   );
@@ -316,10 +333,13 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
     },
     async (request, reply) => {
       const id = Number(request.params.id);
-      if (!players.get(id)) return fail(reply, 404, 'not-found');
+      const player = players.get(id);
+      if (!player) return fail(reply, 404, 'not-found');
       const pin = suggestPin(secureRandom);
       const pinHash = await hashPin(pin);
       if (!players.setPinHash(id, pinHash)) return fail(reply, 404, 'not-found');
+      // A locked player is told to ask the host; the new PIN has to work right away.
+      forget(player.handle);
       return { pin };
     },
   );

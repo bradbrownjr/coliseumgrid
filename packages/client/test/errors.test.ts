@@ -12,6 +12,7 @@ const API_CODES: Record<ApiErrorCode, true> = {
   'not-found': true,
   'too-many-tries': true,
   'bad-request': true,
+  'server-error': true,
 };
 const REFUSALS: Record<HandleRefusal, true> = {
   'too-short': true,

@@ -7,6 +7,12 @@ import { handleReadings, isVulgar } from '../src/vulgarity.ts';
 
 const BAD = [
   'FUCK',
+  'FVCK',
+  'FVVCK',
+  'PHVCK',
+  'N1663R',
+  'N166A',
+  'N1G6ER',
   'FUUUCK',
   'F U C K',
   'F.U.C.K',
@@ -129,6 +135,16 @@ const INNOCENT = [
   'AMY',
   'ACE',
   'R2D2',
+  'C3PO',
+  'MARIO_64',
+  'MARIO 64',
+  'AREA 51',
+  'LEVEL 66',
+  'AGENT 47',
+  '6IX9INE',
+  'VULCAN',
+  'VICTOR',
+  'CALVIN',
   'XXX',
   'HELLO',
   'DAMN',
@@ -234,7 +250,9 @@ describe('isVulgar', () => {
   it('reads an underscore and the digits with no letter look-alike as marks', () => {
     expect(isVulgar('A_S_S')).toBe(true);
     expect(isVulgar('ass_man')).toBe(true);
-    expect(isVulgar('F2U6C_K')).toBe(true);
+    expect(isVulgar('F2U2C_K')).toBe(true);
+    // 6 and 9 read as G, but as filler between single letters they must still count as marks.
+    for (const h of ['F2U6C_K', 'F6U6C6K', 'S6H6I6T', 'A6S6S', 'F9U9C9K']) expect(isVulgar(h)).toBe(true);
     expect(isVulgar('class_act')).toBe(false);
   });
 
@@ -248,13 +266,13 @@ describe('isVulgar', () => {
 
 describe('handleReadings', () => {
   it('reads look-alikes as letters and joins runs of single letters, not words', () => {
-    expect(handleReadings('A55-MAN')).toEqual({ spaced: 'ASS MAN', joined: 'ASS MAN', camel: 'ASS MAN' });
-    expect(handleReadings('A S S')).toEqual({ spaced: 'A S S', joined: 'ASS', camel: 'A S S' });
-    expect(handleReadings('PUSH IT')).toEqual({ spaced: 'PUSH IT', joined: 'PUSH IT', camel: 'PUSH IT' });
+    expect(handleReadings('A55-MAN')).toEqual({ spaced: 'ASS MAN', joined: 'ASS MAN', joinedMarks: 'A MAN', camel: 'ASS MAN' });
+    expect(handleReadings('A S S')).toEqual({ spaced: 'A S S', joined: 'ASS', joinedMarks: 'ASS', camel: 'A S S' });
+    expect(handleReadings('PUSH IT')).toEqual({ spaced: 'PUSH IT', joined: 'PUSH IT', joinedMarks: 'PUSH IT', camel: 'PUSH IT' });
   });
 
   it('gives the same readings in any case', () => {
     expect(handleReadings('a55-Man')).toEqual(handleReadings('A55-MAN'));
-    expect(handleReadings('a.S.s')).toEqual({ spaced: 'A S S', joined: 'ASS', camel: 'A S S' });
+    expect(handleReadings('a.S.s')).toEqual({ spaced: 'A S S', joined: 'ASS', joinedMarks: 'ASS', camel: 'A S S' });
   });
 });

@@ -9,7 +9,8 @@ export const DONE_SECONDS = 15;
 
 interface DoneStepProps {
   handle: string;
-  pin: string;
+  /** Only a new sign-up has one to show. A returning player typed theirs and doesn't see it again. */
+  pin?: string;
   onNext: () => void;
 }
 
@@ -22,10 +23,14 @@ export function DoneStep({ handle, pin, onNext }: DoneStepProps) {
 
   return (
     <SignupFrame title={`You're in, ${handle}!`}>
-      <Typography variant="h5" component="p">
-        Your PIN
-      </Typography>
-      <PinDigits pin={pin} />
+      {pin !== undefined && (
+        <>
+          <Typography variant="h5" component="p">
+            Your PIN
+          </Typography>
+          <PinDigits pin={pin} />
+        </>
+      )}
       <Button variant="contained" size="large" fullWidth onClick={onNext} sx={bigButtonSx}>
         Next player
       </Button>

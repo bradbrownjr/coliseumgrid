@@ -10,14 +10,14 @@ type Step =
   | { name: 'taken'; handle: string }
   | { name: 'pin'; handle: string; suggestedPin: string }
   | { name: 'claim'; handle: string }
-  | { name: 'done'; handle: string; pin: string };
+  | { name: 'done'; handle: string; pin?: string };
 
 /** One task per screen (docs/DESIGN.md, "Sign-up"): handle, then PIN, then done. */
 export function SignupPage() {
   const [step, setStep] = useState<Step>({ name: 'handle' });
   const restart = useCallback(() => setStep({ name: 'handle' }), []);
   const taken = useCallback((handle: string) => setStep({ name: 'taken', handle }), []);
-  const done = useCallback((handle: string, pin: string) => setStep({ name: 'done', handle, pin }), []);
+  const done = useCallback((handle: string, pin?: string) => setStep({ name: 'done', handle, ...(pin !== undefined && { pin }) }), []);
 
   switch (step.name) {
     case 'handle':
@@ -48,6 +48,6 @@ export function SignupPage() {
     case 'claim':
       return <ClaimStep handle={step.handle} onDone={done} onPickAnother={restart} />;
     case 'done':
-      return <DoneStep handle={step.handle} pin={step.pin} onNext={restart} />;
+      return <DoneStep handle={step.handle} {...(step.pin !== undefined && { pin: step.pin })} onNext={restart} />;
   }
 }

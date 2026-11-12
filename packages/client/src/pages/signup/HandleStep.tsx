@@ -5,6 +5,7 @@ import TextField from '@mui/material/TextField';
 import { useState, type SubmitEventHandler } from 'react';
 import { failureWords, HANDLE_REFUSAL_WORDS } from '../../api/errors.ts';
 import { checkSignup } from '../../api/players.ts';
+import { useStepGuard } from '../../components/useStepGuard.ts';
 import { SignupFrame, bigButtonSx } from './SignupFrame.tsx';
 
 interface HandleStepProps {
@@ -17,6 +18,7 @@ export function HandleStep({ onAvailable, onTaken }: HandleStepProps) {
   const [attempted, setAttempted] = useState(false);
   const [serverWords, setServerWords] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const stillHere = useStepGuard();
 
   // Quick feedback from the shared rules. "Too short" waits for Next, because every handle
   // is too short after the first letter. The server still decides (CLAUDE.md, rule 2).
@@ -36,6 +38,7 @@ export function HandleStep({ onAvailable, onTaken }: HandleStepProps) {
     }
     setBusy(true);
     const result = await checkSignup(check.handle);
+    if (!stillHere()) return;
     setBusy(false);
     if (!result.ok) {
       setServerWords(failureWords(result));

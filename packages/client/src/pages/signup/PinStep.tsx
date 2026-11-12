@@ -6,6 +6,7 @@ import { signUp } from '../../api/players.ts';
 import { PinDigits } from '../../components/PinDigits.tsx';
 import { PinKeypad } from '../../components/PinKeypad.tsx';
 import { usePinEntry } from '../../components/usePinEntry.ts';
+import { useStepGuard } from '../../components/useStepGuard.ts';
 import { ErrorSlot, SignupFrame, bigButtonSx, linkButtonSx } from './SignupFrame.tsx';
 
 interface PinStepProps {
@@ -21,12 +22,14 @@ export function PinStep({ handle, suggestedPin, onDone, onTaken, onPickAnother }
   const entry = usePinEntry(suggestedPin, true);
   const [words, setWords] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const stillHere = useStepGuard();
 
   const keep = async () => {
     if (busy || !entry.complete) return;
     setBusy(true);
     setWords(null);
     const result = await signUp(handle, entry.pin);
+    if (!stillHere()) return;
     setBusy(false);
     if (result.ok) return onDone(result.data.player.handle, entry.pin);
     // Someone signed up with this handle while this player was choosing a PIN.

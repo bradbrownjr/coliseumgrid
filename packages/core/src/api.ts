@@ -16,7 +16,8 @@ export type ApiErrorCode =
   | 'wrong-pin'
   | 'not-found'
   | 'too-many-tries'
-  | 'bad-request';
+  | 'bad-request'
+  | 'server-error';
 
 export type ApiError =
   | { error: 'refused'; reason: HandleRefusal }

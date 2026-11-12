@@ -18,7 +18,11 @@ export const CLAIM_MAX_WRONG_PER_HANDLE = 5;
  */
 export const CLAIM_MAX_PER_IP = 60;
 
-/** Counts failures per key in a fixed window that starts at a key's first failure. */
+/**
+ * Counts attempts per key in a fixed window that starts at a key's first attempt. A caller
+ * reserves an attempt before the slow check and clears the key when the check passes, so
+ * requests running at once can't all slip past the limit while the check is in flight.
+ */
 export class FailureLimiter {
   readonly #max: number;
   readonly #windowMs: number;
@@ -31,29 +35,30 @@ export class FailureLimiter {
     this.#now = now;
   }
 
-  /** True when the key has used up its failures for this window. */
-  isBlocked(key: string): boolean {
-    const entry = this.#entries.get(key);
-    if (entry === undefined) return false;
-    if (entry.resetAt <= this.#now()) {
-      this.#entries.delete(key);
-      return false;
-    }
-    return entry.count >= this.#max;
-  }
-
-  recordFailure(key: string): void {
+  /**
+   * Counts one attempt and returns true, or returns false (counting nothing) when the key has
+   * used up its attempts for this window. Synchronous, so no other request runs between the
+   * check and the count.
+   */
+  tryAttempt(key: string): boolean {
     const now = this.#now();
     const entry = this.#entries.get(key);
     if (entry === undefined || entry.resetAt <= now) {
       this.#sweep(now);
       this.#entries.set(key, { count: 1, resetAt: now + this.#windowMs });
-    } else {
-      entry.count++;
+      return true;
     }
+    if (entry.count >= this.#max) return false;
+    entry.count++;
+    return true;
   }
 
-  // Failures are recorded only for handles that exist, so the map is bounded by the player
+  /** Forgets the key's attempts. */
+  clear(key: string): void {
+    this.#entries.delete(key);
+  }
+
+  // Keys are only reserved for handles that exist, so the map is bounded by the player
   // count; dropping expired keys as new ones arrive keeps it at the active ones.
   #sweep(now: number): void {
     for (const [key, entry] of this.#entries) {

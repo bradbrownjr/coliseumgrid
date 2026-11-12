@@ -23,9 +23,11 @@
 /** Roots that count anywhere in a handle. */
 const ANYWHERE = new RegExp(
   [
-    'F+U+C+K',
+    // V for U (FVCK) is listed here instead of mapping V to U everywhere, which would hit
+    // names like Vulcan, Victor, and Calvin.
+    'F+[UV]+C+K',
     'FUQ',
-    'PH+U+C+K',
+    'PH+[UV]+C+K',
     'SH+I+T',
     'SHEIT',
     'SHYT',
@@ -98,18 +100,48 @@ const LOOKALIKES: Record<string, string> = {
   '3': 'E',
   '4': 'A',
   '5': 'S',
+  '6': 'G',
   '7': 'T',
   '8': 'B',
   '9': 'G',
 };
 
 /**
- * The three readings the filter checks: look-alikes as letters and marks as spaces
- * ("A55-MAN" as "ASS MAN"), and that with runs of single letters joined ("A S S" as "ASS"), and split at capitals ("BigAss" as "BIG ASS").
- * All are in capitals, so the case a handle was typed in doesn't matter.
+ * The readings the filter checks, all in capitals so the case a handle was typed in doesn't
+ * matter: look-alikes as letters and marks as spaces ("A55-MAN" as "ASS MAN"); that with runs
+ * of single letters joined ("A S S" as "ASS"); the same join with every digit as a mark, so a
+ * digit that is also a look-alike can't break up a word ("F6U6C6K" as "FUCK", where reading 6
+ * as G would give "FUGCGK"); and split at capitals ("BigAss" as "BIG ASS").
  */
-export function handleReadings(handle: string): { spaced: string; joined: string; camel: string } {
-  const spaced = spacedReading(handle);
+export function handleReadings(handle: string): {
+  spaced: string;
+  joined: string;
+  joinedMarks: string;
+  camel: string;
+} {
+  const spaced = spacedReading(handle, LOOKALIKES);
+  // A capital run ends where a capital starts a lowercase word, so XXAssXX splits to XX Ass XX.
+  // Splitting happens before the look-alikes, so the capitals are still there to split at.
+  const camel = spacedReading(
+    handle.replace(/([a-z0-9])(?=[A-Z])|([A-Z])(?=[A-Z][a-z])/g, '$1$2 '),
+    LOOKALIKES,
+  );
+  return {
+    spaced,
+    joined: joinSingleLetters(spaced),
+    joinedMarks: joinSingleLetters(spacedReading(handle, {})),
+    camel,
+  };
+}
+
+function spacedReading(handle: string, lookalikes: Record<string, string>): string {
+  let spaced = '';
+  for (const c of handle.toUpperCase()) spaced += lookalikes[c] ?? (c >= 'A' && c <= 'Z' ? c : ' ');
+  return spaced;
+}
+
+/** Joins runs of single letters into one word: "A S S MAN" becomes "ASS MAN". */
+function joinSingleLetters(spaced: string): string {
   const words: string[] = [];
   let letters = '';
   for (const word of spaced.split(' ')) {
@@ -122,20 +154,11 @@ export function handleReadings(handle: string): { spaced: string; joined: string
     if (word) words.push(word);
   }
   if (letters) words.push(letters);
-  // A capital run ends where a capital starts a lowercase word, so XXAssXX splits to XX Ass XX.
-  // Splitting happens before the look-alikes, so the capitals are still there to split at.
-  const camel = spacedReading(handle.replace(/([a-z0-9])(?=[A-Z])|([A-Z])(?=[A-Z][a-z])/g, '$1$2 '));
-  return { spaced, joined: words.join(' '), camel };
-}
-
-function spacedReading(handle: string): string {
-  let spaced = '';
-  for (const c of handle.toUpperCase()) spaced += LOOKALIKES[c] ?? (c >= 'A' && c <= 'Z' ? c : ' ');
-  return spaced;
+  return words.join(' ');
 }
 
 /** True when the filter finds an obvious vulgarity in `handle`. */
 export function isVulgar(handle: string): boolean {
-  const { spaced, joined, camel } = handleReadings(handle);
-  return [spaced, joined, camel].some((r) => ANYWHERE.test(r) || WORD.test(r));
+  const { spaced, joined, joinedMarks, camel } = handleReadings(handle);
+  return [spaced, joined, joinedMarks, camel].some((r) => ANYWHERE.test(r) || WORD.test(r));
 }

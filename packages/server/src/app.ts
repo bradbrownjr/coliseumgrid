@@ -91,7 +91,7 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
     if (hasClient && (request.method === 'GET' || request.method === 'HEAD') && !isApiPath(request.url)) {
       return reply.sendFile('index.html', { maxAge: 0, immutable: false });
     }
-    return reply.code(404).send({ error: 'Not found' });
+    return reply.code(404).send({ error: 'not-found' });
   });
 
   return app;

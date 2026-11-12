@@ -6,11 +6,13 @@ import { claimHandle } from '../../api/players.ts';
 import { PinDigits } from '../../components/PinDigits.tsx';
 import { PinKeypad } from '../../components/PinKeypad.tsx';
 import { usePinEntry } from '../../components/usePinEntry.ts';
+import { useStepGuard } from '../../components/useStepGuard.ts';
 import { ErrorSlot, SignupFrame, bigButtonSx, linkButtonSx } from './SignupFrame.tsx';
 
 interface ClaimStepProps {
   handle: string;
-  onDone: (handle: string, pin: string) => void;
+  // No PIN: a returning player just typed it, and a shared tablet shouldn't show it again.
+  onDone: (handle: string) => void;
   onPickAnother: () => void;
 }
 
@@ -20,14 +22,16 @@ export function ClaimStep({ handle, onDone, onPickAnother }: ClaimStepProps) {
   const [words, setWords] = useState<string | null>(null);
   const [lockedOut, setLockedOut] = useState(false);
   const [busy, setBusy] = useState(false);
+  const stillHere = useStepGuard();
 
   const signIn = async () => {
     if (busy || !entry.complete) return;
     setBusy(true);
     setWords(null);
     const result = await claimHandle(handle, entry.pin);
+    if (!stillHere()) return;
     setBusy(false);
-    if (result.ok) return onDone(result.data.player.handle, entry.pin);
+    if (result.ok) return onDone(result.data.player.handle);
     setWords(failureWords(result));
     setLockedOut(result.error === 'too-many-tries');
     entry.reset('');
@@ -51,7 +55,7 @@ export function ClaimStep({ handle, onDone, onPickAnother }: ClaimStepProps) {
       >
         Sign in
       </Button>
-      <Button size="large" onClick={onPickAnother} sx={linkButtonSx}>
+      <Button size="large" onClick={onPickAnother} disabled={busy} sx={linkButtonSx}>
         Pick another handle
       </Button>
     </SignupFrame>

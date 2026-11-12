@@ -31,6 +31,7 @@ export const ERROR_WORDS: Record<ClientErrorCode, string> = {
   'not-found': "That player isn't there anymore.",
   'too-many-tries': 'Too many tries. Ask the host.',
   'bad-request': 'Something went wrong. Try again.',
+  'server-error': 'Something went wrong. Try again.',
   failed: 'Something went wrong. Try again.',
 };
 

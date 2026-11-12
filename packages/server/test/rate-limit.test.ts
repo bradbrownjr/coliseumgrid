@@ -64,6 +64,54 @@ describe('the per-handle limit (online)', () => {
     expect((await claim(server, 'Zap', '4321')).statusCode).toBe(200);
   });
 
+  it('lets at most the limit through when wrong claims arrive at the same time', async () => {
+    const server = await start('online');
+    await signUp(server, 'Zap');
+    const results = await Promise.all(
+      Array.from({ length: 40 }, (_unused, i) => claim(server, 'Zap', '0000', `198.51.100.${i + 1}`)),
+    );
+    const codes = results.map((res) => res.statusCode);
+    expect(codes.filter((code) => code === 401).length).toBeLessThanOrEqual(CLAIM_MAX_WRONG_PER_HANDLE);
+    expect(codes.filter((code) => code === 429).length).toBe(40 - codes.filter((code) => code === 401).length);
+  });
+
+  it('resets the count on a right PIN, so earlier mistypes do not carry over', async () => {
+    const server = await start('online');
+    await signUp(server, 'Zap');
+    for (let round = 0; round < 2; round++) {
+      for (let i = 0; i < CLAIM_MAX_WRONG_PER_HANDLE - 1; i++) {
+        expect((await claim(server, 'Zap', '0000')).statusCode).toBe(401);
+      }
+      expect((await claim(server, 'Zap', '4321')).statusCode).toBe(200);
+    }
+  });
+
+  it('lets a locked player in at once after the host resets the PIN', async () => {
+    const server = await start('online');
+    const id = (await server.inject({ method: 'POST', url: '/api/signup', payload: { handle: 'Zap', pin: '4321' } })).json().player.id;
+    for (let i = 0; i < CLAIM_MAX_WRONG_PER_HANDLE; i++) await claim(server, 'Zap', '0000');
+    expect((await claim(server, 'Zap', '4321')).statusCode).toBe(429);
+    const { pin } = (await server.inject({ method: 'POST', url: `/api/players/${id}/reset-pin` })).json();
+    expect((await claim(server, 'Zap', pin)).statusCode).toBe(200);
+  });
+
+  it('does not leave a count on a handle after a rename or a merge', async () => {
+    const server = await start('online');
+    const post = (url: string, payload?: object) => server.inject({ method: 'POST', url, ...(payload && { payload }) });
+    const zap = (await post('/api/signup', { handle: 'Zap', pin: '4321' })).json().player;
+    const bolt = (await post('/api/signup', { handle: 'Bolt', pin: '4321' })).json().player;
+    for (const handle of ['Zap', 'Bolt']) {
+      for (let i = 0; i < CLAIM_MAX_WRONG_PER_HANDLE; i++) await claim(server, handle, '0000');
+    }
+    await server.inject({ method: 'PATCH', url: `/api/players/${zap.id}`, payload: { handle: 'Zapper' } });
+    await post(`/api/players/${bolt.id}/merge`, { intoId: zap.id });
+    // A new player takes each freed handle and is not locked by the old player's tries.
+    await post('/api/signup', { handle: 'Zap', pin: '1111' });
+    await post('/api/signup', { handle: 'Bolt', pin: '2222' });
+    expect((await claim(server, 'Zap', '1111')).statusCode).toBe(200);
+    expect((await claim(server, 'Bolt', '2222')).statusCode).toBe(200);
+  });
+
   it('keeps the other routes open', async () => {
     const server = await start('online');
     await signUp(server, 'Zap');
@@ -151,23 +199,26 @@ describe('offline mode', () => {
 });
 
 describe('FailureLimiter', () => {
-  it('blocks at the maximum and forgets a key when its window ends', () => {
+  it('counts each attempt up front, blocks at the maximum, and forgets a key when its window ends', () => {
     let now = 1_000;
     const limiter = new FailureLimiter(3, CLAIM_WINDOW_MS, () => now);
-    limiter.recordFailure('zap');
-    limiter.recordFailure('zap');
-    expect(limiter.isBlocked('zap')).toBe(false);
-    limiter.recordFailure('zap');
-    expect(limiter.isBlocked('zap')).toBe(true);
-    expect(limiter.isBlocked('bolt')).toBe(false);
+    expect(limiter.tryAttempt('zap')).toBe(true);
+    expect(limiter.tryAttempt('zap')).toBe(true);
+    expect(limiter.tryAttempt('zap')).toBe(true);
+    expect(limiter.tryAttempt('zap')).toBe(false);
+    expect(limiter.tryAttempt('bolt')).toBe(true);
 
     now += CLAIM_WINDOW_MS - 1;
-    expect(limiter.isBlocked('zap')).toBe(true);
+    expect(limiter.tryAttempt('zap')).toBe(false);
     now += 1;
-    expect(limiter.isBlocked('zap')).toBe(false);
+    expect(limiter.tryAttempt('zap')).toBe(true);
+  });
 
-    // A fresh window starts counting from one.
-    limiter.recordFailure('zap');
-    expect(limiter.isBlocked('zap')).toBe(false);
+  it('clear forgets the count', () => {
+    const limiter = new FailureLimiter(1, CLAIM_WINDOW_MS);
+    expect(limiter.tryAttempt('zap')).toBe(true);
+    expect(limiter.tryAttempt('zap')).toBe(false);
+    limiter.clear('zap');
+    expect(limiter.tryAttempt('zap')).toBe(true);
   });
 });

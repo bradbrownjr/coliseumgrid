@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { openDatabase } from '../src/database.ts';
 import { buildApp } from '../src/app.ts';
 
 const INDEX = '<!doctype html><title>ColiseumGrid test page</title>';
@@ -26,7 +27,18 @@ describe('without a built client', () => {
     const res = await app.inject({ url: '/api/nope' });
     expect(res.statusCode).toBe(404);
     expect(res.headers['content-type']).toContain('application/json');
-    expect(res.json()).toEqual({ error: 'Not found' });
+    expect(res.json()).toEqual({ error: 'not-found' });
+  });
+
+  it('answers a fault with a JSON server-error', async () => {
+    const db = openDatabase(':memory:');
+    const broken = await buildApp({ db });
+    // The prepared statements now fail, which reaches the error handler.
+    db.exec('DROP TABLE players');
+    const res = await broken.inject({ url: '/api/players' });
+    expect(res.statusCode).toBe(500);
+    expect(res.json()).toEqual({ error: 'server-error' });
+    await broken.close();
   });
 
   it('answers other paths with a JSON 404', async () => {
