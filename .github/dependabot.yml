@@ -1,0 +1,8 @@
+# Keeps dependencies current (docs/DEVELOPMENT.md, "Dependencies").
+# M1 adds an npm entry along with package.json.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
