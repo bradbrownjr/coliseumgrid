@@ -97,6 +97,41 @@ Host screens need a host session.
   Online, PIN attempts are rate limited.
 - The host can reset any PIN.
 
+### Players API
+
+Planned in M2 (2026-11-12). Bodies are JSON. Every response lists its fields; a player
+leaves the server as `{ "id": number, "handle": string }` and nothing more (`CLAUDE.md`,
+rule 1). Errors are `{ "error": code }`, plus `"reason"` for a refused handle. The
+client turns codes into words; the server never sends sentences.
+
+Sign-up (tablet):
+
+| Request | Answer |
+|---|---|
+| `POST /api/signup/check` `{ handle }` | `{ status: "available", handle, suggestedPin }`, or `{ status: "taken", handle }`, or 400 `{ error: "refused", reason }` |
+| `POST /api/signup` `{ handle, pin }` | 201 `{ player }`; 409 `{ error: "taken" }`; 400 `{ error: "refused", reason }` or `{ error: "bad-pin" }` |
+| `POST /api/signup/claim` `{ handle, pin }` | `{ player }`; 401 `{ error: "wrong-pin" }`; 404 `{ error: "not-found" }`; 429 `{ error: "too-many-tries" }` |
+
+`handle` in an answer is the normalized display form from `packages/core`. The server runs
+the handle check on every request that takes a handle, whatever the client checked (rule
+2). `suggestedPin` comes from the server's random source, so the tablet needs no state.
+
+Host (laptop):
+
+| Request | Answer |
+|---|---|
+| `GET /api/players` | `{ players: [player] }`, sorted by handle |
+| `POST /api/players` `{ handle }` | 201 `{ player, pin }`, with a suggested PIN for the host to read out |
+| `PATCH /api/players/:id` `{ handle }` | `{ player }`; 409 `{ error: "taken" }`; 400 refused; 404 |
+| `POST /api/players/:id/merge` `{ intoId }` | `{ player }` (the one kept); the merged player is deleted; 404 |
+| `POST /api/players/:id/reset-pin` | `{ pin }`, a new suggested PIN, shown once |
+
+Until M3 adds host sign-in, the host requests answer any device on the network (see
+`ROADMAP.md`, M3).
+
+PIN attempts on `/api/signup/claim` are rate limited per handle and per client IP in online mode, with the
+client IP taken by rule 6. Offline, a wrong PIN only costs a retry.
+
 ### Stats
 
 Each handle keeps, across events: events played, matches won and lost, heat points, and best
