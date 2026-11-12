@@ -199,7 +199,7 @@ Everyone plays everyone with 16 players is 120 matches.
 
 ## 9. Tech stack
 
-Versions checked 2026-11-12. Pin exact versions in the lockfile; recheck at the start of each
+Versions checked 2026-11-12 at the start of M1. Pin exact versions in the lockfile; recheck at the start of each
 milestone.
 
 | Concern | Choice | Notes |
@@ -213,9 +213,10 @@ milestone.
 | Database | `node:sqlite` | See section 8 |
 | Brackets | `brackets-manager` 1.11.1 | MIT; last release 2026-09-20 |
 | Client build | Vite 8.3.8, `@vitejs/plugin-react` 6.3.0 | |
-| UI | React 19.3.1, MUI (Material UI) 9.5.0, React Router 8.5.1 | MUI was Brad's choice (2026-11-12) |
+| UI | React 19.3.1, MUI (Material UI) 9.5.0, `@mui/icons-material` 9.5.0, React Router 8.5.1 | MUI was Brad's choice (2026-11-12) |
+| Styling engine | `@emotion/react` 11.14.0, `@emotion/styled` 11.14.1 | Peer dependencies of MUI 9.5.0 |
 | Fonts | `@fontsource/roboto` 5.3.0 | Bundled for offline use |
-| QR codes | `qrcode` 1.5.4 | Last release 2024-08-05; look for a maintained alternative in M1 |
+| QR codes | `lean-qr` 2.7.4 | MIT, no dependencies, SVG output through `lean-qr/extras/svg`; released 2026-09-07. Replaces `qrcode`, whose last release was 2024-08-05. Its code makes no network requests (checked 2026-11-12) |
 
 ### Packages
 

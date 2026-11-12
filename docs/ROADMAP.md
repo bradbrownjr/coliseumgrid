@@ -51,7 +51,9 @@ Acceptance checks:
 
 - `pnpm check` and `pnpm build` pass locally and in CI.
 - CI fails when `pnpm audit` finds a high or critical advisory.
-- `docker run` on the image serves the client and `/api/health`.
+- The `docker.yml` workflow builds the image, runs it, and gets the client and
+  `/api/health` from it. This CI smoke test is the Docker check; there is no Docker on the
+  dev box (Brad, 2026-11-12).
 - `node tools/check-palette.ts` passes as part of `pnpm check`.
 
 **Docs:** `DEVELOPMENT.md` (requirements, commands, layout, theme), `DESIGN.md` (colors), `PLAN.md` section 9.
