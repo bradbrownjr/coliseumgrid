@@ -11,8 +11,7 @@ in [`PLAN.md`](PLAN.md).
 
 | Item | What it delivers | Stage |
 |---|---|---|
-| [M1 Workspace and checks](#m1-workspace-and-checks) | The pnpm workspace, lint, type-check, tests, CI, dependency audits, and an image build. | Next |
-| [M2 Players and sign-up](#m2-players-and-sign-up) | Handles, the vulgarity filter, PINs, and the Sign-up screen. | Planned |
+| [M2 Players and sign-up](#m2-players-and-sign-up) | Handles, the vulgarity filter, PINs, and the Sign-up screen. | Next |
 | [M3 Pairing and live screens](#m3-pairing-and-live-screens) | Join codes, QR codes, device roles, live updates, and the Display screen's frame. | Planned |
 | [M4 1 vs 1 brackets](#m4-1-vs-1-brackets) | Single and double elimination, round robin, stations, the queue, and undo. | Planned |
 | [M5 Races and free-for-all](#m5-races-and-free-for-all) | Heats with placement points, rounds, and a final. | Planned |
@@ -29,34 +28,6 @@ Each milestone is finished only when its acceptance checks pass. Work them in or
 start the next until the current one is done.
 
 ---
-
-## M1 Workspace and checks
-
-Tasks:
-
-- pnpm workspace with `packages/core`, `packages/server`, and `packages/client`, using the
-  versions in `PLAN.md` section 9 (recheck them first).
-- `pnpm check`: Oxlint, type-check, Vitest, and the docs check.
-- CI runs `pnpm check`, `pnpm build`, and `pnpm audit --audit-level high`.
-- Dependabot for npm and GitHub Actions.
-- `Dockerfile` and the `docker.yml` workflow, following Pattern Break's, publishing
-  `ghcr.io/bradbrownjr/coliseumgrid:edge` from the default branch.
-- The server serves the built client and answers `GET /api/health`.
-- Pick the QR code library (see `PLAN.md` section 9).
-- The MUI theme from `DESIGN.md` "Colors": both color schemes, the dark-mode red-text
-  overrides, the custom tokens, and the TV route forced dark.
-  `check-palette` reads the theme's values.
-
-Acceptance checks:
-
-- `pnpm check` and `pnpm build` pass locally and in CI.
-- CI fails when `pnpm audit` finds a high or critical advisory.
-- The `docker.yml` workflow builds the image, runs it, and gets the client and
-  `/api/health` from it. This CI smoke test is the Docker check; there is no Docker on the
-  dev box (Brad, 2026-11-12).
-- `node tools/check-palette.ts` passes as part of `pnpm check`.
-
-**Docs:** `DEVELOPMENT.md` (requirements, commands, layout, theme), `DESIGN.md` (colors), `PLAN.md` section 9.
 
 ## M2 Players and sign-up
 
