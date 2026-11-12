@@ -118,4 +118,7 @@ here may be forgotten next session.
 - A TV joins by typing an address and a 6-character code; the QR code is a shortcut for
   devices with a camera (Brad, 2026-11-12).
 - Keep libraries current to avoid known vulnerabilities (Brad, 2026-11-12).
+- The changelog's wording needs no approval from Brad, as long as it follows
+  `docs/DOC-STYLE.md` (Brad, 2026-11-12).
+- The license is MIT (Brad, 2026-11-12).
 - Commit and push before deploying anywhere (from ECTLogger and MEPN).

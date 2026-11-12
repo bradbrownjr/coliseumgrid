@@ -88,7 +88,8 @@ script's lists and the guide's "Plain wording" lists in step.
 
 ## Changelog and roadmap
 
-`CHANGELOG.md` is the project's history, kept by whoever finishes the work.
+`CHANGELOG.md` is the project's history, kept by whoever finishes the work. Its wording
+needs no approval from Brad, as long as it follows `DOC-STYLE.md` (Brad, 2026-11-12).
 
 - **A finished roadmap item leaves `ROADMAP.md`**, its "At a glance" row and its section
   together, and becomes an entry in `CHANGELOG.md`. A milestone is finished when the
