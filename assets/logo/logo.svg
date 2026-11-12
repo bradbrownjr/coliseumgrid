@@ -8,7 +8,7 @@
     <rect x="40" y="448" width="432" height="20" rx="10"/>
     <path mask="url(#cg-logo-arches)" d="M64 436V352Q256 324 448 352V436ZM64 342V262Q256 234 448 262V342Q256 314 64 342Z"/>
   </g>
-  <path fill="none" stroke="#B80F2A" stroke-width="20" d="M78 252V212H138V245M108 212V164H198V241M434 252V212H374V245M404 212V164H314V241M153 164V116H359V164M256 116V56"/>
-  <circle cx="256" cy="56" r="14" fill="#B80F2A"/>
-  <path fill="#B80F2A" d="M266 68L334 92L266 116Z"/>
+  <path fill="none" stroke="#B80F2A" stroke-width="20" d="M78 252V212H138V245M108 212V164H198V241M434 252V212H374V245M404 212V164H314V241M153 164V116H359V164M256 116V30"/>
+  <circle cx="256" cy="30" r="14" fill="#B80F2A"/>
+  <path fill="#B80F2A" d="M266 40L322 59L266 78Z"/>
 </svg>
