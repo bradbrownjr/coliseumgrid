@@ -1,14 +1,13 @@
-import type { StandingsRow } from '@coliseumgrid/core';
 import TrophyIcon from '@mui/icons-material/EmojiEvents';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import { ordinal, scaleType, splitPodium, type TypeVariant } from './model.ts';
+import { ordinal, scaleType, splitPodium, type PlacedPlayer, type TypeVariant } from './model.ts';
 
 // 1st is the largest; 2nd and 3rd are a step smaller (docs/DESIGN.md has no TV size yet).
 const PODIUM_TYPE: Record<number, TypeVariant> = { 1: 'h1', 2: 'h2', 3: 'h2' };
 
 /** The finished event: places 1 to 3 large, 1st in the win color, then everyone else. */
-export function FinalStandings({ standings }: { standings: StandingsRow[] }) {
+export function FinalStandings({ standings }: { standings: PlacedPlayer[] }) {
   const { podium, rest } = splitPodium(standings);
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 2, md: 3 }, minHeight: 0 }}>

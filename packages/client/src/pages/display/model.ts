@@ -1,8 +1,19 @@
-// What the Display draws, worked out from a Bracket answer (docs/PLAN.md, "Brackets API").
-// Pure functions with no React, so the choices (which rounds, which sections, how big) are
+// What the Display draws, worked out from a Bracket answer (docs/PLAN.md, "Brackets API")
+// or a Heats answer ("Heats API"). Pure functions with no React, so the choices (which rounds, which sections, how big) are
 // tested without a screen.
 
-import type { Bracket, BracketMatch, Player, StandingsRow, TieNotice } from '@coliseumgrid/core';
+import type {
+  Bracket,
+  BracketMatch,
+  BracketSlot,
+  BracketStation,
+  Heat,
+  HeatStation,
+  Heats,
+  Player,
+  StandingsRow,
+  TieNotice,
+} from '@coliseumgrid/core';
 
 /** The earliest unfinished round and the two after it, so 32 players stay readable. */
 export const SHOWN_ROUNDS = 3;
@@ -207,6 +218,16 @@ export function tableTypeFor(rows: number, screen: Screen): TypeVariant {
   return rows <= 8 ? 'h5' : rows <= 12 ? 'h6' : 'subtitle1';
 }
 
+/**
+ * The type for the points table. The TV has room for h4 up to 10 rows, because the groups
+ * event shows only this table on the right; past that it matches `tableTypeFor`, so 16 rows
+ * and the cut line still fit at 1920 by 1080.
+ */
+export function heatTableType(rows: number, screen: Screen): TypeVariant {
+  if (screen === 'tv' && rows > 8 && rows <= 10) return 'h4';
+  return tableTypeFor(rows, screen);
+}
+
 /** One table, or two halves side by side when there are more than MAX_TABLE_ROWS rows. */
 export function splitTable<T>(rows: T[]): T[][] {
   if (rows.length <= MAX_TABLE_ROWS) return [rows];
@@ -222,6 +243,24 @@ export function stationLayout(count: number, screen: Screen): { columns: 1 | 2; 
   }
   if (count <= 2) return { columns: 1, variant: 'h5' };
   return count <= 4 ? { columns: 1, variant: 'h6' } : { columns: 2, variant: 'body2' };
+}
+
+/**
+ * Stations for groups. A card holds up to 4 handles, so it is about twice as tall as a match
+ * card and the type sits a step or two lower. The rows are measured fits like `DENSITY`: 1 to 4
+ * stations in one column on the TV, 5 to 8 in two; the laptop goes to two columns from 3, because
+ * 4 tall cards and Up next ran past 768.
+ */
+export function heatStationLayout(count: number, screen: Screen): { columns: 1 | 2; variant: TypeVariant } {
+  if (screen === 'phone') return { columns: 1, variant: 'h6' };
+  if (screen === 'tv') {
+    if (count <= 1) return { columns: 1, variant: 'h4' };
+    if (count <= 2) return { columns: 1, variant: 'h5' };
+    return count <= 4 ? { columns: 1, variant: 'h6' } : { columns: 2, variant: 'h6' };
+  }
+  if (count <= 1) return { columns: 1, variant: 'h6' };
+  if (count <= 2) return { columns: 1, variant: 'subtitle1' };
+  return { columns: 2, variant: 'body2' };
 }
 
 /** The type of the Up next list, which sits under the stations. */
@@ -279,21 +318,186 @@ export function elapsedText(calledAt: string | null, nowMs: number): string | nu
 // ---------------------------------------------------------------------------------------
 // Final standings
 
-export interface PlaceGroup {
+/** What the podium needs of a row, so a bracket's and a group event's standings share it. */
+export interface PlacedPlayer {
   place: number;
-  rows: StandingsRow[];
+  player: Player;
+}
+
+export interface PlaceGroup<T extends PlacedPlayer = StandingsRow> {
+  place: number;
+  rows: T[];
 }
 
 /**
  * Places 1 to 3, one group each, and every later row in order. Places 1 to 3 are never
  * shared once a bracket is finished, but a group holds every row at its place anyway.
  */
-export function splitPodium(standings: StandingsRow[]): { podium: PlaceGroup[]; rest: StandingsRow[] } {
+export function splitPodium<T extends PlacedPlayer>(standings: T[]): { podium: PlaceGroup<T>[]; rest: T[] } {
   const sorted = [...standings].sort((a, b) => a.place - b.place || a.player.handle.localeCompare(b.player.handle));
-  const podium: PlaceGroup[] = [];
+  const podium: PlaceGroup<T>[] = [];
   for (const place of [1, 2, 3]) {
     const rows = sorted.filter((row) => row.place === place);
     if (rows.length > 0) podium.push({ place, rows });
   }
   return { podium, rest: sorted.filter((row) => row.place > 3) };
 }
+
+// ---------------------------------------------------------------------------------------
+// Stations, standings, and Up next, for brackets and for groups
+
+/** One station card, worked out from a bracket's station or a group event's station. */
+export interface StationCard {
+  number: number;
+  /** After "Station n:", for a tie-break or a group; null for an ordinary match. */
+  note: string | null;
+  /** Empty while nothing is on the station. */
+  slots: BracketSlot[];
+  calledAt: string | null;
+}
+
+const slotOf = (player: Player): BracketSlot => ({ player, bye: false });
+
+export const bracketStationCards = (stations: BracketStation[]): StationCard[] =>
+  stations.map((station) => ({
+    number: station.number,
+    note: station.match?.side === 'tie-break' ? 'tie-break' : null,
+    slots: station.match?.slots ?? [],
+    calledAt: station.calledAt,
+  }));
+
+export const heatStationCards = (stations: HeatStation[]): StationCard[] =>
+  stations.map((station) => ({
+    number: station.number,
+    note: station.heat ? heatLabel(station.heat) : null,
+    slots: station.heat?.players.map(slotOf) ?? [],
+    calledAt: station.calledAt,
+  }));
+
+/** What a group is called on screen (docs/DOC-STYLE.md, "Tournament words on screen"). */
+export function heatLabel(heat: Heat): string {
+  if (heat.kind === 'final') return 'Final';
+  if (heat.kind === 'tie-break') return 'Tie-break race';
+  return `Group ${heat.number}`;
+}
+
+/** One line of Up next: "Tie-break:" or "Group 4:", then the handles. */
+export interface UpNextEntry {
+  key: number;
+  prefix: string | null;
+  names: string[];
+  /** Drawn small between the names ("vs" for a match); null puts a comma after each name but the last, which wraps cleanly. */
+  separator: string | null;
+}
+
+export const bracketUpNext = (matches: BracketMatch[]): UpNextEntry[] =>
+  matches.map((match) => ({
+    key: match.id,
+    prefix: match.side === 'tie-break' ? 'Tie-break:' : null,
+    names: match.slots.map((slot) => slot.player?.handle ?? 'Waiting'),
+    separator: 'vs',
+  }));
+
+export const heatUpNext = (heats: Heat[]): UpNextEntry[] =>
+  heats.map((heat) => ({
+    key: heat.id,
+    prefix: `${heatLabel(heat)}:`,
+    names: heat.players.map((player) => player.handle),
+    separator: null,
+  }));
+
+/** One row of a standings table: wins and losses in a bracket, points and groups in a group event. */
+export interface StandingsLine {
+  key: number;
+  place: number;
+  handle: string;
+  first: number;
+  second: number;
+  /** A word after the handle, such as "Tie" for a player in a tie that is still open. */
+  note: string | null;
+}
+
+export const bracketLines = (rows: StandingsRow[]): StandingsLine[] =>
+  rows.map((row) => ({ key: row.player.id, place: row.place, handle: row.player.handle, first: row.wins, second: row.losses, note: null }));
+
+/**
+ * The standings by points. A player in a tie that is still open reads "Tie", so the order
+ * between the tied rows isn't taken for a result.
+ */
+export function heatLines(heats: Heats): StandingsLine[] {
+  const tied = new Set(heats.ties.flatMap((tie) => tie.players.map((player) => player.id)));
+  return heats.standings.map((row) => ({
+    key: row.player.id,
+    place: row.place,
+    handle: row.player.handle,
+    first: row.points,
+    second: row.heatsPlayed,
+    note: tied.has(row.player.id) ? 'Tie' : null,
+  }));
+}
+
+/**
+ * How many rows sit above the cut line: the places that reach the final. Null when everyone
+ * reaches it (2 to 4 players) or there are no rows, so no line is drawn.
+ */
+export const cutAfter = (rowCount: number, finalSize: number): number | null =>
+  finalSize > 0 && finalSize < rowCount ? finalSize : null;
+
+/** The row index of the first player in an open tie at the cut, or -1 when no tie is open. */
+function firstTiedIndex(heats: Heats): number {
+  const tied = new Set(heats.ties.flatMap((tie) => tie.players.map((player) => player.id)));
+  return heats.standings.findIndex((row) => tied.has(row.player.id));
+}
+
+/**
+ * Where the cut line goes. With a tie open at the cut it goes above the whole tied group, so
+ * it never reads as the tied players being in: only the rows above it are surely through.
+ */
+export function heatCutAfter(heats: Heats): number | null {
+  const first = firstTiedIndex(heats);
+  if (first >= 0 && first < heats.finalSize) return first;
+  return cutAfter(heats.standings.length, heats.finalSize);
+}
+
+/** Before any qualifying group has a result, every player is level, so there are no places to show. */
+export const noResultsYet = (heats: Heats): boolean =>
+  heats.standings.length > 0 && heats.standings.every((row) => row.heatsPlayed === 0);
+
+/** "Round 1 of 2" while qualifying goes on; null at a tie-break or the final. */
+export const heatRoundText = (heats: Heats): string | null =>
+  heats.round !== null && heats.rounds > 0 ? `Round ${heats.round} of ${heats.rounds}` : null;
+
+/**
+ * The one line a tie at the cut shows, worded by what is at stake: "Zap, Jett, Dash, and Jinx
+ * are tied. 2 of them go to the final. Tie-break race coming up." The spots are the places the
+ * final has left after the players surely in (docs/PLAN.md, "Ties").
+ */
+export function heatTieMessage(tie: TieNotice, heats: Heats): string {
+  const tail = tie.started ? 'Playing the tie-break race.' : 'Tie-break race coming up.';
+  const tied = tie.players.map((player) => player.id);
+  const first = heats.standings.findIndex((row) => tied.includes(row.player.id));
+  const spots = heats.finalSize - first;
+  const spotsText = first >= 0 && spots >= 1 && spots < tie.players.length ? ` ${spots} of them ${spots === 1 ? 'goes' : 'go'} to the final.` : '';
+  return `${joinHandles(tie.players)} are tied.${spotsText} ${tail}`;
+}
+
+/** The final once it is made, or null while qualifying or a tie-break still has to finish. */
+export const finalHeat = (heats: Heats): Heat | null => heats.heats.find((heat) => heat.kind === 'final') ?? null;
+
+export interface Finalist {
+  player: Player;
+  /** Qualifying points; null when the final is the only group (2 to 4 players). */
+  points: number | null;
+}
+
+/** The final's players, best qualifier first, with the points they came in with. */
+export function finalists(heats: Heats, final: Heat): Finalist[] {
+  const rank = new Map(heats.standings.map((row, index) => [row.player.id, { index, points: row.points }]));
+  return final.players
+    .map((player) => ({ player, points: heats.rounds > 0 ? (rank.get(player.id)?.points ?? null) : null, index: rank.get(player.id)?.index ?? Infinity }))
+    .sort((a, b) => a.index - b.index)
+    .map(({ player, points }) => ({ player, points }));
+}
+
+/** "1 point" or "12 points". */
+export const pointsText = (points: number): string => `${points} ${points === 1 ? 'point' : 'points'}`;

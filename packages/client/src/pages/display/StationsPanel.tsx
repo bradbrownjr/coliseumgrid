@@ -1,15 +1,21 @@
-import type { BracketStation } from '@coliseumgrid/core';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { PlayerLine } from './PlayerLine.tsx';
-import { elapsedText, stationLayout } from './model.ts';
-import { useScreen } from './useScreen.ts';
+import { elapsedText, type StationCard, type TypeVariant } from './model.ts';
 import { useNow } from '../../components/useNow.ts';
 
-/** One card per station: the two handles and a timer counting up from the call. */
-export function StationsPanel({ stations }: { stations: BracketStation[] }) {
+interface StationsPanelProps {
+  stations: StationCard[];
+  layout: { columns: 1 | 2; variant: TypeVariant };
+  /** Shown on a station with nothing on it. */
+  idle: string;
+  /** The group's name goes on its own line under "Station n", which a narrow card needs. */
+  noteBelow?: boolean;
+}
+
+/** One card per station: the handles (two in a match, up to four in a group) and a timer counting up from the call. */
+export function StationsPanel({ stations, layout, idle, noteBelow = false }: StationsPanelProps) {
   const now = useNow(true);
-  const layout = stationLayout(stations.length, useScreen());
 
   return (
     <Box
@@ -32,7 +38,7 @@ export function StationsPanel({ stations }: { stations: BracketStation[] }) {
               borderColor: 'divider',
               borderRadius: 1,
               bgcolor: 'background.paper',
-              px: { xs: 2, xl: 2 },
+              px: { xs: 2, md: 1.5, xl: 2 },
               py: { xs: 1.5, md: 1, xl: 1.5 },
               minWidth: 0,
               typography: layout.variant,
@@ -42,21 +48,21 @@ export function StationsPanel({ stations }: { stations: BracketStation[] }) {
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 1, mb: 0.5 }}>
               <Typography component="h2" sx={{ fontSize: '0.8em', lineHeight: 1.25, color: 'text.secondary' }}>
                 Station {station.number}
-                {station.match?.side === 'tie-break' && ': tie-break'}
+                {station.note && !noteBelow && `: ${station.note}`}
               </Typography>
-              {station.match && timer !== null && (
+              {station.slots.length > 0 && timer !== null && (
                 <Box component="span" sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>
                   {timer}
                 </Box>
               )}
             </Box>
-            {station.match ? (
-              <>
-                <PlayerLine slot={station.match.slots[0]} />
-                <PlayerLine slot={station.match.slots[1]} />
-              </>
+            {noteBelow && station.note && (
+              <Box sx={{ fontWeight: 700, color: 'text.primary', mb: 0.25 }}>{station.note}</Box>
+            )}
+            {station.slots.length > 0 ? (
+              station.slots.map((slot, index) => <PlayerLine key={index} slot={slot} />)
             ) : (
-              <Box sx={{ fontSize: '0.8em', color: 'text.secondary' }}>Waiting for a match</Box>
+              <Box sx={{ fontSize: '0.8em', color: 'text.secondary' }}>{idle}</Box>
             )}
           </Box>
         );

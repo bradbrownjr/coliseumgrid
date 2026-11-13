@@ -1,12 +1,11 @@
-import type { BracketMatch } from '@coliseumgrid/core';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import { UP_NEXT_COUNT, scaleType, upNextType } from './model.ts';
+import { UP_NEXT_COUNT, scaleType, upNextType, type UpNextEntry } from './model.ts';
 import { useScreen } from './useScreen.ts';
 
-/** The next matches in the queue, in the Up next color (docs/DESIGN.md, "Colors"). */
-export function UpNextPanel({ matches }: { matches: BracketMatch[] }) {
-  const next = matches.slice(0, UP_NEXT_COUNT);
+/** The next matches or groups in the queue, in the Up next color (docs/DESIGN.md, "Colors"). */
+export function UpNextPanel({ entries, empty }: { entries: UpNextEntry[]; empty: string }) {
+  const next = entries.slice(0, UP_NEXT_COUNT);
   const listType = upNextType(useScreen());
   return (
     <Box
@@ -17,25 +16,29 @@ export function UpNextPanel({ matches }: { matches: BracketMatch[] }) {
         Up next
       </Typography>
       {next.length === 0 ? (
-        <Typography sx={{ typography: listType, color: 'text.secondary' }}>No matches waiting.</Typography>
+        <Typography sx={{ typography: listType, color: 'text.secondary' }}>{empty}</Typography>
       ) : (
         <Box component="ol" sx={{ m: 0, p: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 1, typography: listType, lineHeight: 1.25 }}>
-          {next.map((match) => (
-            <Box component="li" key={match.id} sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', columnGap: '0.5em' }}>
-              {match.side === 'tie-break' && (
+          {next.map((entry) => (
+            <Box component="li" key={entry.key} sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', columnGap: '0.5em' }}>
+              {entry.prefix && (
                 <Box component="span" sx={{ fontSize: '0.7em', color: 'text.secondary' }}>
-                  Tie-break:
+                  {entry.prefix}
                 </Box>
               )}
-              <Box component="span" sx={{ overflowWrap: 'anywhere' }}>
-                {match.slots[0].player?.handle ?? 'Waiting'}
-              </Box>
-              <Box component="span" sx={{ fontSize: '0.7em', color: 'text.secondary' }}>
-                vs
-              </Box>
-              <Box component="span" sx={{ overflowWrap: 'anywhere' }}>
-                {match.slots[1].player?.handle ?? 'Waiting'}
-              </Box>
+              {entry.names.map((name, index) => (
+                <Box component="span" key={index} sx={{ display: 'contents' }}>
+                  {index > 0 && entry.separator !== null && (
+                    <Box component="span" sx={{ fontSize: '0.7em', color: 'text.secondary' }}>
+                      {entry.separator}
+                    </Box>
+                  )}
+                  <Box component="span" sx={{ overflowWrap: 'anywhere' }}>
+                    {name}
+                    {entry.separator === null && index < entry.names.length - 1 && ','}
+                  </Box>
+                </Box>
+              ))}
             </Box>
           ))}
         </Box>
