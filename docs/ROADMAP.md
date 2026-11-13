@@ -11,8 +11,7 @@ in [`PLAN.md`](PLAN.md).
 
 | Item | What it delivers | Stage |
 |---|---|---|
-| [M3 Pairing and live screens](#m3-pairing-and-live-screens) | Join codes, QR codes, device roles, live updates, and the Display screen's frame. | Next |
-| [M4 1 vs 1 brackets](#m4-1-vs-1-brackets) | Single and double elimination, round robin, stations, the queue, and undo. | Planned |
+| [M4 1 vs 1 brackets](#m4-1-vs-1-brackets) | Single and double elimination, round robin, stations, the queue, and undo. | Next |
 | [M5 Races and free-for-all](#m5-races-and-free-for-all) | Heats with placement points, rounds, and a final. | Planned |
 | [M6 Player view](#m6-player-view) | Players follow their own matches and standings on their phones, with an alert when they're up next. | Planned |
 | [M7 Setup wizard](#m7-setup-wizard) | The three-step setup and the time estimate. | Planned |
@@ -28,26 +27,6 @@ Each milestone is finished only when its acceptance checks pass. Work them in or
 start the next until the current one is done.
 
 ---
-
-## M3 Pairing and live screens
-
-Tasks:
-
-- Join codes and QR codes, device roles, device tokens, and unpairing (`PLAN.md` section 3).
-- Host sign-in for both modes. Until then the host's actions (the player list's add, rename,
-  merge, and PIN reset) answer any device on the network, by Brad's choice for LAN testing
-  (2026-11-12). This task closes them in both modes.
-- WebSocket updates from the server to every paired screen.
-- The Display screen's frame: event name, "Up next", the timer.
-
-Acceptance checks:
-
-- A code works once, expires after 10 minutes, and wrong guesses are rate limited.
-- In online mode, a request from `localhost` still needs the host password.
-- A change on the host screen shows on a paired display within a second on the local
-  network.
-
-**Docs:** `PLAN.md` section 3, `DESIGN.md` (TV type size), `PLAYTEST.md`.
 
 ## M4 1 vs 1 brackets
 

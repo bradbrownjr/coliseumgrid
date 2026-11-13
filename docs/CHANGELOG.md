@@ -12,6 +12,16 @@ use **New Features**, **Improvements**, and **Bug Fixes**, in that order.
 
 ## Milestones
 
+* **M3 Pairing and live screens.** The host signs in with a password, set in
+  `COLISEUMGRID_HOST_PASSWORD` or, on the offline laptop, chosen on first run. The host
+  screen makes a 6-character code with a QR code for a TV or a sign-up tablet, lists paired
+  screens, and unpairs them. The plain address opens the join screen, so a TV remote types
+  only the host and port. Codes work once, expire after 10 minutes, and are limited per
+  address and across all callers. Paired screens get changes over a WebSocket; on the Unraid
+  server a renamed event reached a paired display in 156 ms. The Display screen shows the
+  event name, with places for "Up next" and the timer. A security review closed requests from
+  pages on another port, a limiter that a flood of addresses could stall, and old sessions
+  outliving a password change. Hand tests on real devices are in `PLAYTEST.md`.
 * **M2 Players and sign-up.** Players sign up on the Sign-up screen with a handle and a
   4-digit PIN, suggested for them. A taken handle asks for its PIN. The handle filter in
   `core` is ported from Pattern Break and tightened: capital letters inside a handle count as

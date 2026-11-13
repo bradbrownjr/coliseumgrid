@@ -3,9 +3,27 @@
 Tests that need a person or real hardware. Brad runs them as time allows; what one finds
 becomes a roadmap item. A test is removed once it's reported.
 
-Each test names the milestone that makes it possible. None can be run yet.
+Each test names the milestone that makes it possible. The tests marked "after M3" can be
+run on the Unraid server (`http://10.6.26.2:8390`).
 
 ## Planned
+
+### Host sign-in, pairing, and live updates (after M3)
+
+Why: the server's tests use made-up requests. These use real browsers, a real camera, and a
+real network.
+
+- Open `/host` and sign in. Change the event name.
+- Tap **Add a TV**. On another device, open the plain address and type the code. Does it
+  land on the Display screen? Change the event name on the host. Does the TV show it within
+  a second?
+- Scan the QR code with a phone camera. Does the join page open with the code filled in,
+  and join by itself?
+- Tap **Add a sign-up tablet** and pair a second device. Does it land on the Sign-up screen?
+- Unpair one device from the host's list. Does it go back to the join screen? Does the new
+  device show up in the host's list within about 5 seconds?
+- Tap **Reset PIN** on a player several times. Does the window open every time? (Brad saw it
+  fail on his phone in M2; the cause wasn't found.)
 
 ### The TV device (after M3)
 
