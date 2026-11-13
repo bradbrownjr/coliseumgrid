@@ -48,9 +48,9 @@ A bad value stops it with a message.
 | `HOST` | `0.0.0.0` | The address to listen on. The default is every address, so tablets and a TV can reach it. |
 | `PORT` | `3000` | The port to listen on, a whole number from 0 to 65535. |
 | `COLISEUMGRID_MODE` | `offline` | `offline` or `online` (see `PLAN.md` section 8). Online turns on the rate limits on `POST /api/signup/claim`, turns off the `localhost` host sign-in and the first-run password setup, and needs `COLISEUMGRID_HOST_PASSWORD`. |
-| `COLISEUMGRID_HOST_PASSWORD` | none | The host password, 8 to 128 characters, taken as typed (spaces count). When set, it is the password and first-run setup is off. **Required online**: the server stops at startup without it. Offline without it, the first visit from the laptop itself (`localhost`) sets the password, once, and it is stored hashed (scrypt, like PINs). The server never prints or returns it. The Unraid template has it as a masked variable. |
+| `COLISEUMGRID_HOST_PASSWORD` | none | The host password, 8 to 128 characters, taken as typed (spaces count). When set, it is the password and first-run setup is off. **Required online**: the server stops at startup without it. Offline without it, the first visit from the laptop itself (`localhost`) sets the password, once, and it is stored hashed (scrypt, like PINs). The server never prints or returns it. Changing it between starts ends every host session at startup (see "Host and device sessions"). The Unraid template has it as a masked variable. |
 | `DATA_DIR` | `data` | The folder that holds the database file `coliseumgrid.db`. Absolute, or relative to the working directory (the server turns it into an absolute path at startup). The server creates it if it is missing. The Docker image sets `/data`. |
-| `TRUSTED_PROXY` | none | The reverse proxy's IP address. Only a request whose direct peer is this address may name the client in `X-Forwarded-For`, and only the last entry is used (`CLAUDE.md`, rule 6). Without it, the client is the socket address. Set it online, behind the proxy; without it every player shares the proxy's address and its rate limit. |
+| `TRUSTED_PROXY` | none | The reverse proxy's IP address. Only a request whose direct peer is this address may name the client in `X-Forwarded-For`, and only the last entry is used (`CLAUDE.md`, rule 6). Without it, the client is the socket address. Set it online, behind the proxy; without it every player shares the proxy's address and its rate limit, and the server prints a warning at startup. |
 | `CLIENT_DIST` | `packages/client/dist` | The folder of built client files to serve: absolute, or relative to the working directory. The default is found from the server package's location, so it works from any working directory. Read in `src/main.ts`, not by `loadConfig`. Without an `index.html` there, the server answers only `/api`. |
 
 ### Host and device sessions
@@ -84,7 +84,21 @@ A bad value stops it with a message.
   refused the sign-up routes with the same 401.
 - **Guessing limits.** Wrong host passwords and wrong pairing codes are limited per client IP
   in both modes (`rate-limit.ts`: 10 wrong tries per 10 minutes each, counted before the slow
-  check). The tests move time with the `now` option of `buildApp`.
+  check). Wrong pairing codes are also capped across all callers, 100 per 10 minutes, because
+  the per-IP limit means little against a caller with many addresses; the arithmetic is on
+  `JOIN_MAX_WRONG_GLOBAL`. Every per-client key comes from `getClientKey` in `client-ip.ts`,
+  which counts an IPv6 address by its /64 (IPv4 and IPv4-mapped IPv6 stay per address). A
+  `FailureLimiter` holds at most 10,000 keys and answers as blocked for a new key when full,
+  so a flood of made-up keys can't grow it without bound. The tests move time with the `now`
+  option of `buildApp`.
+- **Origin check.** `app.ts` has an `onRequest` hook that answers 403 `forbidden` to any
+  request other than `GET`, `HEAD`, or `OPTIONS` whose `Origin` host and port differ from its
+  `Host`; `GET /api/live` runs the same check (`rejectForeignOrigin` in `access.ts`). The rule
+  and the reason are in `PLAN.md` section 3. It depends on the original `Host` reaching the
+  server, so a reverse proxy must not rewrite it (see "Docker").
+- **Repeated cookies.** `parseCookies` returns every value of a name. A page on a sibling
+  subdomain can set a second `cg_host` or `cg_device` with a narrower path, which browsers
+  send first, so `access.ts` takes the first value that is a real session or device.
 - **Live updates.** `GET /api/live` is a WebSocket (`@fastify/websocket`). `live.ts` keeps the
   open connections, pings them every 30 seconds, drops the ones that don't answer or whose
   sign-in ended, and sends `unpaired` before closing a device the host removed. Routes
@@ -93,6 +107,34 @@ A bad value stops it with a message.
   the peer address as `{ socket: { remoteAddress } }`, and close each socket at the end.
 - **The current event** is the newest row of `events`. `PUT /api/event` renames it, or makes
   the first one. Names are 1 to 60 characters with spaces tidied.
+
+### Client screens and the API
+
+How the client talks to the server (`packages/client/src`).
+
+- **Calls.** Every call goes through `api/request.ts`: it resolves to a `Result` (`ok` and `data`, or
+  `ok: false` and an error code), never throws, sends cookies (`credentials: 'same-origin'`), and
+  reads a 204 as `ok` with no data. `api/players.ts` and `api/host.ts` are one line per route. A
+  401 `not-signed-in` on any call also runs the listeners from `onNotSignedIn`: the host page
+  returns to its sign-in panel, and a paired screen returns to the join screen.
+- **Who sees a screen.** `/host` asks `GET /api/host/session` first (`pages/HostPage.tsx`). `/signup`
+  and `/display` sit inside `components/AccessGate.tsx`, which sends anyone without a device of
+  the right role (or, for Sign-up, a host session) to `/`. `/` is the join screen
+  (`pages/JoinPage.tsx`): a paired device goes on to its own screen, and `?code=` joins at once and
+  is removed from the address.
+- **The live connection.** `components/useLive.ts` opens `GET /api/live` (ws or wss to match the
+  page) and reconnects after a drop with a wait that doubles from 1 to 30 seconds with jitter
+  (`api/live.ts`). It stops on `unpaired` and when the sign-in has ended. `onOpen` runs on every
+  connect, so a screen reloads what it shows; messages sent while it was down are lost. In
+  `pnpm dev`, the Vite proxy needs `ws: true` for `/api`, which `vite.config.ts` sets.
+- **The join address.** The pairing panel builds it from `window.location.origin`. On `localhost`
+  no other screen can reach that, so the panel asks the host to type the laptop's network
+  address; the server doesn't report one.
+- **QR codes.** `lean-qr` makes one SVG path (`pairing.ts`, `pages/host/JoinQr.tsx`). The code is
+  always dark on light, in both color modes.
+- **Screens in tests.** Client tests need no DOM, so the pure parts are in `api/live.ts` and
+  `pairing.ts`. Screens are checked with Playwright against `packages/client/dist`, with `/api`
+  answered by `page.route` and the socket by `page.routeWebSocket`.
 
 ### Database
 
@@ -110,7 +152,7 @@ by a newer server is refused at startup.
 |---|---|
 | `packages/core` | `@coliseumgrid/core`: rules shared by the browser and the server (see `PLAN.md` section 9). Today it holds the seeded random source. |
 | `packages/server` | `@coliseumgrid/server`: `src/app.ts` builds the Fastify app (`buildApp`), `src/config.ts` reads the settings, `src/main.ts` starts it, `src/database.ts` holds the schema, `src/players-routes.ts` the players API, `src/pin-hash.ts` PIN and password hashing (scrypt), `src/client-ip.ts` and `src/rate-limit.ts` the client address and the guessing limits, `src/access.ts`, `src/host-routes.ts`, `src/devices.ts`, `src/host-store.ts`, `src/events.ts`, and `src/live.ts` host sign-in, pairing, and live updates. |
-| `packages/client` | `@coliseumgrid/client`: Vite, React, and MUI. `src/theme/` holds the palette and the theme, `src/pages/` the Host (`/host`), Sign-up (`/signup`), and Display (`/display`) screens, `src/components/` shared pieces, `test/` the Vitest tests. `/` goes to `/host`. |
+| `packages/client` | `@coliseumgrid/client`: Vite, React, and MUI. `src/theme/` holds the palette and the theme, `src/pages/` the Host (`/host`), Sign-up (`/signup`), and Display (`/display`) screens, `src/components/` shared pieces, `src/api/` the calls, `test/` the Vitest tests. `/` is the join screen and `/host` is the host's entry; an unknown path goes to `/`. |
 | `tools/` | Scripts run by hand or in CI, type-checked by `tools/tsconfig.json`. |
 | `docs/` | The docs listed in `DOC-STYLE.md`, "Where things go". |
 
@@ -208,6 +250,16 @@ without pushing. The dev box has no Docker, so this CI job is the only place the
 
 `deploy/unraid/coliseumgrid.xml` is the Unraid template, following Pattern Break's. Its
 data folder must belong to uid 1000 (`chown 1000:1000`), since the image runs as `node`.
+
+Behind a reverse proxy, the proxy has to pass the browser's `Host` header through unchanged,
+or every state-changing request fails the server's Origin check (`PLAN.md` section 3). Caddy
+does this by default: its `reverse_proxy` docs say it passes incoming headers, `Host`
+included, to the backend without modifications
+(<https://caddyserver.com/docs/caddyfile/directives/reverse_proxy>, "Defaults"). The same page
+says Caddy rewrites `Host` automatically only for HTTPS upstreams, so point it at the
+container over plain HTTP (`reverse_proxy coliseumgrid:3000`) and don't add `header_up Host`.
+Set `TRUSTED_PROXY` to the proxy's address. The Origin check ignores the scheme, so HTTPS in
+front of plain HTTP works.
 
 The Dockerfile installs pnpm with `npm install --global pnpm@<version>`, because Node 26 has
 no corepack. Keep that version in step with `packageManager` in `package.json`.

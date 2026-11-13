@@ -6,7 +6,7 @@ import { useState, type SubmitEventHandler } from 'react';
 import { failureWords, HANDLE_REFUSAL_WORDS } from '../../api/errors.ts';
 import { checkSignup } from '../../api/players.ts';
 import { useStepGuard } from '../../components/useStepGuard.ts';
-import { SignupFrame, bigButtonSx } from './SignupFrame.tsx';
+import { EntryFrame, bigButtonSx } from '../../components/EntryFrame.tsx';
 
 interface HandleStepProps {
   onAvailable: (handle: string, suggestedPin: string) => void;
@@ -49,7 +49,7 @@ export function HandleStep({ onAvailable, onTaken }: HandleStepProps) {
   };
 
   return (
-    <SignupFrame title="Pick your handle">
+    <EntryFrame title="Pick your handle">
       <Box component="form" onSubmit={submit} noValidate sx={{ display: 'contents' }}>
         <TextField
           autoFocus
@@ -73,6 +73,6 @@ export function HandleStep({ onAvailable, onTaken }: HandleStepProps) {
           Next
         </Button>
       </Box>
-    </SignupFrame>
+    </EntryFrame>
   );
 }

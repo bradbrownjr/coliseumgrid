@@ -10,6 +10,7 @@ export {
 } from './handle.ts';
 export { isVulgar } from './vulgarity.ts';
 export { PIN_LENGTH, isValidPin, suggestPin } from './pin.ts';
+export { HOST_PASSWORD_MAX, HOST_PASSWORD_MIN } from './host-password.ts';
 export {
   JOIN_CODE_ALPHABET,
   JOIN_CODE_LENGTH,

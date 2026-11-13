@@ -158,6 +158,9 @@ Tasks:
 
 - The portable bundle for Windows x64 and Linux x64, built in CI and attached to releases.
 - The launcher: starts the server, opens the host screen.
+- The join address on the laptop. The launcher opens the host screen at `localhost`, which
+  a TV can't use, so for now the pairing panel asks the host to type the laptop's address.
+  The server tells the host screen its network address instead.
 - Online mode settings, the reverse proxy and client IP rule, and `docs/SELF-HOSTING.md`.
 
 Acceptance checks:

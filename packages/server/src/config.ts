@@ -3,14 +3,14 @@
 
 import { isIP } from 'node:net';
 import { resolve } from 'node:path';
+import { HOST_PASSWORD_MAX, HOST_PASSWORD_MIN } from '@coliseumgrid/core';
 import { normalizeIp } from './client-ip.ts';
 
 export const MODES = ['offline', 'online'] as const;
 export type Mode = (typeof MODES)[number];
 
-/** Host passwords are 8 to 128 characters. The cap keeps a huge body from costing a long hash. */
-export const HOST_PASSWORD_MIN = 8;
-export const HOST_PASSWORD_MAX = 128;
+// The limits live in core so the client's setup screen shows the same numbers.
+export { HOST_PASSWORD_MAX, HOST_PASSWORD_MIN };
 
 export interface Config {
   /** Offline runs on the host's laptop; online runs behind a reverse proxy (docs/PLAN.md, section 8). */

@@ -7,7 +7,7 @@ import { PinDigits } from '../../components/PinDigits.tsx';
 import { PinKeypad } from '../../components/PinKeypad.tsx';
 import { usePinEntry } from '../../components/usePinEntry.ts';
 import { useStepGuard } from '../../components/useStepGuard.ts';
-import { ErrorSlot, SignupFrame, bigButtonSx, linkButtonSx } from './SignupFrame.tsx';
+import { ErrorSlot, EntryFrame, bigButtonSx, linkButtonSx } from '../../components/EntryFrame.tsx';
 
 interface ClaimStepProps {
   handle: string;
@@ -38,7 +38,7 @@ export function ClaimStep({ handle, onDone, onPickAnother }: ClaimStepProps) {
   };
 
   return (
-    <SignupFrame narrow title="Enter your PIN">
+    <EntryFrame narrow title="Enter your PIN">
       <Typography variant="h4" component="p" sx={{ overflowWrap: 'anywhere' }}>
         {handle}
       </Typography>
@@ -58,6 +58,6 @@ export function ClaimStep({ handle, onDone, onPickAnother }: ClaimStepProps) {
       <Button size="large" onClick={onPickAnother} disabled={busy} sx={linkButtonSx}>
         Pick another handle
       </Button>
-    </SignupFrame>
+    </EntryFrame>
   );
 }

@@ -7,7 +7,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import TextField from '@mui/material/TextField';
 import { useState, type SubmitEventHandler } from 'react';
 import { failureWords, HANDLE_REFUSAL_WORDS } from '../../api/errors.ts';
-import type { Result } from '../../api/players.ts';
+import type { Result } from '../../api/request.ts';
 
 interface HandleDialogProps<T> {
   title: string;

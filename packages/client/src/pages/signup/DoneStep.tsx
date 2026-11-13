@@ -2,7 +2,7 @@ import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import { useEffect } from 'react';
 import { PinDigits } from '../../components/PinDigits.tsx';
-import { SignupFrame, bigButtonSx } from './SignupFrame.tsx';
+import { EntryFrame, bigButtonSx } from '../../components/EntryFrame.tsx';
 
 /** How long the done screen stays before the line moves on by itself. */
 export const DONE_SECONDS = 15;
@@ -22,7 +22,7 @@ export function DoneStep({ handle, pin, onNext }: DoneStepProps) {
   }, [onNext]);
 
   return (
-    <SignupFrame title={`You're in, ${handle}!`}>
+    <EntryFrame title={`You're in, ${handle}!`}>
       {pin !== undefined && (
         <>
           <Typography variant="h5" component="p">
@@ -34,6 +34,6 @@ export function DoneStep({ handle, pin, onNext }: DoneStepProps) {
       <Button variant="contained" size="large" fullWidth onClick={onNext} sx={bigButtonSx}>
         Next player
       </Button>
-    </SignupFrame>
+    </EntryFrame>
   );
 }

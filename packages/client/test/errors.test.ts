@@ -1,6 +1,6 @@
 import type { ApiErrorCode, HandleRefusal } from '@coliseumgrid/core';
 import { describe, expect, it } from 'vitest';
-import { ERROR_WORDS, HANDLE_REFUSAL_WORDS, failureWords, isApiErrorCode, isHandleRefusal } from '../src/api/errors.ts';
+import { ERROR_WORDS, GUESS_LIMIT_WORDS, HANDLE_REFUSAL_WORDS, failureWords, guessWords, isApiErrorCode, isHandleRefusal } from '../src/api/errors.ts';
 
 // A Record over the union makes these lists fail to compile when core adds a code the
 // screens have no words for.
@@ -74,5 +74,23 @@ describe('error words', () => {
     expect(isApiErrorCode('toString')).toBe(false);
     expect(isApiErrorCode(7)).toBe(false);
     expect(isHandleRefusal('toString')).toBe(false);
+  });
+});
+
+describe('words for guessed passwords and codes', () => {
+  it('tells the host to wait, not to ask the host', () => {
+    expect(guessWords({ error: 'too-many-tries' })).toBe(GUESS_LIMIT_WORDS);
+    expect(GUESS_LIMIT_WORDS).not.toMatch(/ask/i);
+  });
+
+  it('uses the shared words for everything else', () => {
+    expect(guessWords({ error: 'wrong-password' })).toBe("That password doesn't match. Try again.");
+    expect(guessWords({ error: 'wrong-code' })).toBe("That code doesn't work. Ask the host for a new one.");
+    expect(guessWords({ error: 'forbidden' })).toBe('Only the host laptop can do that.');
+    expect(guessWords({ error: 'failed' })).toBe('Something went wrong. Try again.');
+  });
+
+  it('keeps the writing rules', () => {
+    expect(GUESS_LIMIT_WORDS).not.toMatch(/[\u2014]|\p{Extended_Pictographic}/u);
   });
 });

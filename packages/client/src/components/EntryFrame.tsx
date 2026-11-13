@@ -4,17 +4,20 @@ import Container from '@mui/material/Container';
 import type { SxProps, Theme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import type { ReactNode } from 'react';
-import { Logo } from '../../components/Logo.tsx';
+import { Logo } from './Logo.tsx';
 
-interface SignupFrameProps {
+interface EntryFrameProps {
   title: string;
   /** The PIN screens: as wide as the keypad, so the buttons line up with it. */
   narrow?: boolean;
   children: ReactNode;
 }
 
-/** Every sign-up screen is one centered panel (docs/DESIGN.md, "Sign-up"). */
-export function SignupFrame({ title, narrow = false, children }: SignupFrameProps) {
+/**
+ * Every entry screen is one centered panel (docs/DESIGN.md, "Sign-up"; CLAUDE.md, "Always and
+ * never"): the sign-up steps, the join screen, and the host sign-in.
+ */
+export function EntryFrame({ title, narrow = false, children }: EntryFrameProps) {
   return (
     <Container
       component="main"
@@ -40,7 +43,7 @@ export function SignupFrame({ title, narrow = false, children }: SignupFrameProp
   );
 }
 
-/** The main button on a sign-up screen: full width and tall. */
+/** The main button on an entry screen: full width and tall. */
 export const bigButtonSx: SxProps<Theme> = {
   minHeight: (theme) => theme.spacing(9),
   typography: 'h5',

@@ -1,4 +1,6 @@
 import { useCallback, useState } from 'react';
+import { AccessGate, useGoToJoin } from '../components/AccessGate.tsx';
+import { useLive } from '../components/useLive.ts';
 import { ClaimStep } from './signup/ClaimStep.tsx';
 import { DoneStep } from './signup/DoneStep.tsx';
 import { HandleStep } from './signup/HandleStep.tsx';
@@ -12,8 +14,20 @@ type Step =
   | { name: 'claim'; handle: string }
   | { name: 'done'; handle: string; pin?: string };
 
-/** One task per screen (docs/DESIGN.md, "Sign-up"): handle, then PIN, then done. */
+/** Only a Sign-up device or a signed-in host gets in; anyone else goes to the join screen. */
 export function SignupPage() {
+  return (
+    <AccessGate role="signup">
+      <SignupSteps />
+    </AccessGate>
+  );
+}
+
+/** One task per screen (docs/DESIGN.md, "Sign-up"): handle, then PIN, then done. */
+function SignupSteps() {
+  // Unpaired by the host, or a sign-in that ended: back to the join screen.
+  const goToJoin = useGoToJoin();
+  useLive({ onMessage: () => undefined, onEnded: goToJoin });
   const [step, setStep] = useState<Step>({ name: 'handle' });
   const restart = useCallback(() => setStep({ name: 'handle' }), []);
   const taken = useCallback((handle: string) => setStep({ name: 'taken', handle }), []);

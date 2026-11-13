@@ -2,7 +2,7 @@ import Button from '@mui/material/Button';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { ERROR_WORDS } from '../../api/errors.ts';
-import { SignupFrame, bigButtonSx } from './SignupFrame.tsx';
+import { EntryFrame, bigButtonSx } from '../../components/EntryFrame.tsx';
 
 interface TakenStepProps {
   handle: string;
@@ -12,7 +12,7 @@ interface TakenStepProps {
 
 export function TakenStep({ handle, onItsMe, onPickAnother }: TakenStepProps) {
   return (
-    <SignupFrame title={ERROR_WORDS.taken}>
+    <EntryFrame title={ERROR_WORDS.taken}>
       <Typography variant="h4" component="p" sx={{ overflowWrap: 'anywhere' }}>
         {handle}
       </Typography>
@@ -24,6 +24,6 @@ export function TakenStep({ handle, onItsMe, onPickAnother }: TakenStepProps) {
           Pick another handle
         </Button>
       </Stack>
-    </SignupFrame>
+    </EntryFrame>
   );
 }

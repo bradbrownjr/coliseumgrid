@@ -53,3 +53,15 @@ export function failureWords(failure: Pick<Failure, 'error' | 'reason'>): string
   if (failure.error === 'refused' && failure.reason) return HANDLE_REFUSAL_WORDS[failure.reason];
   return ERROR_WORDS[failure.error];
 }
+
+/**
+ * The words for a password or code that was tried too often. The wait is the server's
+ * 10-minute guess window, and nobody else can lift it, so "Ask the host" (the PIN words) would
+ * send the host to the host.
+ */
+export const GUESS_LIMIT_WORDS = 'Too many tries. Wait 10 minutes, then try again.';
+
+/** `failureWords` for the host sign-in and the join screen, where a limit means waiting. */
+export function guessWords(failure: Pick<Failure, 'error' | 'reason'>): string {
+  return failure.error === 'too-many-tries' ? GUESS_LIMIT_WORDS : failureWords(failure);
+}

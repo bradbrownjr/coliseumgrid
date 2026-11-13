@@ -1,9 +1,7 @@
-// Calls to the players API (docs/PLAN.md, section 4). Paths are relative, so the same build
-// works from the laptop, the tablet, and a hosted server. Every call resolves to a Result:
-// a screen switches on `ok` and `error`, and never has to catch.
+// Calls to the players API (docs/PLAN.md, section 4). Every call resolves to a Result
+// (request.ts): a screen switches on `ok` and `error`, and never has to catch.
 
 import type {
-  ApiErrorCode,
   HandleBody,
   HandlePinBody,
   MergeBody,
@@ -14,36 +12,7 @@ import type {
   PlayersAnswer,
   SignupCheckAnswer,
 } from '@coliseumgrid/core';
-import { isApiErrorCode, isHandleRefusal, type Failure } from './errors.ts';
-
-export type Result<T> = { ok: true; data: T } | Failure;
-
-async function call<T>(method: string, path: string, body?: object): Promise<Result<T>> {
-  let response: Response;
-  try {
-    response = await fetch(path, {
-      method,
-      ...(body && { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
-    });
-  } catch {
-    return { ok: false, error: 'failed' };
-  }
-
-  let json: unknown;
-  try {
-    json = await response.json();
-  } catch {
-    return { ok: false, error: 'failed' };
-  }
-
-  if (response.ok) return { ok: true, data: json as T };
-
-  const answer = (json ?? {}) as { error?: unknown; reason?: unknown };
-  if (!isApiErrorCode(answer.error)) return { ok: false, error: 'failed' };
-  const error: ApiErrorCode = answer.error;
-  if (error === 'refused' && isHandleRefusal(answer.reason)) return { ok: false, error, reason: answer.reason };
-  return { ok: false, error };
-}
+import { call } from './request.ts';
 
 export const checkSignup = (handle: string) =>
   call<SignupCheckAnswer>('POST', '/api/signup/check', { handle } satisfies HandleBody);

@@ -9,7 +9,8 @@ export default defineConfig({
   server: {
     // The server (packages/server) listens on 3000; the dev client forwards /api to it.
     proxy: {
-      '/api': 'http://localhost:3000',
+      // ws: the live connection (GET /api/live) is a WebSocket, which the proxy passes only when told to.
+      '/api': { target: 'http://localhost:3000', ws: true },
     },
   },
 });

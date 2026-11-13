@@ -7,7 +7,7 @@ import { PinDigits } from '../../components/PinDigits.tsx';
 import { PinKeypad } from '../../components/PinKeypad.tsx';
 import { usePinEntry } from '../../components/usePinEntry.ts';
 import { useStepGuard } from '../../components/useStepGuard.ts';
-import { ErrorSlot, SignupFrame, bigButtonSx, linkButtonSx } from './SignupFrame.tsx';
+import { ErrorSlot, EntryFrame, bigButtonSx, linkButtonSx } from '../../components/EntryFrame.tsx';
 
 interface PinStepProps {
   handle: string;
@@ -38,7 +38,7 @@ export function PinStep({ handle, suggestedPin, onDone, onTaken, onPickAnother }
   };
 
   return (
-    <SignupFrame narrow title="Your PIN">
+    <EntryFrame narrow title="Your PIN">
       <Typography variant="h5" component="p">
         Remember your PIN. You use it to sign in again.
       </Typography>
@@ -59,6 +59,6 @@ export function PinStep({ handle, suggestedPin, onDone, onTaken, onPickAnother }
       <Button size="large" onClick={onPickAnother} sx={linkButtonSx} disabled={busy}>
         Pick another handle
       </Button>
-    </SignupFrame>
+    </EntryFrame>
   );
 }
