@@ -1,8 +1,10 @@
 import BrightnessAutoIcon from '@mui/icons-material/BrightnessAuto';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import LightModeIcon from '@mui/icons-material/LightMode';
+import Box from '@mui/material/Box';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
+import Tooltip from '@mui/material/Tooltip';
 import { useColorScheme } from '@mui/material/styles';
 
 type Mode = 'light' | 'dark' | 'system';
@@ -31,10 +33,17 @@ export function ColorModePicker() {
       }}
     >
       {CHOICES.map(({ mode: value, label, icon: Icon }) => (
-        <ToggleButton key={value} value={value} sx={{ gap: 1, px: 2 }}>
-          <Icon fontSize="small" />
-          {label}
-        </ToggleButton>
+        // On a phone only the icon shows, so the name is in the aria-label and the tooltip
+        // (docs/DESIGN.md, "Phone width"). A Tooltip is fine inside the group: each button
+        // reads the group's value from context.
+        <Tooltip key={value} title={label}>
+          <ToggleButton value={value} aria-label={label} sx={{ gap: 1, px: { xs: 1.5, sm: 2 } }}>
+            <Icon fontSize="small" />
+            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+              {label}
+            </Box>
+          </ToggleButton>
+        </Tooltip>
       ))}
     </ToggleButtonGroup>
   );

@@ -119,6 +119,16 @@ place. A "Next match" button on the host screen and on the queue panel are one c
 A field with a fixed set of answers (format, best-of, heat size, label size) is a select,
 radio group, or toggle buttons. Free text is only for event names and handles.
 
+### Phone width
+
+Every screen and dialog works at 320 CSS pixels wide with no sideways scrolling and nothing
+cut off: WCAG 2.2 success criterion 1.4.10, Reflow
+(<https://www.w3.org/WAI/WCAG22/Understanding/reflow.html>). Hosts and players use phones as
+well as laptops and tablets (Brad, 2026-11-13). Sizes that matter on a big screen, like the
+PIN digits, scale down with the theme's breakpoints instead of overflowing, and rows of
+buttons wrap or fold into a menu. Check each screen at 320 and 412 pixels wide as well as at
+tablet and laptop sizes.
+
 ### Kid-sized targets
 
 Every control a player or host taps is at least 44 by 44 CSS pixels: WCAG 2.2's enhanced

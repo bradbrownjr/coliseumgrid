@@ -23,6 +23,29 @@ const SELECTED = '&.Mui-selected';
 const FOCUSED = '&.Mui-focused:not(.Mui-error)';
 
 export const components: Components<Theme> = {
+  // On a phone a dialog keeps a small margin and the width that is left, so a form or the PIN
+  // boxes get most of the screen (docs/DESIGN.md, "Phone width").
+  MuiDialog: {
+    styleOverrides: {
+      paper: ({ theme }) => ({
+        [theme.breakpoints.down('sm')]: {
+          margin: theme.spacing(2),
+          '&.MuiDialog-paperFullWidth': { width: `calc(100% - ${theme.spacing(4)})` },
+        },
+      }),
+    },
+  },
+  // A long handle wraps instead of running out of the dialog.
+  MuiDialogTitle: { styleOverrides: { root: { overflowWrap: 'anywhere' } } },
+  // MUI drops menu items to their content height from the sm breakpoint up; keep the target.
+  MuiMenuItem: {
+    styleOverrides: {
+      root: ({ theme }) => ({
+        minHeight: TOUCH_TARGET,
+        [theme.breakpoints.up('sm')]: { minHeight: TOUCH_TARGET },
+      }),
+    },
+  },
   MuiButtonBase: {
     styleOverrides: {
       // Drawn with an outline offset so a strip of page background separates the ring from a

@@ -1,8 +1,5 @@
 import type { Player } from '@coliseumgrid/core';
 import AddIcon from '@mui/icons-material/Add';
-import EditIcon from '@mui/icons-material/Edit';
-import KeyIcon from '@mui/icons-material/VpnKey';
-import MergeIcon from '@mui/icons-material/MergeType';
 import Alert from '@mui/material/Alert';
 import AppBar from '@mui/material/AppBar';
 import Box from '@mui/material/Box';
@@ -28,6 +25,7 @@ import { Logo } from '../components/Logo.tsx';
 import { HandleDialog } from './host/HandleDialog.tsx';
 import { MergeDialog } from './host/MergeDialog.tsx';
 import { PinDialog } from './host/PinDialog.tsx';
+import { PlayerActions } from './host/PlayerActions.tsx';
 
 type Dialog =
   | { kind: 'add' }
@@ -78,17 +76,20 @@ export function HostPage() {
   return (
     <>
       <AppBar position="static" color="inherit" elevation={0} sx={{ bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider' }}>
-        <Toolbar sx={{ gap: 2, flexWrap: 'wrap', py: 1 }}>
+        <Toolbar sx={{ gap: 2, py: 1 }}>
           <Logo />
-          <Typography variant="h6" component="p" sx={{ flexGrow: 1 }}>
+          {/* The logo stays; the name hides on a phone so the mode picker fits the same row. */}
+          <Typography variant="h6" component="p" sx={{ flexGrow: 1, display: { xs: 'none', sm: 'block' } }}>
             ColiseumGrid
           </Typography>
-          <ColorModePicker />
+          <Box sx={{ flexGrow: { xs: 1, sm: 0 }, display: 'flex', justifyContent: 'flex-end' }}>
+            <ColorModePicker />
+          </Box>
         </Toolbar>
       </AppBar>
-      <Container component="main" sx={{ py: 4 }}>
+      <Container component="main" sx={{ py: { xs: 2, sm: 4 } }}>
         <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', mb: 3 }}>
-          <Typography variant="h3" component="h1">
+          <Typography variant="h3" component="h1" sx={{ typography: { xs: 'h4', sm: 'h3' } }}>
             Players
           </Typography>
           <Button variant="contained" size="large" startIcon={<AddIcon />} onClick={() => setDialog({ kind: 'add' })}>
@@ -134,22 +135,13 @@ export function HostPage() {
                       {player.handle}
                     </TableCell>
                     <TableCell align="right">
-                      <Stack direction="row" sx={{ gap: 1, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                        <Button variant="outlined" startIcon={<EditIcon />} onClick={() => setDialog({ kind: 'rename', player })}>
-                          Rename
-                        </Button>
-                        <Button variant="outlined" startIcon={<KeyIcon />} onClick={() => void reset(player)}>
-                          Reset PIN
-                        </Button>
-                        <Button
-                          variant="outlined"
-                          startIcon={<MergeIcon />}
-                          disabled={players.length < 2}
-                          onClick={() => setDialog({ kind: 'merge', player })}
-                        >
-                          Merge
-                        </Button>
-                      </Stack>
+                      <PlayerActions
+                        player={player}
+                        canMerge={players.length >= 2}
+                        onRename={() => setDialog({ kind: 'rename', player })}
+                        onResetPin={() => void reset(player)}
+                        onMerge={() => setDialog({ kind: 'merge', player })}
+                      />
                     </TableCell>
                   </TableRow>
                 ))}

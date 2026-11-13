@@ -21,12 +21,12 @@ export function SignupFrame({ title, narrow = false, children }: SignupFrameProp
       maxWidth={narrow ? 'xs' : 'sm'}
       sx={{
         minHeight: '100dvh',
-        py: 4,
+        py: { xs: 2, sm: 4 },
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 3,
+        gap: { xs: 2, sm: 3 },
         textAlign: 'center',
       }}
     >

@@ -15,13 +15,15 @@ const ROWS = [
   ['7', '8', '9'],
 ] as const;
 
-const keySx: SxProps<Theme> = {
-  height: (theme) => theme.spacing(10),
+const keySx: SxProps<Theme> = (theme) => ({
+  // Shorter on a phone so the keypad and the buttons under it fit a short screen; still over 44px.
+  height: theme.spacing(8),
+  [theme.breakpoints.up('sm')]: { height: theme.spacing(10) },
   typography: 'h3',
   // The outline stays visible in dark mode, where the secondary color is light.
   borderWidth: 2,
   '&:hover': { borderWidth: 2 },
-};
+});
 
 /** 0 to 9 and backspace, sized for a thumb on a tablet (docs/DESIGN.md, "Kid-sized targets"). */
 export function PinKeypad({ onDigit, onBackspace, disabled = false }: PinKeypadProps) {
@@ -36,7 +38,7 @@ export function PinKeypad({ onDigit, onBackspace, disabled = false }: PinKeypadP
       sx={{
         display: 'grid',
         gridTemplateColumns: 'repeat(3, 1fr)',
-        gap: 2,
+        gap: { xs: 1, sm: 2 },
         width: '100%',
         maxWidth: (theme) => theme.spacing(48),
       }}
