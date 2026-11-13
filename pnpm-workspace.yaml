@@ -1,2 +1,9 @@
 packages:
   - packages/*
+
+# brackets-manager 1.11.1 asks for uuid ^9.0.0, which has GHSA-w5hq-g745-h8pq (a missing
+# bounds check in v3, v5, and v6 with an output buffer). The library calls only v4, in its
+# manager.js. uuid 14 is ESM only, which Node 26 loads through require. With this override the
+# bracket tests in packages/server pass and pnpm audit is clean (checked 2026-11-13).
+overrides:
+  "brackets-manager>uuid": "14.0.3"

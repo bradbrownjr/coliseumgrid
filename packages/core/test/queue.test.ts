@@ -84,6 +84,19 @@ describe('buildQueue: order', () => {
     expect(state.upNext).toEqual([3]);
   });
 
+  it('puts a late match behind one that became ready at the same step', () => {
+    // A late player joined after the first result. Match 4 became ready from that result and
+    // was called then; the late match 3 must not take its station.
+    const matches = [
+      match(1, 1, 1, [1, 2]),
+      match(3, 1, 2, [5, 6], { readyStep: 1, late: true }),
+      match(4, 2, 1, [1, 7], { readyStep: 1 }),
+    ];
+    const state = buildQueue({ stations: 1, createdAt: T0, matches, results: [{ matchId: 1, at: T1 }] });
+    expect(slots(state)).toEqual([[1, 4, T1]]);
+    expect(state.upNext).toEqual([3]);
+  });
+
   it('ignores a match that is not ready yet at the step asked for', () => {
     const matches = [match(1, 1, 1, [1, 2]), match(2, 2, 1, [1, 3], { readyStep: 5 })];
     const state = buildQueue({ stations: 2, createdAt: T0, matches, results: [] });

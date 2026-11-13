@@ -19,6 +19,9 @@
     "@fastify/rate-limit": "11.2.2",
     "@fastify/static": "10.1.10",
     "@fastify/websocket": "11.3.7",
+    "brackets-manager": "1.11.1",
+    "brackets-memory-db": "1.0.6",
+    "brackets-model": "1.7.0",
     "fastify": "5.12.8"
   }
 }

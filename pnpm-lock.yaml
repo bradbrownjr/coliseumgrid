@@ -162,6 +162,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  brackets-manager>uuid: 14.0.3
+
 importers:
 
   .:
@@ -248,6 +251,15 @@ importers:
       '@fastify/websocket':
         specifier: 11.3.7
         version: 11.3.7
+      brackets-manager:
+        specifier: 1.11.1
+        version: 1.11.1
+      brackets-memory-db:
+        specifier: 1.0.6
+        version: 1.0.6(brackets-model@1.7.0)
+      brackets-model:
+        specifier: 1.7.0
+        version: 1.7.0
       fastify:
         specifier: 5.12.8
         version: 5.12.8
@@ -1009,6 +1021,18 @@ packages:
     resolution: {integrity: sha512-Vh3dmFbc4wZeox7M9I/0L9GfFd83Su4+yCck/OF9Gi/P/dAHn0RT7X4K9R7gMNMhDck3DvhR6QXsnQdjjgwNvQ==}
     engines: {node: 20 || >=22}
 
+  brackets-manager@1.11.1:
+    resolution: {integrity: sha512-P5XTJMstqKKnSct39PReh6ONcnp3WZ5vJYyeSCs2WvrLsx0lEvR6lOD3lTKnQ7WBGKbll8JOu6lETTwStc1i7w==}
+    engines: {node: '>=14'}
+
+  brackets-memory-db@1.0.6:
+    resolution: {integrity: sha512-agCBS56rwbnZFwLhX3WGbFusAwvyuYz39MG7YrX+e+P3VK9VS/z3mjiZGM4XCYPL5Z6tGWcJ1BTnhYh7ww9t7w==}
+    peerDependencies:
+      brackets-model: ^1.7.0
+
+  brackets-model@1.7.0:
+    resolution: {integrity: sha512-Hj6WpXjWw/VmCha3LOSYC1ZjHPXD2UahwPVOEEboBmxFP8CfTdnm4kDUyG23RfTH+ktoNPrmcxNnHUN/T5IwLg==}
+
   callsites@3.1.0:
     resolution: {integrity: sha512-P8BjAsXvZS+VIDUI11hHCQEv74YT67YUi5JJFNWIqL235sBmjX4+qx9Muvls5ivyNENctx46xQLQ3aTuE7ssaQ==}
     engines: {node: '>=6'}
@@ -1609,6 +1633,10 @@ packages:
 
   util-deprecate@1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
+
+  uuid@14.0.3:
+    resolution: {integrity: sha512-Sc5u1VVln93y1Xnz4R+CunOZc7R9LUcTmhj7Rc7Eg3HVcf7rVn2FOoa812fe0W8p3jD7xeoGSYbfqCGGH2B6xw==}
+    hasBin: true
 
   vite@8.3.8:
     resolution: {integrity: sha512-LzOn3h9rG/0vhLdXrV4yJ4QFA9eEoqCl+Yx+kGJd7aB9w6nfNgVHKSYwLPZUHrz4ZGa+t+kXjV9itvcHDLQouA==}
@@ -2370,6 +2398,18 @@ snapshots:
     dependencies:
       balanced-match: 4.0.4
 
+  brackets-manager@1.11.1:
+    dependencies:
+      brackets-model: 1.7.0
+      uuid: 14.0.3
+
+  brackets-memory-db@1.0.6(brackets-model@1.7.0):
+    dependencies:
+      brackets-model: 1.7.0
+      rfdc: 1.4.1
+
+  brackets-model@1.7.0: {}
+
   callsites@3.1.0: {}
 
   chai@6.3.0: {}
@@ -2919,6 +2959,8 @@ snapshots:
   undici-types@8.9.0: {}
 
   util-deprecate@1.0.2: {}
+
+  uuid@14.0.3: {}
 
   vite@8.3.8(@types/node@26.6.6):
     dependencies:

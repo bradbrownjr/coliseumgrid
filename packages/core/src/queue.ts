@@ -20,6 +20,11 @@ export interface QueueMatch {
    * which the player joined, so they queue behind matches that were already waiting.
    */
   readyStep: number;
+  /**
+   * Its readyStep is the step a late player joined. It goes behind matches that became ready
+   * at that same step, because those were called, or queued, before the player joined.
+   */
+  late?: boolean;
   /** In the first round of play, the round a bye skips. Never true for a round robin. */
   firstRound: boolean;
   /**
@@ -64,9 +69,15 @@ export interface QueueState {
   offStation: number[];
 }
 
-/** Earliest ready first, then round, then number, then id so the order is total. */
+/** Earliest ready first, a late player's match last among those, then round, number, and id. */
 function byQueue(a: QueueMatch, b: QueueMatch): number {
-  return a.readyStep - b.readyStep || a.round - b.round || a.number - b.number || a.id - b.id;
+  return (
+    a.readyStep - b.readyStep ||
+    Number(a.late === true) - Number(b.late === true) ||
+    a.round - b.round ||
+    a.number - b.number ||
+    a.id - b.id
+  );
 }
 
 export function buildQueue(input: QueueInput): QueueState {
