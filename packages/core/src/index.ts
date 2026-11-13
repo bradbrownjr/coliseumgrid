@@ -10,6 +10,13 @@ export {
 } from './handle.ts';
 export { isVulgar } from './vulgarity.ts';
 export { PIN_LENGTH, isValidPin, suggestPin } from './pin.ts';
+export {
+  JOIN_CODE_ALPHABET,
+  JOIN_CODE_LENGTH,
+  formatJoinCode,
+  generateJoinCode,
+  parseJoinCode,
+} from './join-code.ts';
 export type {
   ApiError,
   ApiErrorCode,
