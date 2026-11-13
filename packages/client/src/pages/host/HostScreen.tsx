@@ -20,12 +20,15 @@ import TableRow from '@mui/material/TableRow';
 import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { addLatePlayer } from '../../api/bracket.ts';
 import { failureWords } from '../../api/errors.ts';
 import { getEvent, getHostSession, signOutHost } from '../../api/host.ts';
 import { addPlayer, listPlayers, renamePlayer, resetPin } from '../../api/players.ts';
 import { ColorModePicker } from '../../components/ColorModePicker.tsx';
 import { Logo } from '../../components/Logo.tsx';
 import { useLive } from '../../components/useLive.ts';
+import { BracketSection } from './BracketSection.tsx';
+import { playersInBracket } from './bracketWords.ts';
 import { DeviceList } from './DeviceList.tsx';
 import { EventName } from './EventName.tsx';
 import { HandleDialog } from './HandleDialog.tsx';
@@ -33,6 +36,7 @@ import { MergeDialog } from './MergeDialog.tsx';
 import { PairingPanel } from './PairingPanel.tsx';
 import { PinDialog } from './PinDialog.tsx';
 import { PlayerActions } from './PlayerActions.tsx';
+import { useBracket } from './useBracket.ts';
 
 type Dialog =
   | { kind: 'add' }
@@ -51,8 +55,11 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
   const [loadWords, setLoadWords] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [event, setEvent] = useState<EventInfo | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  // `id` restarts the snackbar's timer when a new message replaces one still showing. `undo`
+  // adds an Undo button (docs/DESIGN.md, "Undo, not Are you sure").
+  const [notice, setNotice] = useState<{ id: number; message: string; undo?: () => void } | null>(null);
   const [noticeOpen, setNoticeOpen] = useState(false);
+  const { bracket, loadWords: bracketWords, reload: reloadBracket, apply: applyBracket } = useBracket();
   // Which reset the open PIN dialog is waiting on, so a reset the host closed can't reopen it.
   const resetting = useRef(0);
 
@@ -82,10 +89,12 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
     onMessage: (message) => {
       if (message.type === 'players') void load();
       if (message.type === 'event') setEvent(message.event);
+      if (message.type === 'bracket') void reloadBracket();
     },
     onOpen: () => {
       void load();
       void loadEvent();
+      void reloadBracket();
     },
     onEnded: onSignedOut,
   });
@@ -100,10 +109,23 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
     onSignedOut();
   };
 
-  const say = (message: string) => {
-    setNotice(message);
+  const say = (message: string, undo?: () => void) => {
+    setNotice((before) => ({ id: (before?.id ?? 0) + 1, message, undo }));
     setNoticeOpen(true);
   };
+
+  const addToBracket = async (player: Player) => {
+    const result = await addLatePlayer(player.id);
+    if (!result.ok) {
+      void reloadBracket();
+      return say(failureWords(result));
+    }
+    applyBracket(result.data.bracket);
+    say(`Added ${player.handle} to the bracket`);
+  };
+
+  // Late players come in while the bracket says so, and only the players not in it yet.
+  const inBracket = bracket && bracket.lateOpen ? playersInBracket(bracket) : null;
 
   const close = () => {
     resetting.current += 1;
@@ -157,6 +179,8 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
           <PairingPanel />
           <DeviceList onUnpaired={say} />
         </Section>
+
+        <BracketSection bracket={bracket} loadWords={bracketWords} players={players} apply={applyBracket} reload={reloadBracket} say={say} />
 
         <Box component="section">
         <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', mb: 3 }}>
@@ -212,6 +236,7 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
                         onRename={() => setDialog({ kind: 'rename', player })}
                         onResetPin={() => void reset(player)}
                         onMerge={() => setDialog({ kind: 'merge', player })}
+                        onAddToBracket={inBracket && !inBracket.has(player.id) ? () => void addToBracket(player) : undefined}
                       />
                     </TableCell>
                   </TableRow>
@@ -258,11 +283,25 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
 
       <Snackbar
         open={noticeOpen}
-        autoHideDuration={4000}
+        key={notice?.id}
+        autoHideDuration={notice?.undo ? 8000 : 4000}
         onClose={(_event, reason) => {
           if (reason !== 'clickaway') setNoticeOpen(false);
         }}
-        message={notice}
+        message={notice?.message}
+        action={
+          notice?.undo && (
+            <Button
+              color="inherit"
+              onClick={() => {
+                setNoticeOpen(false);
+                notice.undo?.();
+              }}
+            >
+              Undo
+            </Button>
+          )
+        }
       />
     </>
   );

@@ -35,9 +35,10 @@ describe('live address', () => {
 });
 
 describe('live messages', () => {
-  it('reads the three messages the server sends', () => {
+  it('reads the messages the server sends', () => {
     expect(parseLiveMessage('{"type":"players"}')).toEqual({ type: 'players' });
     expect(parseLiveMessage('{"type":"unpaired"}')).toEqual({ type: 'unpaired' });
+    expect(parseLiveMessage('{"type":"bracket"}')).toEqual({ type: 'bracket' });
     expect(parseLiveMessage('{"type":"event","event":{"name":"Smash Bash"}}')).toEqual({
       type: 'event',
       event: { name: 'Smash Bash' },
