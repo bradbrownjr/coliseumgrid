@@ -50,6 +50,8 @@ either, once explained.
 | Double elimination | Two lives |
 | Round robin | Everyone plays everyone |
 | Bracket reset | Rematch for the title |
+| Winners bracket | No losses |
+| Losers bracket | One life left |
 
 ### Plain wording
 

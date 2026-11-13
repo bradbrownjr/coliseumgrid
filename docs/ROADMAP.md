@@ -44,7 +44,8 @@ Tasks:
   doesn't settle them (`PLAN.md`, "Ties").
 - Late sign-up: a late player takes a first-round bye until round 1 is finished, and takes
   a round robin's empty slot when the count is odd (`PLAN.md`, "Late sign-up").
-- Merging away a player in an unfinished bracket is refused (409 `in-bracket`).
+- Merging away a player in the current event's bracket, running or finished, is refused
+  (409 `in-bracket`).
 - The host's Bracket section, and the bracket on the Display screen.
 
 Acceptance checks:

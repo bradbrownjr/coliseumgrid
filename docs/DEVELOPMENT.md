@@ -3,9 +3,9 @@
 How to work on ColiseumGrid. The design is in [`PLAN.md`](PLAN.md); the writing rules are in
 [`DOC-STYLE.md`](DOC-STYLE.md).
 
-M1 builds the workspace. So far it has `packages/core` (a seeded random source),
-`packages/server` (the health route and the static file server), `packages/client` (the
-theme and three placeholder screens), and the checks.
+The code is in three packages: `packages/core` (the rules the browser and the server share),
+`packages/server` (the API, the database, and live updates), and `packages/client` (the three
+screens). The Layout table lists their files.
 
 ## Requirements
 
@@ -146,13 +146,41 @@ means the first N entries have run, each once, in a transaction. To change the s
 entry at the end; never edit one that has shipped. Tests use `':memory:'`. A database written
 by a newer server is refused at startup.
 
+### Brackets
+
+The rules are in `PLAN.md`, sections 5 and 6. These are the facts a change has to keep.
+
+- **The database holds inputs.** Migration 3 stores a bracket's settings, its seeding list, its
+  late joins, its tie-break matches, and its result log. It doesn't store the library's state.
+- **Every answer is a replay.** `replayLibrary` in `bracket-library.ts` builds a new in-memory
+  store, creates the stage from the seeding, and replays the log. An undo drops one result and
+  replays. The library's `reset.matchResults` and `update.seeding` aren't called:
+  `reset.matchResults` left matches in the wrong state or threw, and `update.seeding` changed
+  matches already played (`PLAN.md`, "Late sign-up" and "Brackets API").
+- **One file calls the library.** Only `bracket-library.ts` imports `brackets-manager`,
+  `brackets-memory-db`, or `brackets-model`. Check with
+  `grep -rn "brackets-" packages/server/src`.
+- **Every change runs on the write chain.** A route that changes a bracket runs its work through
+  `createWriteChain` (`write-chain.ts`), so two taps can't interleave.
+- **Seeding takes the caller's random source.** `seedPlayers` in `packages/core/src/bracket-seeding.ts`
+  takes it as an argument, so the tests fix the order.
+- **Late joins fill the first empty slot.** `addLatePlayer` in core does it. The engine accepts the
+  join only if every logged result and every called match still holds, and refuses with 409
+  `late-closed` otherwise.
+- **A result's step is its place in the log,** counting from 0. The queue (`packages/core/src/queue.ts`)
+  and the late-join check read steps.
+- **Tie-break matches have their own ids.** They start at `TIE_BREAK_ID_BASE` (1000, in
+  `bracket-engine.ts`) and never go to the library. The engine throws if a library match id
+  reaches 1000, so library ids must stay below it.
+- **Result ids are never reused** (`nextResultId`), so an old id can't name a new result.
+
 ## Layout
 
 | Path | What it holds |
 |---|---|
 | `packages/core` | `@coliseumgrid/core`: rules shared by the browser and the server (see `PLAN.md` section 9): the seeded random source, handles and the vulgarity filter, PINs, join codes, bracket seeding, the station queue, tie ranking, and the API types. |
-| `packages/server` | `@coliseumgrid/server`: `src/app.ts` builds the Fastify app (`buildApp`), `src/config.ts` reads the settings, `src/main.ts` starts it, `src/database.ts` holds the schema, `src/players-routes.ts` the players API, `src/pin-hash.ts` PIN and password hashing (scrypt), `src/client-ip.ts` and `src/rate-limit.ts` the client address and the guessing limits, `src/access.ts`, `src/host-routes.ts`, `src/devices.ts`, `src/host-store.ts`, `src/events.ts`, and `src/live.ts` host sign-in, pairing, and live updates. |
-| `packages/client` | `@coliseumgrid/client`: Vite, React, and MUI. `src/theme/` holds the palette and the theme, `src/pages/` the Host (`/host`), Sign-up (`/signup`), and Display (`/display`) screens, `src/components/` shared pieces, `src/api/` the calls, `test/` the Vitest tests. `/` is the join screen and `/host` is the host's entry; an unknown path goes to `/`. |
+| `packages/server` | `@coliseumgrid/server`: `src/app.ts` builds the Fastify app (`buildApp`), `src/config.ts` reads the settings, `src/main.ts` starts it, `src/database.ts` holds the schema, `src/players-routes.ts` the players API, `src/pin-hash.ts` PIN and password hashing (scrypt), `src/client-ip.ts` and `src/rate-limit.ts` the client address and the guessing limits, `src/access.ts`, `src/host-routes.ts`, `src/devices.ts`, `src/host-store.ts`, `src/events.ts`, and `src/live.ts` host sign-in, pairing, and live updates. The bracket files are `src/bracket-engine.ts` (a bracket's state and each change to it), `src/bracket-library.ts` (the only file that calls brackets-manager), `src/bracket-store.ts` (its tables), `src/bracket-routes.ts` (the bracket API), `src/write-chain.ts` (one write at a time), and `src/event-players.ts` (who is in the event). |
+| `packages/client` | `@coliseumgrid/client`: Vite, React, and MUI. `src/theme/` holds the palette and the theme, `src/pages/` the Host (`/host`), Sign-up (`/signup`), and Display (`/display`) screens, `src/components/` shared pieces (`useNow.ts` is the timer hook), `src/api/` the calls (`bracket.ts` for brackets), `src/pages/host/` and `src/pages/display/` the bracket pieces of the Host and the TV, `test/` the Vitest tests. `/` is the join screen and `/host` is the host's entry; an unknown path goes to `/`. |
 | `tools/` | Scripts run by hand or in CI, type-checked by `tools/tsconfig.json`. |
 | `docs/` | The docs listed in `DOC-STYLE.md`, "Where things go". |
 
@@ -181,6 +209,10 @@ Brad wants current libraries to avoid known vulnerabilities (2026-11-12).
 - When an update breaks something, fix the cause. Don't pin an old version to avoid it. (MEPN
   hit this with `passlib` and `bcrypt`: the fix was to drop the unmaintained `passlib`, not
   to hold `bcrypt` back.)
+- **The uuid override.** `pnpm-workspace.yaml` sets `brackets-manager>uuid` to 14.0.3.
+  brackets-manager 1.11.1 asks for uuid 9, which has the advisory GHSA-w5hq-g745-h8pq. The
+  library calls only uuid v4. Remove the override when brackets-manager moves off uuid 9, and
+  run `pnpm audit --audit-level high` before and after.
 - A new dependency needs a reason: what it does that the platform or an existing dependency
   doesn't, and its last release date.
 
@@ -266,6 +298,10 @@ no corepack. Keep that version in step with `packageManager` in `package.json`.
 
 ## Tests
 
+- The server suite takes about 60 s (measured 2026-11-13 on the dev box). Each PIN and the host
+  password is hashed at the production scrypt cost (`pin-hash.ts`), and
+  `packages/server/vitest.config.ts` allows 30 s per test. A test that signs in several times
+  needs that room.
 - Vitest for `core`, `server`, and `client`. Client tests need no DOM: they build the theme and
   call its overrides. Server tests build the app with `buildApp` and call
   `app.inject`, so they open no port. Formats are tested with seeded randomness and fixed

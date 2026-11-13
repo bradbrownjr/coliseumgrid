@@ -7,25 +7,14 @@ import Button from '@mui/material/Button';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useNow } from '../../components/useNow.ts';
 import { failureWords } from '../../api/errors.ts';
 import { makePairingCode } from '../../api/host.ts';
 import { formatCountdown, isLoopbackHost, joinUrl, shownAddress } from '../../pairing.ts';
 import { JoinQr } from './JoinQr.tsx';
 
 const ROLE_WORDS: Record<DeviceRole, string> = { display: 'a TV', signup: 'a sign-up tablet' };
-
-/** The current time, refreshed every second while `active`, so a countdown ticks. */
-function useNow(active: boolean): number {
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    if (!active) return;
-    setNow(Date.now());
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [active]);
-  return now;
-}
 
 /**
  * Makes pairing codes and shows the latest one: the address to open, the code, a QR code that

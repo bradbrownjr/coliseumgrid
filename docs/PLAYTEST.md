@@ -3,8 +3,8 @@
 Tests that need a person or real hardware. Brad runs them as time allows; what one finds
 becomes a roadmap item. A test is removed once it's reported.
 
-Each test names the milestone that makes it possible. The tests marked "after M3" can be
-run on the Unraid server (`http://10.6.26.2:8390`).
+Each test names the milestone that makes it possible. The tests marked "after M3" or "after
+M4" can be run on the Unraid server (`http://10.6.26.2:8390`).
 
 ## Planned
 
@@ -64,6 +64,33 @@ Why: devices reconnect by address, so the laptop's address has to stay the same.
 
 - Scan the host's QR code with the tablet's camera app. Does the join page open with the
   code filled in?
+
+### Brackets (after M4)
+
+Why: the server's tests use made-up players and no screen. These use real phones, tablets,
+and a TV.
+
+- Sign up 8 players on two tablets. Start a One life bracket on 2 stations. Does each station
+  show a card with a "won" button for each of its players?
+- Record each result from the host's phone with one tap. Does the next match move to a free
+  station? Is "Up next" in the right order?
+- Tap Undo in the snackbar after a result. Does the match go back on its station with the
+  same two players? Record that result again, then undo it from the Results list. Is the
+  bracket the same as before the result?
+- While recording a result, watch the TV. Does it show the change within a second?
+- Start a One life bracket with 7 players, so one first-round bye exists. Before round 1 is
+  finished, add the eighth player with "Add to bracket". Does the new player get a match
+  against the player who moved on? Do the matches already on stations keep their players?
+- Start a Two lives bracket. Play until the first final is decided. Does "Rematch for the
+  title" appear only when the player from the One life left side won that final? Does it
+  show on the TV and on a station?
+- Start a round robin of 5. Record results until two players tie for 1st. Does the host
+  show "Tie for 1st" with "Play tie-break", and does the TV show the tie? Tap "Play
+  tie-break". Are the tie-break matches on the stations? Record them. Does the tie-break
+  leave one player in 1st?
+- Start a One life bracket with 32 players. Stand where the players sit. From there, can you
+  read every handle, the station numbers, and "Up next"? Note the distance and the smallest
+  type that worked, and record it in `DESIGN.md`, "Display (TV)".
 
 ### Alerts on players' phones (after M6)
 

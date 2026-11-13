@@ -144,7 +144,7 @@ A winner, a loss, or a player's status is shown with text or an icon as well as 
 ### Undo, not "Are you sure?"
 
 Recording a result never asks for confirmation. It shows a snackbar with **Undo**. A
-confirmation dialog is only for actions that can't be undone, like deleting an event.
+confirmation dialog is only for actions that can't be undone, like deleting a bracket.
 
 ## The three screens
 
@@ -154,6 +154,13 @@ confirmation dialog is only for actions that can't be undone, like deleting an e
   filled in; the rest is under "More options".
 - During play, the queue is the main view: each station's current match, "Up next", and
   one-tap result buttons.
+- A station card has one large button per player, reading "<handle> won". A tap records that
+  player as the winner of the whole match, whatever the best-of label says.
+- A tap shows "<handle> won" in the snackbar with **Undo**. Every recorded result also has its
+  own **Undo** in the Results list, newest first.
+- **Delete bracket** asks first, since it can't be undone. Results don't ask.
+- While a tie is open, **Play tie-break** starts its matches. While late sign-up is open,
+  **Add to bracket** is in a player's menu.
 
 ### Sign-up (tablet)
 
@@ -168,9 +175,28 @@ confirmation dialog is only for actions that can't be undone, like deleting an e
 
 - Read from across a room, with no input. Large type, high contrast, nothing that needs a
   hover or a click.
-- Dark theme by default.
-- The minimum type size for the TV has no published source yet. It is set in M3 by testing
-  on the real TV (see `PLAYTEST.md`) and recorded here.
+- Always dark, whatever color mode the host picks.
+- Nothing scrolls on a TV. From a tablet up, the page is one screen tall and hides overflow.
+  A phone stacks the parts and scrolls.
+- During play, the stations and "Up next" sit on the left, and the bracket or the standings
+  on the right. Stations are one column up to four, and two columns from five.
+- Bracket columns start at the earliest round with an unfinished match and show the two
+  after it. When every round is finished, the last round shows. A round with more than 8
+  matches wraps into a second column.
+- Type sizes follow how many cards stack on screen (`DENSITY` in `pages/display/model.ts`).
+  The rows are measured fits, not a published minimum: 32 players in the first round and in
+  two lives at 1920 by 1080, and the laptop rows at 1366 by 768. The real TV test is in
+  `PLAYTEST.md`.
+- Round robin shows a standings table, split into two side-by-side tables past 16 rows.
+- Two lives has the sections "No losses" (the winners' side), "One life left" (the losers'
+  side), and "Final". With a rematch, the first final is headed "First match" and the rematch
+  "Rematch for the title". A beaten player reads "One life left" or "Out".
+- Single elimination has "Round n", then "Semi-finals" and "Final", with the "3rd place match"
+  under the final.
+- A tie shows as a banner: "Tie for 1st: Zap and Kai. Tie-break coming up."
+- A finished bracket shows the final standings, with the podium large.
+- The minimum type size for the TV has no published source yet. It is set by testing on the
+  real TV (see `PLAYTEST.md`) and recorded here.
 
 ## Name tags
 
