@@ -20,9 +20,10 @@ import {
 import rateLimit from '@fastify/rate-limit';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { Access } from './access.ts';
-import { errorSchema, fail, idParams, notSignedIn, objectSchema } from './api-schemas.ts';
+import { errorSchema, fail, idParams, notSignedIn, objectSchema, playerSchema } from './api-schemas.ts';
 import { getClientKey } from './client-ip.ts';
 import type { Mode } from './config.ts';
+import type { EventPlayers } from './event-players.ts';
 import { hashPin, verifyPin } from './pin-hash.ts';
 import type { Players } from './players.ts';
 import {
@@ -35,6 +36,12 @@ import { secureRandom } from './secure-random.ts';
 
 export interface PlayerRoutesOptions {
   players: Players;
+  /** Who signed up to the current event: sign-up, claim, and the host's Add player fill it. */
+  eventPlayers: EventPlayers;
+  /** True if the player is in a bracket of the current event (merging them away is refused). */
+  inBracket: (playerId: number) => boolean;
+  /** Runs a task after the bracket writes already queued, so a merge can't land inside one. */
+  exclusive: <T>(task: () => T | Promise<T>) => Promise<T>;
   /** Decides who may call each route (docs/PLAN.md, "Devices and host API"). */
   access: Access;
   /** Called after the player list changes, so the host page reloads it (a "players" live message). */
@@ -43,13 +50,6 @@ export interface PlayerRoutesOptions {
   /** See getClientKey. */
   trustedProxy?: string;
 }
-
-const playerSchema = {
-  type: 'object',
-  properties: { id: { type: 'integer' }, handle: { type: 'string' } },
-  required: ['id', 'handle'],
-  additionalProperties: false,
-} as const;
 
 const pinSchema = { type: 'string' } as const;
 
@@ -66,7 +66,7 @@ function refuse(reply: FastifyReply, reason: HandleRefusal): FastifyReply {
 }
 
 export async function registerPlayerRoutes(app: FastifyInstance, options: PlayerRoutesOptions): Promise<void> {
-  const { players, access, onPlayersChanged, trustedProxy } = options;
+  const { players, eventPlayers, inBracket, exclusive, access, onPlayersChanged, trustedProxy } = options;
   const online = options.mode === 'online';
 
   // Claim attempts per handle, online only. Counted here rather than by @fastify/rate-limit
@@ -149,6 +149,7 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
       // Hashing took a moment, so ask again: another request may have taken the handle.
       const player = players.create(check.handle, check.key, pinHash);
       if (!player) return fail(reply, 409, 'taken');
+      eventPlayers.add(player.id);
       onPlayersChanged();
       return reply.code(201).send({ player });
     },
@@ -194,6 +195,9 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
       if (!right) return fail(reply, 401, 'wrong-pin');
       // Earlier mistypes don't carry over to the player's next sign-in.
       wrongPins?.clear(check.key);
+      // A returning player counts as here today. The host's list of players reloads only when
+      // that changed something.
+      if (eventPlayers.add(player.id)) onPlayersChanged();
       return { player: { id: player.id, handle: player.handle } };
     },
   );
@@ -238,6 +242,7 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
       const pinHash = await hashPin(pin);
       const player = players.create(check.handle, check.key, pinHash);
       if (!player) return fail(reply, 409, 'taken');
+      eventPlayers.add(player.id);
       onPlayersChanged();
       return reply.code(201).send({ player, pin });
     },
@@ -291,6 +296,7 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
           400: badRequest,
           401: notSignedIn,
           404: notFound,
+          409: errorSchema(['in-bracket']),
         },
       },
     },
@@ -298,15 +304,23 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
       const id = Number(request.params.id);
       const { intoId } = request.body;
       if (id === intoId) return fail(reply, 400, 'bad-request');
-      const merged = players.get(id);
-      const kept = players.get(intoId);
-      if (!merged || !kept) return fail(reply, 404, 'not-found');
-      // Nothing else references a player yet. When matches do, move them to `kept` here first.
-      players.delete(id);
-      // The merged handle no longer means this player, so its count goes with it.
-      forget(merged.handle);
-      onPlayersChanged();
-      return { player: kept };
+      // Queued behind any bracket write, so the player can't join a bracket between the check
+      // and the delete.
+      return exclusive(() => {
+        const merged = players.get(id);
+        const kept = players.get(intoId);
+        if (!merged || !kept) return fail(reply, 404, 'not-found');
+        // A bracket holds its players by id, running or finished, and its answer needs every
+        // handle. Deleting the bracket frees them.
+        if (inBracket(id)) return fail(reply, 409, 'in-bracket');
+        // Attendance follows the player kept; nothing else references a player yet.
+        eventPlayers.move(id, intoId);
+        players.delete(id);
+        // The merged handle no longer means this player, so its count goes with it.
+        forget(merged.handle);
+        onPlayersChanged();
+        return { player: kept };
+      });
     },
   );
 

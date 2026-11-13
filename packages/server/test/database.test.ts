@@ -91,6 +91,110 @@ describe('migrations', () => {
   });
 });
 
+describe('migration 3 (brackets)', () => {
+  /** A database as M3 left it: schema version 2, with a player, an event, a host, and a device. */
+  function oldDatabase(): DatabaseSync {
+    const db = new DatabaseSync(':memory:');
+    db.exec(MIGRATIONS[0] as string);
+    db.exec(MIGRATIONS[1] as string);
+    db.exec('PRAGMA user_version = 2');
+    db.exec(`
+      INSERT INTO players (handle, handle_key, pin_hash, created_at) VALUES ('Zap', 'zap', 'h1', 't1'), ('Bolt', 'bolt', 'h2', 't2');
+      INSERT INTO events (name, created_at) VALUES ('Friday', 't3');
+      INSERT INTO host_settings (id, password_hash, updated_at) VALUES (1, 'ph', 't4');
+      INSERT INTO host_sessions (token_hash, created_at, expires_at) VALUES ('s1', 't5', 't6');
+      INSERT INTO pairing_codes (code, role, created_at, expires_at) VALUES ('ABCDEF', 'display', 't7', 't8');
+      INSERT INTO devices (role, label, token_hash, last_seen, created_at) VALUES ('signup', 'Sign-up 1', 'd1', 't9', 't10');
+    `);
+    return db;
+  }
+
+  const dump = (db: DatabaseSync, table: string) => db.prepare(`SELECT * FROM ${table} ORDER BY 1, 2`).all();
+  const OLD_TABLES = ['players', 'events', 'host_settings', 'host_sessions', 'pairing_codes', 'devices'];
+
+  it('adds the bracket tables to a database that has M2 and M3 data, and keeps every old row', () => {
+    const db = oldDatabase();
+    const before = OLD_TABLES.map((t) => dump(db, t));
+    migrate(db);
+    expect(version(db)).toBe(3);
+    expect(OLD_TABLES.map((t) => dump(db, t))).toEqual(before);
+    expect(columns(db, 'brackets')).toEqual(['id', 'event_id', 'format', 'best_of', 'stations', 'seeding', 'created_at']);
+    expect(columns(db, 'bracket_results')).toEqual(['id', 'bracket_id', 'match_id', 'winner_id', 'loser_id', 'at']);
+    expect(columns(db, 'bracket_late_joins')).toEqual(['bracket_id', 'position', 'player_id', 'step']);
+    expect(columns(db, 'bracket_tie_breaks')).toEqual(['bracket_id', 'position', 'round', 'player_a', 'player_b', 'step']);
+    expect(columns(db, 'event_players')).toEqual(['event_id', 'player_id']);
+    for (const table of ['brackets', 'bracket_results', 'bracket_late_joins', 'bracket_tie_breaks', 'event_players']) {
+      expect(dump(db, table), table).toEqual([]);
+    }
+    expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+    expect(db.prepare('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' });
+  });
+
+  it('also upgrades a database that is still at M2', () => {
+    const db = new DatabaseSync(':memory:');
+    db.exec(MIGRATIONS[0] as string);
+    db.exec('PRAGMA user_version = 1');
+    db.exec("INSERT INTO players (handle, handle_key, pin_hash, created_at) VALUES ('Zap', 'zap', 'h1', 't1')");
+    migrate(db);
+    expect(version(db)).toBe(MIGRATIONS.length);
+    expect(db.prepare('SELECT handle FROM players').all()).toEqual([{ handle: 'Zap' }]);
+  });
+
+  it('lets the old data be used with the new tables', () => {
+    const db = oldDatabase();
+    migrate(db);
+    db.exec("INSERT INTO event_players (event_id, player_id) VALUES (1, 1), (1, 2)");
+    db.exec("INSERT INTO brackets (event_id, format, best_of, stations, seeding, created_at) VALUES (1, 'single', 1, 2, '[1,2]', 't')");
+    db.exec("INSERT INTO bracket_results (bracket_id, match_id, winner_id, loser_id, at) VALUES (1, 0, 1, 2, 't')");
+    expect(db.prepare('SELECT COUNT(*) AS n FROM event_players').get()).toEqual({ n: 2 });
+  });
+
+  it('keeps a player in an event once, follows a deleted player, and rejects an unknown player or event', () => {
+    const db = openDatabase(':memory:');
+    db.exec("INSERT INTO players (handle, handle_key, pin_hash, created_at) VALUES ('Zap', 'zap', 'h', 't')");
+    db.exec("INSERT INTO events (name, created_at) VALUES ('Friday', 't')");
+    const add = db.prepare('INSERT INTO event_players (event_id, player_id) VALUES (?, ?)');
+    add.run(1, 1);
+    expect(() => add.run(1, 1)).toThrow(/UNIQUE|PRIMARY/);
+    expect(() => add.run(1, 99)).toThrow(/FOREIGN/);
+    expect(() => add.run(99, 1)).toThrow(/FOREIGN/);
+    db.exec('DELETE FROM players WHERE id = 1');
+    expect(db.prepare('SELECT COUNT(*) AS n FROM event_players').get()).toEqual({ n: 0 });
+  });
+
+  it('allows one bracket per event, only the known formats, best-ofs, and station counts, and removes a bracket\'s lists with it', () => {
+    const db = openDatabase(':memory:');
+    db.exec("INSERT INTO events (name, created_at) VALUES ('Friday', 't')");
+    const insert = db.prepare('INSERT INTO brackets (event_id, format, best_of, stations, seeding, created_at) VALUES (1, ?, ?, ?, \'[]\', \'t\')');
+    expect(() => insert.run('swiss', 1, 1)).toThrow(/CHECK/);
+    expect(() => insert.run('single', 2, 1)).toThrow(/CHECK/);
+    expect(() => insert.run('single', 1, 0)).toThrow(/CHECK/);
+    expect(() => insert.run('single', 1, 9)).toThrow(/CHECK/);
+    insert.run('single', 1, 8);
+    expect(() => insert.run('double', 3, 2)).toThrow(/UNIQUE/);
+
+    db.exec("INSERT INTO bracket_results (bracket_id, match_id, winner_id, loser_id, at) VALUES (1, 0, 1, 2, 't')");
+    db.exec('INSERT INTO bracket_late_joins (bracket_id, position, player_id, step) VALUES (1, 0, 3, 0)');
+    db.exec('INSERT INTO bracket_tie_breaks (bracket_id, position, round, player_a, player_b, step) VALUES (1, 0, 1, 1, 2, 0)');
+    expect(() => db.exec('INSERT INTO bracket_late_joins (bracket_id, position, player_id, step) VALUES (1, 0, 4, 0)')).toThrow(/UNIQUE|PRIMARY/);
+    expect(() => db.exec("INSERT INTO bracket_results (bracket_id, match_id, winner_id, loser_id, at) VALUES (9, 0, 1, 2, 't')")).toThrow(/FOREIGN/);
+    db.exec('DELETE FROM brackets');
+    for (const table of ['bracket_results', 'bracket_late_joins', 'bracket_tie_breaks']) {
+      expect(db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get(), table).toEqual({ n: 0 });
+    }
+  });
+
+  it('never gives out an id twice, even after the rows are deleted', () => {
+    const db = openDatabase(':memory:');
+    db.exec("INSERT INTO events (name, created_at) VALUES ('Friday', 't')");
+    db.exec("INSERT INTO brackets (event_id, format, best_of, stations, seeding, created_at) VALUES (1, 'single', 1, 1, '[]', 't')");
+    db.exec("INSERT INTO bracket_results (bracket_id, match_id, winner_id, loser_id, at) VALUES (1, 0, 1, 2, 't')");
+    db.exec('DELETE FROM bracket_results');
+    db.exec("INSERT INTO bracket_results (bracket_id, match_id, winner_id, loser_id, at) VALUES (1, 0, 1, 2, 't')");
+    expect(db.prepare('SELECT id FROM bracket_results').all()).toEqual([{ id: 2 }]);
+  });
+});
+
 describe('openDatabase on a file', () => {
   it('creates the folder, uses WAL, and keeps data across a reopen', async () => {
     dir = await mkdtemp(join(tmpdir(), 'coliseumgrid-db-'));

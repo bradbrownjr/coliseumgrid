@@ -6,13 +6,16 @@
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.ts';
+import { openDatabase, type Database } from '../src/database.ts';
 import { HOST_PASSWORD, REMOTE, signInHost } from './helpers.ts';
 
 let app: FastifyInstance;
 let host = '';
+let db: Database;
 
 beforeEach(async () => {
-  app = await buildApp({ hostPassword: HOST_PASSWORD });
+  db = openDatabase(':memory:');
+  app = await buildApp({ db, hostPassword: HOST_PASSWORD });
   host = await signInHost(app);
 });
 afterEach(() => app.close());
@@ -21,7 +24,7 @@ const HOST_HEADER = '10.6.26.2:3000';
 const SAME_ORIGIN = 'http://10.6.26.2:3000';
 const OTHER_PORT = 'http://10.6.26.2:8080';
 
-function send(method: 'GET' | 'POST', url: string, origin: string | undefined, payload?: object) {
+function send(method: 'GET' | 'POST' | 'DELETE', url: string, origin: string | undefined, payload?: object) {
   return app.inject({
     method,
     url,
@@ -45,6 +48,21 @@ describe('a state-changing request from a page on another origin', () => {
     expect(res.json()).toEqual({ error: 'forbidden' });
     // The PIN was not replaced.
     expect((await send('POST', '/api/signup/claim', undefined, { handle: 'Zap', pin: '4321' })).statusCode).toBe(200);
+  });
+
+  it('is refused for the bracket routes, which a page could otherwise delete or change with no body', async () => {
+    const players = db.prepare("INSERT INTO players (handle, handle_key, pin_hash, created_at) VALUES (?, ?, 'x', 't')");
+    const ids = ['Ann', 'Bo', 'Cy', 'Di'].map((h) => Number(players.run(h, h.toLowerCase()).lastInsertRowid));
+    const body = { format: 'single', bestOf: 1, stations: 1, playerIds: ids };
+    expect((await send('POST', '/api/bracket', OTHER_PORT, body)).statusCode).toBe(403);
+    expect((await send('GET', '/api/bracket', undefined)).json()).toEqual({ bracket: null });
+    expect((await send('POST', '/api/bracket', SAME_ORIGIN, body)).statusCode).toBe(201);
+    for (const [method, url] of [['DELETE', '/api/bracket'], ['POST', '/api/bracket/tie-break']] as const) {
+      const res = await send(method, url, OTHER_PORT);
+      expect(res.statusCode, url).toBe(403);
+      expect(res.json()).toEqual({ error: 'forbidden' });
+    }
+    expect((await send('GET', '/api/bracket', undefined)).json().bracket).not.toBeNull();
   });
 
   it('is refused for sign-out, and the session survives', async () => {

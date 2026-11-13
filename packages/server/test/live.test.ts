@@ -176,7 +176,8 @@ describe('messages', () => {
     const hostCall = (method: 'POST' | 'PATCH', url: string, payload?: object) =>
       withCookie(app, host, { method, url, ...(payload && { payload }) });
 
-    // Sign-up from a tablet, a host add, a rename, and a merge each change the list.
+    // Sign-up from a tablet, a host add, a rename, and a merge each change the list. The first
+    // sign-up also makes the event (nobody had named one), which screens hear about once.
     const tablet = await pairDevice(app, host, 'signup');
     const zap = (await withCookie(app, tablet.cookie, { method: 'POST', url: '/api/signup', payload: { handle: 'Zap', pin: '1234' } })).json().player;
     const bolt = (await hostCall('POST', '/api/players', { handle: 'Bolt' })).json().player;
@@ -193,6 +194,7 @@ describe('messages', () => {
 
     await vi.waitFor(() =>
       expect(connection.messages).toEqual([
+        { type: 'event', event: { name: 'ColiseumGrid' } },
         { type: 'players' },
         { type: 'players' },
         { type: 'players' },

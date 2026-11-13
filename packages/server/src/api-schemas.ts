@@ -2,7 +2,7 @@
 // body or an answer, so a field added to a handler later can't leave the server unless it is
 // added here too (CLAUDE.md, rule 1).
 
-import type { ApiError, HandleRefusal } from '@coliseumgrid/core';
+import type { ApiError, BracketFormat, HandleRefusal, MatchSide, MatchStatus } from '@coliseumgrid/core';
 import type { FastifyReply } from 'fastify';
 
 // Written as a Record so a reason added to core fails the type check until it is listed here.
@@ -38,3 +38,71 @@ export const notSignedIn = errorSchema(['not-signed-in']);
 export function fail(reply: FastifyReply, status: number, error: Exclude<ApiError['error'], 'refused'>): FastifyReply {
   return reply.code(status).send({ error } satisfies ApiError);
 }
+
+/** A player leaves the server as an id and a handle and nothing more (CLAUDE.md, rule 1). */
+export const playerSchema = objectSchema({ id: { type: 'integer' }, handle: { type: 'string' } });
+
+const nullable = (schema: object) => ({ anyOf: [{ type: 'null' }, schema] }) as const;
+
+// Brackets (docs/PLAN.md, "Brackets API"). Each shape names every field, and the enums are
+// written as Records so a word added to core fails the type check until it is listed here.
+const MATCH_SIDES = Object.keys({
+  main: true,
+  winners: true,
+  losers: true,
+  final: true,
+  rematch: true,
+  third: true,
+  'tie-break': true,
+} satisfies Record<MatchSide, true>);
+const MATCH_STATUSES = Object.keys({
+  waiting: true,
+  ready: true,
+  playing: true,
+  done: true,
+  bye: true,
+} satisfies Record<MatchStatus, true>);
+export const BRACKET_FORMATS = Object.keys({ single: true, double: true, round_robin: true } satisfies Record<BracketFormat, true>);
+
+const slotSchema = objectSchema({ player: nullable(playerSchema), bye: { type: 'boolean' } });
+
+const matchSchema = objectSchema({
+  id: { type: 'integer' },
+  side: { type: 'string', enum: MATCH_SIDES },
+  round: { type: 'integer' },
+  number: { type: 'integer' },
+  status: { type: 'string', enum: MATCH_STATUSES },
+  slots: { type: 'array', items: slotSchema, minItems: 2, maxItems: 2 },
+  winner: { type: ['integer', 'null'] },
+  resultId: { type: ['integer', 'null'] },
+});
+
+export const bracketSchema = objectSchema({
+  id: { type: 'integer' },
+  format: { type: 'string', enum: BRACKET_FORMATS },
+  bestOf: { type: 'integer', enum: [1, 3, 5] },
+  finished: { type: 'boolean' },
+  lateOpen: { type: 'boolean' },
+  lastResultId: { type: ['integer', 'null'] },
+  stations: {
+    type: 'array',
+    items: objectSchema({ number: { type: 'integer' }, match: nullable(matchSchema), calledAt: { type: ['string', 'null'] } }),
+  },
+  upNext: { type: 'array', items: matchSchema },
+  matches: { type: 'array', items: matchSchema },
+  standings: {
+    type: 'array',
+    items: objectSchema({
+      place: { type: 'integer' },
+      player: playerSchema,
+      wins: { type: 'integer' },
+      losses: { type: 'integer' },
+    }),
+  },
+  ties: {
+    type: 'array',
+    items: objectSchema({ place: { type: 'integer' }, players: { type: 'array', items: playerSchema }, started: { type: 'boolean' } }),
+  },
+});
+
+export const nullableBracketSchema = nullable(bracketSchema);

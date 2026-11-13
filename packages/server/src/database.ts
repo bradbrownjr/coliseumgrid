@@ -61,6 +61,56 @@ export const MIGRATIONS: readonly string[] = [
     created_at TEXT NOT NULL
   );
   `,
+  // M4: brackets (docs/PLAN.md, "Brackets API"). A bracket is stored as its settings, the
+  // seeding (a JSON list of player ids and nulls), and three ordered lists, and the server
+  // rebuilds everything else by replay. The event has at most one bracket (a new one replaces
+  // it), and deleting a bracket removes its lists. The AUTOINCREMENT ids are never reused, so
+  // the id of an undone result can't later name a different result. Player ids inside a
+  // bracket are plain numbers with no foreign key: merging a player away is refused while they
+  // are in a bracket of the current event (players-routes.ts). No handle is stored here.
+  // `event_players` is who signed up to the event; it follows a player's deletion.
+  `
+  CREATE TABLE event_players (
+    event_id  INTEGER NOT NULL REFERENCES events(id),
+    player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    PRIMARY KEY (event_id, player_id)
+  );
+  CREATE INDEX event_players_player ON event_players (player_id);
+  CREATE TABLE brackets (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id   INTEGER NOT NULL UNIQUE REFERENCES events(id),
+    format     TEXT NOT NULL CHECK (format IN ('single', 'double', 'round_robin')),
+    best_of    INTEGER NOT NULL CHECK (best_of IN (1, 3, 5)),
+    stations   INTEGER NOT NULL CHECK (stations BETWEEN 1 AND 8),
+    seeding    TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE bracket_results (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    bracket_id INTEGER NOT NULL REFERENCES brackets(id) ON DELETE CASCADE,
+    match_id   INTEGER NOT NULL,
+    winner_id  INTEGER NOT NULL,
+    loser_id   INTEGER NOT NULL,
+    at         TEXT NOT NULL
+  );
+  CREATE INDEX bracket_results_bracket ON bracket_results (bracket_id, id);
+  CREATE TABLE bracket_late_joins (
+    bracket_id INTEGER NOT NULL REFERENCES brackets(id) ON DELETE CASCADE,
+    position   INTEGER NOT NULL,
+    player_id  INTEGER NOT NULL,
+    step       INTEGER NOT NULL,
+    PRIMARY KEY (bracket_id, position)
+  );
+  CREATE TABLE bracket_tie_breaks (
+    bracket_id INTEGER NOT NULL REFERENCES brackets(id) ON DELETE CASCADE,
+    position   INTEGER NOT NULL,
+    round      INTEGER NOT NULL,
+    player_a   INTEGER NOT NULL,
+    player_b   INTEGER NOT NULL,
+    step       INTEGER NOT NULL,
+    PRIMARY KEY (bracket_id, position)
+  );
+  `,
 ];
 
 export function migrate(db: Database): void {

@@ -444,10 +444,11 @@ every answer lists its fields, errors are `{ "error": code }`, and a missing ses
 
 **Storage.** Migration 3 adds `brackets` (the event, format, best of, stations, the seeding
 as a JSON list of player ids and nulls, and the creation time), `bracket_results` (the
-bracket, the match, the winner, the loser, and the time), and `event_players` (the event and
-the player). No handle is stored; an answer joins the current one. The server rebuilds the
-library's state on its in-memory store (`brackets-memory-db`) by creating the stage and
-replaying the log. It checks that each logged match is ready and holds the same two players.
+bracket, the match, the winner, the loser, and the time), `bracket_late_joins` and
+`bracket_tie_breaks` (in order, each with the step it was made at), and `event_players` (the
+event and the player). An event has one bracket, and a new one replaces it. No handle is
+stored; an answer joins the current one. The server rebuilds the library's state on its
+in-memory store (`brackets-memory-db`) by creating the stage and replaying the log. It checks that each logged match is ready and holds the same two players.
 A tie-break match is stored by the server with the step at which it was made, and its
 result goes in the same log. Replay of 32 players took 13 ms in two lives (63 results) and
 258 ms in a round robin (496 results), so there is no cache in M4.
@@ -519,8 +520,12 @@ reload it. The Display also reloads on `players`, for renames.
 
 **Who is in a bracket.** Players are kept across events and attendance isn't tracked, so
 `event_players` lists who signed up to the current event. Sign-up, claim, and the host's
-"Add player" fill it, and the start dialog pre-checks the event's players. Merging away a
-player who is in an unfinished bracket answers 409 `in-bracket`.
+"Add player" fill it, and the start dialog pre-checks the event's players. A player who
+signs up before the host has named an event goes into one the server makes then, named
+"ColiseumGrid" (what the Display shows with no event), and the host can rename it. Merging
+away a player who is in a bracket of the current event, running or finished, answers 409
+`in-bracket`, so the bracket's answer can always be made; deleting the bracket frees them. A
+merge keeps the merged player's place in the event for the player kept.
 
 
 ## 7. Name tags

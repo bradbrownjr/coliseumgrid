@@ -6,16 +6,20 @@ import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import { createAccess, rejectForeignOrigin } from './access.ts';
+import { registerBracketRoutes } from './bracket-routes.ts';
+import { createBracketStore } from './bracket-store.ts';
 import type { Clock } from './clock.ts';
 import type { Mode } from './config.ts';
 import { openDatabase, type Database } from './database.ts';
 import { createDevices } from './devices.ts';
+import { createEventPlayers } from './event-players.ts';
 import { createEvents } from './events.ts';
 import { registerHostRoutes } from './host-routes.ts';
 import { createHostStore } from './host-store.ts';
 import { createLiveHub } from './live.ts';
 import { createPlayers } from './players.ts';
 import { registerPlayerRoutes } from './players-routes.ts';
+import { createWriteChain } from './write-chain.ts';
 
 export interface AppOptions {
   /** The built client (packages/client/dist), absolute or relative to the working directory. When it has no index.html, only /api is served. */
@@ -119,22 +123,38 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
   // library's default is 100 MiB).
   await app.register(fastifyWebsocket, { options: { maxPayload: 1024 } });
 
+  const events = createEvents(db, now);
+  const players = createPlayers(db);
+  const eventPlayers = createEventPlayers(db, events, (event) => hub.broadcast({ type: 'event', event }));
+  const store = createBracketStore(db);
+  // Every bracket write, and a merge that could delete a player a bracket is about to take,
+  // goes through this one chain (docs/PLAN.md, "Brackets API").
+  const chain = createWriteChain();
+
   await registerHostRoutes(app, {
     access,
     devices,
-    events: createEvents(db, now),
+    events,
     hub,
     now,
     ...(options.trustedProxy && { trustedProxy: options.trustedProxy }),
   });
 
   await registerPlayerRoutes(app, {
-    players: createPlayers(db),
+    players,
+    eventPlayers,
+    inBracket: (playerId) => {
+      const eventId = events.currentId();
+      return eventId !== null && store.hasPlayer(eventId, playerId);
+    },
+    exclusive: (task) => chain.run(task),
     access,
     onPlayersChanged: () => hub.broadcast({ type: 'players' }),
     mode,
     ...(options.trustedProxy && { trustedProxy: options.trustedProxy }),
   });
+
+  await registerBracketRoutes(app, { access, players, events, eventPlayers, store, hub, chain, now });
 
   // @fastify/static throws on a relative root while existsSync accepts one, so resolve it here
   // (against the working directory) in the factory rather than in each caller.

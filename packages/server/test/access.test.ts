@@ -23,7 +23,7 @@ async function start(mode: 'offline' | 'online'): Promise<void> {
 afterEach(() => app.close());
 
 interface Route {
-  method: 'GET' | 'POST' | 'PATCH';
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   url: string;
   payload?: object;
 }
@@ -40,7 +40,17 @@ const HOST_ROUTES: Route[] = [
   { method: 'PATCH', url: '/api/players/1', payload: { handle: 'Renamed' } },
   { method: 'POST', url: '/api/players/1/merge', payload: { intoId: 2 } },
   { method: 'POST', url: '/api/players/1/reset-pin' },
+  { method: 'POST', url: '/api/bracket', payload: { format: 'single', bestOf: 1, stations: 1, playerIds: [1, 2] } },
+  { method: 'POST', url: '/api/bracket/results', payload: { matchId: 0, winnerId: 1 } },
+  { method: 'POST', url: '/api/bracket/undo', payload: { resultId: 1 } },
+  { method: 'POST', url: '/api/bracket/players', payload: { playerId: 1 } },
+  { method: 'POST', url: '/api/bracket/tie-break' },
+  { method: 'DELETE', url: '/api/bracket' },
+  { method: 'GET', url: '/api/event/players' },
 ];
+
+// Any paired device may look; only the host changes things.
+const DEVICE_ROUTES: Route[] = [{ method: 'GET', url: '/api/bracket' }];
 
 /** Answers for a route as a caller sees them: 401 not-signed-in, or something else. */
 async function status(route: Route, cookie: string | undefined, remoteAddress = REMOTE) {
@@ -69,6 +79,15 @@ describe.each(['offline', 'online'] as const)('in %s mode', (mode) => {
       for (const route of [...SIGNUP_ROUTES, ...HOST_ROUTES]) {
         expect(await status(route, cookie), `${cookie} ${route.url}`).toBe(401);
       }
+    }
+  });
+
+  it('lets a Display and a Sign-up device read the bracket, and a stranger not', async () => {
+    for (const route of DEVICE_ROUTES) {
+      expect(await status(route, display), route.url).toBe(200);
+      expect(await status(route, signup), route.url).toBe(200);
+      expect(await status(route, host), route.url).toBe(200);
+      expect(await status(route, undefined), route.url).toBe(401);
     }
   });
 
