@@ -41,9 +41,39 @@ The first event is on July 10, 2027.
 | Laptop | Host | Creates the event, starts rounds, records results, undoes mistakes, pairs devices, prints name tags |
 | Tablet | Sign-up | A player types a handle, keeps or changes the suggested PIN, and gets a name tag |
 | TV | Display | Shows the bracket or standings, "Up next", the console to go to, and the match timer. No input |
+| Player's phone | Player view | Follows one or more handles: their next match, how far away it is, the station, and standings, with an alert when they're up (from M6) |
 
 One console is the starting point, with room for a second. Each console is a **station**,
 and the queue sends the next match to the first free station.
+
+### Player view
+
+Planned for M6 (Brad, 2026-11-13). A player signs in on their own phone with handle and PIN,
+or by scanning a QR code on the Sign-up done screen, and follows their matches. One phone can
+follow several handles. The phone has to reach the server: at an offline venue it joins the
+event Wi-Fi; a phone on cellular data can't reach the laptop.
+
+Alerts depend on HTTPS, because browsers only give these features to a secure context, and a
+plain `http://192.168.x.x` address isn't one; only `localhost` is
+(<https://developer.mozilla.org/en-US/docs/Web/Security/Secure_Contexts>):
+
+| | Offline, plain HTTP | Online, HTTPS |
+|---|---|---|
+| Page alert (banner, title, sound after a first tap) | Yes | Yes |
+| Vibration | Android only (<https://caniuse.com/vibration>) | Android only |
+| Screen wake lock | No | Yes (<https://developer.mozilla.org/en-US/docs/Web/API/Screen_Wake_Lock_API>) |
+| Push notifications | No | Yes; on iPhone and iPad only from a Home Screen web app, iOS 16.4 and later (<https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/>) |
+
+Push also goes through the browser maker's push service (Apple's for iOS), so it needs the
+internet (<https://www.w3.org/TR/push-api/>). Offline, the page alert works only while the
+page is open and the screen is on. Whether a page's sound keeps playing on a locked phone is
+undocumented; WebKit bug reports say iOS stops it
+(<https://bugs.webkit.org/show_bug.cgi?id=173332>). `PLAYTEST.md` tests it on real phones
+before anything relies on it.
+
+An option not yet planned: a real certificate for a hostname that points at the laptop on
+the venue network would make the page a secure context offline, which allows the wake lock
+(push would still need the internet).
 
 ### Pairing a device
 

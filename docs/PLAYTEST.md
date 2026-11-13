@@ -47,20 +47,32 @@ Why: devices reconnect by address, so the laptop's address has to stay the same.
 - Scan the host's QR code with the tablet's camera app. Does the join page open with the
   code filled in?
 
-### Label printer (after M7)
+### Alerts on players' phones (after M6)
+
+Why: whether a page can alert a phone whose screen is locked isn't documented, and the
+offline plan depends on the answer (`PLAN.md`, "Player view").
+
+- On an Android phone and an iPhone, over plain HTTP on the event network: open the player
+  page, tap once to allow sound, then lock the screen. Does the alert sound when the player
+  comes up? After 5 minutes locked? After 15?
+- The same over HTTPS, and from an iPhone Home Screen web app.
+- Does the phone stay signed in after the browser is closed and reopened?
+- With a parent's phone following two handles, is it clear whose match is up?
+
+### Label printer (after M8)
 
 Why: label sizes and printer margins vary by printer and driver.
 
 - Print a name tag from each preset. Is anything cut off? Is the PIN readable up close and
   hard to read from two meters?
 
-### Offline bundle (after M8)
+### Offline bundle (after M9)
 
 - On the Windows laptop with no network: run the launcher. Does Windows Firewall ask, and
   do the tablets and TV connect after allowing it?
 - The same on the Fedora laptop.
 
-### Dress rehearsal (after M9)
+### Dress rehearsal (after M10)
 
 - A full mock event with family or friends, run by Brad's son: sign-up, a Smash bracket, a
   Mario Kart heat round, name tags. Note everything he had to ask about.

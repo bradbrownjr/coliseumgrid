@@ -1,11 +1,11 @@
 # Roadmap
 
-*Last updated: 2026-11-12*
+*Last updated: 2026-11-13*
 
 ## At a glance
 
 What comes next for ColiseumGrid, in build order. The first event is on July 10, 2027;
-everything through M9 is meant to be done and play-tested before then. Finished items leave
+everything through M10 is meant to be done and play-tested before then. Finished items leave
 this page and are recorded in the [changelog](CHANGELOG.md). The design behind every item is
 in [`PLAN.md`](PLAN.md).
 
@@ -15,10 +15,11 @@ in [`PLAN.md`](PLAN.md).
 | [M3 Pairing and live screens](#m3-pairing-and-live-screens) | Join codes, QR codes, device roles, live updates, and the Display screen's frame. | Planned |
 | [M4 1 vs 1 brackets](#m4-1-vs-1-brackets) | Single and double elimination, round robin, stations, the queue, and undo. | Planned |
 | [M5 Races and free-for-all](#m5-races-and-free-for-all) | Heats with placement points, rounds, and a final. | Planned |
-| [M6 Setup wizard](#m6-setup-wizard) | The three-step setup and the time estimate. | Planned |
-| [M7 Name tags](#m7-name-tags) | Event graphics and printed name tags. | Planned |
-| [M8 Packaging](#m8-packaging) | The offline bundle for Windows and Fedora, and the Docker image for online use. | Planned |
-| [M9 Player stats](#m9-player-stats) | Each handle's results across events. | Planned |
+| [M6 Player view](#m6-player-view) | Players follow their own matches and standings on their phones, with an alert when they're up next. | Planned |
+| [M7 Setup wizard](#m7-setup-wizard) | The three-step setup and the time estimate. | Planned |
+| [M8 Name tags](#m8-name-tags) | Event graphics and printed name tags. | Planned |
+| [M9 Packaging](#m9-packaging) | The offline bundle for Windows and Fedora, and the Docker image for online use. | Planned |
+| [M10 Player stats](#m10-player-stats) | Each handle's results across events. | Planned |
 | [Later](#later) | Teams, Swiss, pools, season standings, and a public results page. | Later |
 
 **Stages:** *Next* is being worked on or starts as soon as the current item is finished.
@@ -104,7 +105,39 @@ Acceptance checks:
 
 **Docs:** `PLAN.md` section 5.
 
-## M6 Setup wizard
+## M6 Player view
+
+A player follows their own matches on their own phone, so the host spends less time waiting
+for players at the concession stand or the bathroom (Brad, 2026-11-13). Design: `PLAN.md`
+section 3, "Player view".
+
+Tasks:
+
+- Sign-in on a player's phone with handle and PIN, reusing M2's claim and its limits. A
+  device token keeps the phone signed in.
+- A QR code on the Sign-up done screen that signs a phone in without typing. It follows the
+  pairing code rules: works once, expires after 10 minutes, rate limited (`CLAUDE.md`, rule
+  7).
+- One phone can follow several handles (a parent with two kids).
+- The player page: the next match or heat, how many matches away it is, the station, and
+  standings, updated live over M3's connection.
+- The alert when a followed player is up next: a full-screen flashing banner, a page title
+  change, a sound (unlocked by a first tap), and a vibration where the browser supports it.
+- Over HTTPS: Web Push notifications through a service worker, which also needs a Home
+  Screen web app on iPhone and iPad (iOS 16.4 and later), and a screen wake lock while the
+  page is open. Offline over plain HTTP, the page alert is the only alert.
+
+Acceptance checks:
+
+- A phone signs in by handle and PIN, and by the QR code; a used or expired code is refused.
+- When a followed player's match is two away, the page shows it within a second of the host
+  recording the result before it.
+- Over HTTPS, a subscribed phone gets a push notification; over plain HTTP the page offers no
+  push and still shows the page alert.
+
+**Docs:** `PLAN.md` section 3, `DESIGN.md` (the player page), `PLAYTEST.md`.
+
+## M7 Setup wizard
 
 Tasks:
 
@@ -117,7 +150,7 @@ Acceptance checks:
 
 **Docs:** `PLAN.md` sections 5 and 6, `DESIGN.md`.
 
-## M7 Name tags
+## M8 Name tags
 
 Tasks:
 
@@ -131,7 +164,7 @@ Acceptance checks:
 
 **Docs:** `PLAN.md` section 7, `DESIGN.md`, `PLAYTEST.md`.
 
-## M8 Packaging
+## M9 Packaging
 
 Tasks:
 
@@ -147,7 +180,7 @@ Acceptance checks:
 
 **Docs:** `docs/SELF-HOSTING.md` (new), `PLAN.md` section 8, `PLAYTEST.md`.
 
-## M9 Player stats
+## M10 Player stats
 
 Tasks:
 
