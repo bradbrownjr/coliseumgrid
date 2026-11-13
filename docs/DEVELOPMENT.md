@@ -47,10 +47,52 @@ A bad value stops it with a message.
 |---|---|---|
 | `HOST` | `0.0.0.0` | The address to listen on. The default is every address, so tablets and a TV can reach it. |
 | `PORT` | `3000` | The port to listen on, a whole number from 0 to 65535. |
-| `COLISEUMGRID_MODE` | `offline` | `offline` or `online` (see `PLAN.md` section 8). Online turns on the rate limits on `POST /api/signup/claim`; later milestones add more. |
+| `COLISEUMGRID_MODE` | `offline` | `offline` or `online` (see `PLAN.md` section 8). Online turns on the rate limits on `POST /api/signup/claim`, turns off the `localhost` host sign-in and the first-run password setup, and needs `COLISEUMGRID_HOST_PASSWORD`. |
+| `COLISEUMGRID_HOST_PASSWORD` | none | The host password, 8 to 128 characters, taken as typed (spaces count). When set, it is the password and first-run setup is off. **Required online**: the server stops at startup without it. Offline without it, the first visit from the laptop itself (`localhost`) sets the password, once, and it is stored hashed (scrypt, like PINs). The server never prints or returns it. The Unraid template has it as a masked variable. |
 | `DATA_DIR` | `data` | The folder that holds the database file `coliseumgrid.db`. Absolute, or relative to the working directory (the server turns it into an absolute path at startup). The server creates it if it is missing. The Docker image sets `/data`. |
 | `TRUSTED_PROXY` | none | The reverse proxy's IP address. Only a request whose direct peer is this address may name the client in `X-Forwarded-For`, and only the last entry is used (`CLAUDE.md`, rule 6). Without it, the client is the socket address. Set it online, behind the proxy; without it every player shares the proxy's address and its rate limit. |
 | `CLIENT_DIST` | `packages/client/dist` | The folder of built client files to serve: absolute, or relative to the working directory. The default is found from the server package's location, so it works from any working directory. Read in `src/main.ts`, not by `loadConfig`. Without an `index.html` there, the server answers only `/api`. |
+
+### Host and device sessions
+
+`packages/server/src/access.ts` decides who a request is; the contract is `PLAN.md` section 3,
+"Devices and host API".
+
+- **Tokens.** A host session (`cg_host`) and a paired device (`cg_device`) each hold 32 random
+  bytes from `node:crypto`, sent once in a cookie and stored only as a SHA-256 hash
+  (`tokens.ts`). A random 256-bit token can't be guessed at any speed, so it needs no slow
+  hash; the hash only keeps a copied database from signing anyone in. Passwords use scrypt
+  (`pin-hash.ts`). The cost is the PIN's, so raise it there if the host password ever matters
+  more than a PIN.
+- **Cookies.** `cookies.ts` reads and writes them by hand (no cookie package): `Path=/`,
+  `HttpOnly`, `SameSite=Strict`, and `Secure` only when the request came over HTTPS. The
+  server speaks plain HTTP, so HTTPS is known only from the reverse proxy: the last
+  `X-Forwarded-Proto` entry, and only when the direct peer is `TRUSTED_PROXY` (`CLAUDE.md`,
+  rule 6). A host session lasts 12 hours from sign-in and is never extended. A device cookie
+  lasts 400 days, the most Chrome keeps
+  (<https://developer.chrome.com/blog/cookie-max-age-expires>); the server expires a device
+  only when the host unpairs it.
+- **The laptop counts as the host** (offline only) when the socket's peer is `127.0.0.1`,
+  `::1`, or `::ffff:127.0.0.1`. Online it never does. Headers can only take this away: a
+  forwarding header, a `Host` that isn't `localhost`, `127.0.0.1`, or `[::1]` (DNS
+  rebinding, or a dev proxy such as Vite passing a LAN request through), or an `Origin` that
+  doesn't match `Host` (another site's script) all make the request an ordinary one that
+  needs the password. Don't put an offline server behind a reverse proxy on the same machine.
+- **Which route needs what.** Host routes need a host session (401 `not-signed-in`), sign-up
+  routes a Sign-up device or a host session, `GET /api/event` and `GET /api/live` any host or
+  device. The check runs as an `onRequest` hook, before the body is read. A Display is
+  refused the sign-up routes with the same 401.
+- **Guessing limits.** Wrong host passwords and wrong pairing codes are limited per client IP
+  in both modes (`rate-limit.ts`: 10 wrong tries per 10 minutes each, counted before the slow
+  check). The tests move time with the `now` option of `buildApp`.
+- **Live updates.** `GET /api/live` is a WebSocket (`@fastify/websocket`). `live.ts` keeps the
+  open connections, pings them every 30 seconds, drops the ones that don't answer or whose
+  sign-in ended, and sends `unpaired` before closing a device the host removed. Routes
+  announce changes with `hub.broadcast`. Tests connect with the plugin's `app.injectWS`, which
+  runs the real upgrade path over in-memory streams: call `await app.ready()` first, give it
+  the peer address as `{ socket: { remoteAddress } }`, and close each socket at the end.
+- **The current event** is the newest row of `events`. `PUT /api/event` renames it, or makes
+  the first one. Names are 1 to 60 characters with spaces tidied.
 
 ### Database
 
@@ -67,7 +109,7 @@ by a newer server is refused at startup.
 | Path | What it holds |
 |---|---|
 | `packages/core` | `@coliseumgrid/core`: rules shared by the browser and the server (see `PLAN.md` section 9). Today it holds the seeded random source. |
-| `packages/server` | `@coliseumgrid/server`: `src/app.ts` builds the Fastify app (`buildApp`), `src/config.ts` reads the settings, `src/main.ts` starts it, `src/database.ts` holds the schema, `src/players-routes.ts` the players API, `src/pin-hash.ts` PIN hashing (scrypt), `src/client-ip.ts` and `src/rate-limit.ts` the online limits. |
+| `packages/server` | `@coliseumgrid/server`: `src/app.ts` builds the Fastify app (`buildApp`), `src/config.ts` reads the settings, `src/main.ts` starts it, `src/database.ts` holds the schema, `src/players-routes.ts` the players API, `src/pin-hash.ts` PIN and password hashing (scrypt), `src/client-ip.ts` and `src/rate-limit.ts` the client address and the guessing limits, `src/access.ts`, `src/host-routes.ts`, `src/devices.ts`, `src/host-store.ts`, `src/events.ts`, and `src/live.ts` host sign-in, pairing, and live updates. |
 | `packages/client` | `@coliseumgrid/client`: Vite, React, and MUI. `src/theme/` holds the palette and the theme, `src/pages/` the Host (`/host`), Sign-up (`/signup`), and Display (`/display`) screens, `src/components/` shared pieces, `test/` the Vitest tests. `/` goes to `/host`. |
 | `tools/` | Scripts run by hand or in CI, type-checked by `tools/tsconfig.json`. |
 | `docs/` | The docs listed in `DOC-STYLE.md`, "Where things go". |
@@ -148,10 +190,13 @@ on Node 26 alpine, running as the non-root `node` user.
 
 ```sh
 docker build -t coliseumgrid .
-docker run --rm -p 3000:3000 -v coliseumgrid-data:/data coliseumgrid
+docker run --rm -p 3000:3000 -v coliseumgrid-data:/data \
+  -e COLISEUMGRID_HOST_PASSWORD=change-this-password coliseumgrid
 ```
 
-The image sets `COLISEUMGRID_MODE=online`, `PORT=3000`, and
+The image starts in online mode, which stops at startup without a host password, so pass one:
+`-e COLISEUMGRID_HOST_PASSWORD=...` (at least 8 characters). The image sets
+`COLISEUMGRID_MODE=online`, `PORT=3000`, and
 `CLIENT_DIST=/app/packages/client/dist`. It also sets `DATA_DIR=/data`, which holds the
 database (and later uploaded graphics), so mount a volume there.
 

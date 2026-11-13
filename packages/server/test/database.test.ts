@@ -24,6 +24,34 @@ describe('migrations', () => {
     expect(columns(db, 'events')).toEqual(['id', 'name', 'created_at']);
   });
 
+  it('add the host, pairing, and device tables, with no token or password stored in plain text', () => {
+    const db = openDatabase(':memory:');
+    expect(columns(db, 'host_settings')).toEqual(['id', 'password_hash', 'updated_at']);
+    expect(columns(db, 'host_sessions')).toEqual(['token_hash', 'created_at', 'expires_at']);
+    expect(columns(db, 'pairing_codes')).toEqual(['code', 'role', 'created_at', 'expires_at', 'used_at']);
+    expect(columns(db, 'devices')).toEqual(['id', 'role', 'label', 'token_hash', 'last_seen', 'created_at']);
+  });
+
+  it('allow one host password row, and only the two device roles', () => {
+    const db = openDatabase(':memory:');
+    const insertPassword = db.prepare("INSERT INTO host_settings (id, password_hash, updated_at) VALUES (?, 'h', 't')");
+    insertPassword.run(1);
+    expect(() => insertPassword.run(1)).toThrow(/UNIQUE|PRIMARY/);
+    expect(() => insertPassword.run(2)).toThrow(/CHECK/);
+    expect(() =>
+      db.prepare("INSERT INTO pairing_codes (code, role, created_at, expires_at) VALUES ('AAAAAA', 'host', 't', 't')").run(),
+    ).toThrow(/CHECK/);
+  });
+
+  it('keep device token hashes unique', () => {
+    const db = openDatabase(':memory:');
+    const insert = db.prepare(
+      "INSERT INTO devices (role, label, token_hash, last_seen, created_at) VALUES ('display', 'Display 1', ?, 't', 't')",
+    );
+    insert.run('abc');
+    expect(() => insert.run('abc')).toThrow(/UNIQUE/);
+  });
+
   it('run once: running again changes nothing and keeps the rows', () => {
     const db = openDatabase(':memory:');
     db.prepare("INSERT INTO players (handle, handle_key, pin_hash, created_at) VALUES ('Zap', 'zap', 'h', 't')").run();

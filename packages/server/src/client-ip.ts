@@ -12,9 +12,19 @@ export function normalizeIp(address: string): string {
   return address.toLowerCase().replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/, '');
 }
 
+/** The socket's peer address, normalized. This is the one address a caller can't choose. */
+export function getPeerIp(request: FastifyRequest): string {
+  return normalizeIp(request.raw.socket.remoteAddress ?? '');
+}
+
+/** True when the direct peer is the reverse proxy we were told about. */
+export function isFromTrustedProxy(request: FastifyRequest, trustedProxy: string | undefined): boolean {
+  return trustedProxy !== undefined && getPeerIp(request) === normalizeIp(trustedProxy);
+}
+
 export function getClientIp(request: FastifyRequest, trustedProxy: string | undefined): string {
-  const peer = normalizeIp(request.raw.socket.remoteAddress ?? '');
-  if (trustedProxy === undefined || peer !== normalizeIp(trustedProxy)) return peer;
+  const peer = getPeerIp(request);
+  if (!isFromTrustedProxy(request, trustedProxy)) return peer;
 
   const header = request.headers['x-forwarded-for'];
   const value = Array.isArray(header) ? header.join(',') : header;

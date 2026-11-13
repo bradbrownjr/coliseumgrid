@@ -31,6 +31,36 @@ export const MIGRATIONS: readonly string[] = [
     created_at TEXT NOT NULL
   );
   `,
+  // M3: host sign-in, pairing, and devices (docs/PLAN.md, "Devices and host API"). Times are
+  // ISO 8601 UTC text, which sorts and compares correctly as text. Tokens are stored only as
+  // SHA-256 hashes (tokens.ts). The current event is the newest row of `events`.
+  `
+  CREATE TABLE host_settings (
+    id            INTEGER PRIMARY KEY CHECK (id = 1),
+    password_hash TEXT NOT NULL,
+    updated_at    TEXT NOT NULL
+  );
+  CREATE TABLE host_sessions (
+    token_hash TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+  );
+  CREATE TABLE pairing_codes (
+    code       TEXT PRIMARY KEY,
+    role       TEXT NOT NULL CHECK (role IN ('display', 'signup')),
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    used_at    TEXT
+  );
+  CREATE TABLE devices (
+    id         INTEGER PRIMARY KEY,
+    role       TEXT NOT NULL CHECK (role IN ('display', 'signup')),
+    label      TEXT NOT NULL,
+    token_hash TEXT NOT NULL UNIQUE,
+    last_seen  TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  `,
 ];
 
 export function migrate(db: Database): void {
@@ -50,6 +80,19 @@ export function migrate(db: Database): void {
       db.exec('ROLLBACK');
       throw error;
     }
+  }
+}
+
+/** Runs `work` in one transaction: all its writes happen, or none do. */
+export function inTransaction<T>(db: Database, work: () => T): T {
+  db.exec('BEGIN');
+  try {
+    const result = work();
+    db.exec('COMMIT');
+    return result;
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
   }
 }
 

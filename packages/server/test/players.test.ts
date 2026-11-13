@@ -4,6 +4,8 @@ import { buildApp } from '../src/app.ts';
 import { openDatabase, type Database } from '../src/database.ts';
 import { verifyPin } from '../src/pin-hash.ts';
 
+// The app runs offline and app.inject comes from 127.0.0.1, so every request here counts as the
+// laptop, which is the host. Who may call which route is tested in access.test.ts.
 let app: FastifyInstance;
 let db: Database;
 /** Every response body the test saw, to check what leaves the server. */

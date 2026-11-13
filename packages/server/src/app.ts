@@ -3,9 +3,17 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import fastifyStatic from '@fastify/static';
+import fastifyWebsocket from '@fastify/websocket';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
+import { createAccess } from './access.ts';
+import type { Clock } from './clock.ts';
 import type { Mode } from './config.ts';
 import { openDatabase, type Database } from './database.ts';
+import { createDevices } from './devices.ts';
+import { createEvents } from './events.ts';
+import { registerHostRoutes } from './host-routes.ts';
+import { createHostStore } from './host-store.ts';
+import { createLiveHub } from './live.ts';
 import { createPlayers } from './players.ts';
 import { registerPlayerRoutes } from './players-routes.ts';
 
@@ -20,6 +28,12 @@ export interface AppOptions {
   mode?: Mode;
   /** The reverse proxy's address, the only peer whose X-Forwarded-For is read (CLAUDE.md, rule 6). */
   trustedProxy?: string;
+  /** The host password from COLISEUMGRID_HOST_PASSWORD. When set it is the password and first-run setup is off. Online mode requires it. */
+  hostPassword?: string;
+  /** The clock for expiry and rate-limit windows. Tests move it by hand. Default Date.now. */
+  now?: Clock;
+  /** Ping interval for live connections, in milliseconds. Tests shorten it. Default HEARTBEAT_MS. */
+  liveHeartbeatMs?: number;
 }
 
 /** `/api` and everything under it belongs to the API, never to the client. */
@@ -36,8 +50,18 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
     ajv: { customOptions: { coerceTypes: false, removeAdditional: false } },
   });
 
+  const mode = options.mode ?? 'offline';
+  // Online has no localhost sign-in and no first-run setup, so without a password the host
+  // screens could never be opened (docs/PLAN.md, "Host sign-in").
+  if (mode === 'online' && !options.hostPassword) {
+    throw new Error('Online mode needs a host password (COLISEUMGRID_HOST_PASSWORD).');
+  }
+  const now = options.now ?? Date.now;
+
   const db = options.db ?? openDatabase(':memory:');
+  const hub = createLiveHub(options.liveHeartbeatMs);
   app.addHook('onClose', () => {
+    hub.stop();
     db.close();
   });
 
@@ -70,9 +94,35 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
     () => ({ status: 'ok' }),
   );
 
+  const hostStore = createHostStore(db, now);
+  const devices = createDevices(db, now);
+  const access = await createAccess({
+    mode,
+    hostStore,
+    devices,
+    ...(options.hostPassword && { hostPassword: options.hostPassword }),
+    ...(options.trustedProxy && { trustedProxy: options.trustedProxy }),
+  });
+
+  // Registered before any route, because it adds a hook that sees each route as it is added.
+  // maxPayload: clients send the server nothing, so even a small message is refused (the
+  // library's default is 100 MiB).
+  await app.register(fastifyWebsocket, { options: { maxPayload: 1024 } });
+
+  await registerHostRoutes(app, {
+    access,
+    devices,
+    events: createEvents(db, now),
+    hub,
+    now,
+    ...(options.trustedProxy && { trustedProxy: options.trustedProxy }),
+  });
+
   await registerPlayerRoutes(app, {
     players: createPlayers(db),
-    mode: options.mode ?? 'offline',
+    access,
+    onPlayersChanged: () => hub.broadcast({ type: 'players' }),
+    mode,
     ...(options.trustedProxy && { trustedProxy: options.trustedProxy }),
   });
 

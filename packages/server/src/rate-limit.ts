@@ -18,6 +18,26 @@ export const CLAIM_MAX_WRONG_PER_HANDLE = 5;
  */
 export const CLAIM_MAX_PER_IP = 60;
 
+/** The window for wrong host passwords and wrong pairing codes. */
+export const GUESS_WINDOW_MS = 10 * 60 * 1000;
+
+/**
+ * Wrong host passwords per client IP per window, in both modes (CLAUDE.md, rule 7). 10 is room
+ * for a host who mistypes a few times, and averages one guess a minute: against a password of
+ * 8 or more characters that is no progress at all. Counted per IP, so at an online venue
+ * behind one public address a stranger on the same network can also lock the host out for
+ * the window. Restarting the server clears the counts.
+ */
+export const SIGN_IN_MAX_WRONG_PER_IP = 10;
+
+/**
+ * Wrong pairing codes per client IP per window, in both modes (rule 7). A code has 27^6, about
+ * 387 million, values and only a few are live at once, so 10 guesses a window find one with a
+ * chance of about 1 in 40 million per live code. 10 also leaves room for someone typing a code
+ * with a TV remote to get it wrong a few times.
+ */
+export const JOIN_MAX_WRONG_PER_IP = 10;
+
 /**
  * Counts attempts per key in a fixed window that starts at a key's first attempt. A caller
  * reserves an attempt before the slow check and clears the key when the check passes, so

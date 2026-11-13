@@ -15,8 +15,45 @@ describe('loadConfig', () => {
         PORT: '8080',
         DATA_DIR: '/data',
         TRUSTED_PROXY: '10.0.0.1',
+        COLISEUMGRID_HOST_PASSWORD: 'hunter2hunter2',
       }),
-    ).toEqual({ mode: 'online', host: '127.0.0.1', port: 8080, dataDir: '/data', trustedProxy: '10.0.0.1' });
+    ).toEqual({
+      mode: 'online',
+      host: '127.0.0.1',
+      port: 8080,
+      dataDir: '/data',
+      trustedProxy: '10.0.0.1',
+      hostPassword: 'hunter2hunter2',
+    });
+  });
+
+  it('takes the host password as it is, spaces included', () => {
+    expect(loadConfig({ COLISEUMGRID_HOST_PASSWORD: '  spaced out  ' }).hostPassword).toBe('  spaced out  ');
+  });
+
+  it('treats an empty host password as not set', () => {
+    expect(loadConfig({ COLISEUMGRID_HOST_PASSWORD: '' })).not.toHaveProperty('hostPassword');
+  });
+
+  it('refuses to start online without a host password', () => {
+    expect(() => loadConfig({ COLISEUMGRID_MODE: 'online' })).toThrow(/COLISEUMGRID_HOST_PASSWORD/);
+    expect(() => loadConfig({ COLISEUMGRID_MODE: 'online', COLISEUMGRID_HOST_PASSWORD: '' })).toThrow(
+      /COLISEUMGRID_HOST_PASSWORD/,
+    );
+  });
+
+  it('starts offline without a host password, for first-run setup from localhost', () => {
+    expect(loadConfig({ COLISEUMGRID_MODE: 'offline' }).mode).toBe('offline');
+  });
+
+  it.each(['short', 'x'.repeat(129)])('fails on a host password of the wrong length, without printing it', (password) => {
+    try {
+      loadConfig({ COLISEUMGRID_HOST_PASSWORD: password });
+      expect.unreachable();
+    } catch (error) {
+      expect((error as Error).message).toMatch(/COLISEUMGRID_HOST_PASSWORD must be 8 to 128/);
+      expect((error as Error).message).not.toContain(password);
+    }
   });
 
   it('resolves a relative DATA_DIR against the working directory', () => {

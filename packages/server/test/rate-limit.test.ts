@@ -1,6 +1,7 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, InjectOptions } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.ts';
+import { HOST_PASSWORD, signInHost } from './helpers.ts';
 import type { Mode } from '../src/config.ts';
 import {
   CLAIM_MAX_PER_IP,
@@ -15,17 +16,27 @@ afterEach(async () => {
   app = undefined;
 });
 
+// The claim route needs a host or Sign-up session, so the host signs in once per app and every
+// request carries that cookie. The tests below vary the remote address, which a cookie ignores.
+let cookie = '';
+
 async function start(mode: Mode, trustedProxy?: string): Promise<FastifyInstance> {
-  app = await buildApp({ mode, ...(trustedProxy && { trustedProxy }) });
+  app = await buildApp({ mode, hostPassword: HOST_PASSWORD, ...(trustedProxy && { trustedProxy }) });
+  cookie = await signInHost(app, '127.0.0.1');
   return app;
 }
 
+/** inject() with the host's cookie. */
+function send(server: FastifyInstance, options: InjectOptions) {
+  return server.inject({ ...options, headers: { cookie, ...options.headers } });
+}
+
 function claim(server: FastifyInstance, handle: string, pin: string, remoteAddress = '198.51.100.7', headers = {}) {
-  return server.inject({ method: 'POST', url: '/api/signup/claim', payload: { handle, pin }, remoteAddress, headers });
+  return send(server, { method: 'POST', url: '/api/signup/claim', payload: { handle, pin }, remoteAddress, headers });
 }
 
 async function signUp(server: FastifyInstance, handle: string, pin = '4321') {
-  const res = await server.inject({ method: 'POST', url: '/api/signup', payload: { handle, pin } });
+  const res = await send(server, { method: 'POST', url: '/api/signup', payload: { handle, pin } });
   expect(res.statusCode).toBe(201);
 }
 
@@ -88,22 +99,22 @@ describe('the per-handle limit (online)', () => {
 
   it('lets a locked player in at once after the host resets the PIN', async () => {
     const server = await start('online');
-    const id = (await server.inject({ method: 'POST', url: '/api/signup', payload: { handle: 'Zap', pin: '4321' } })).json().player.id;
+    const id = (await send(server, { method: 'POST', url: '/api/signup', payload: { handle: 'Zap', pin: '4321' } })).json().player.id;
     for (let i = 0; i < CLAIM_MAX_WRONG_PER_HANDLE; i++) await claim(server, 'Zap', '0000');
     expect((await claim(server, 'Zap', '4321')).statusCode).toBe(429);
-    const { pin } = (await server.inject({ method: 'POST', url: `/api/players/${id}/reset-pin` })).json();
+    const { pin } = (await send(server, { method: 'POST', url: `/api/players/${id}/reset-pin` })).json();
     expect((await claim(server, 'Zap', pin)).statusCode).toBe(200);
   });
 
   it('does not leave a count on a handle after a rename or a merge', async () => {
     const server = await start('online');
-    const post = (url: string, payload?: object) => server.inject({ method: 'POST', url, ...(payload && { payload }) });
+    const post = (url: string, payload?: object) => send(server, { method: 'POST', url, ...(payload && { payload }) });
     const zap = (await post('/api/signup', { handle: 'Zap', pin: '4321' })).json().player;
     const bolt = (await post('/api/signup', { handle: 'Bolt', pin: '4321' })).json().player;
     for (const handle of ['Zap', 'Bolt']) {
       for (let i = 0; i < CLAIM_MAX_WRONG_PER_HANDLE; i++) await claim(server, handle, '0000');
     }
-    await server.inject({ method: 'PATCH', url: `/api/players/${zap.id}`, payload: { handle: 'Zapper' } });
+    await send(server, { method: 'PATCH', url: `/api/players/${zap.id}`, payload: { handle: 'Zapper' } });
     await post(`/api/players/${bolt.id}/merge`, { intoId: zap.id });
     // A new player takes each freed handle and is not locked by the old player's tries.
     await post('/api/signup', { handle: 'Zap', pin: '1111' });
@@ -116,7 +127,7 @@ describe('the per-handle limit (online)', () => {
     const server = await start('online');
     await signUp(server, 'Zap');
     for (let i = 0; i < CLAIM_MAX_WRONG_PER_HANDLE; i++) await claim(server, 'Zap', '0000');
-    const check = await server.inject({ method: 'POST', url: '/api/signup/check', payload: { handle: 'Zap' } });
+    const check = await send(server, { method: 'POST', url: '/api/signup/check', payload: { handle: 'Zap' } });
     expect(check.statusCode).toBe(200);
   });
 });
@@ -137,7 +148,7 @@ describe('the per-IP limit (online)', () => {
   it('only limits the claim route', async () => {
     const server = await start('online');
     for (let i = 0; i < CLAIM_MAX_PER_IP + 5; i++) {
-      const res = await server.inject({ method: 'GET', url: '/api/players', remoteAddress: '198.51.100.7' });
+      const res = await send(server, { method: 'GET', url: '/api/players', remoteAddress: '198.51.100.7' });
       expect(res.statusCode).toBe(200);
     }
   });

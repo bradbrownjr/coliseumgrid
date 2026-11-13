@@ -19,6 +19,8 @@ import {
 } from '@coliseumgrid/core';
 import rateLimit from '@fastify/rate-limit';
 import type { FastifyInstance, FastifyReply } from 'fastify';
+import type { Access } from './access.ts';
+import { errorSchema, fail, idParams, notSignedIn, objectSchema } from './api-schemas.ts';
 import { getClientIp } from './client-ip.ts';
 import type { Mode } from './config.ts';
 import { hashPin, verifyPin } from './pin-hash.ts';
@@ -33,18 +35,14 @@ import { secureRandom } from './secure-random.ts';
 
 export interface PlayerRoutesOptions {
   players: Players;
+  /** Decides who may call each route (docs/PLAN.md, "Devices and host API"). */
+  access: Access;
+  /** Called after the player list changes, so the host page reloads it (a "players" live message). */
+  onPlayersChanged: () => void;
   mode: Mode;
   /** See getClientIp. */
   trustedProxy?: string;
 }
-
-// Written as a Record so a reason added to core fails the type check until it is listed here.
-const REFUSALS = Object.keys({
-  'too-short': true,
-  'too-long': true,
-  'bad-characters': true,
-  'not-allowed': true,
-} satisfies Record<HandleRefusal, true>);
 
 const playerSchema = {
   type: 'object',
@@ -55,26 +53,6 @@ const playerSchema = {
 
 const pinSchema = { type: 'string' } as const;
 
-function errorSchema(codes: string[], withReason = false) {
-  return {
-    type: 'object',
-    properties: {
-      error: { type: 'string', enum: codes },
-      ...(withReason && { reason: { type: 'string', enum: REFUSALS } }),
-    },
-    required: ['error'],
-    additionalProperties: false,
-  } as const;
-}
-
-function objectSchema(properties: Record<string, object>) {
-  return { type: 'object', properties, required: Object.keys(properties), additionalProperties: false } as const;
-}
-
-// The id arrives as a string (Fastify is told not to coerce types, see app.ts), so the schema
-// holds the digits check. Up to 15 digits stays a safe integer.
-const idParams = objectSchema({ id: { type: 'string', pattern: '^[1-9][0-9]{0,14}$' } });
-
 const handleBody = objectSchema({ handle: { type: 'string' } });
 const handlePinBody = objectSchema({ handle: { type: 'string' }, pin: pinSchema });
 
@@ -83,16 +61,12 @@ const notFound = errorSchema(['not-found']);
 const taken = errorSchema(['taken']);
 const refusedOrBadRequest = errorSchema(['refused', 'bad-request'], true);
 
-function fail(reply: FastifyReply, status: number, error: Exclude<ApiError['error'], 'refused'>): FastifyReply {
-  return reply.code(status).send({ error } satisfies ApiError);
-}
-
 function refuse(reply: FastifyReply, reason: HandleRefusal): FastifyReply {
   return reply.code(400).send({ error: 'refused', reason } satisfies ApiError);
 }
 
 export async function registerPlayerRoutes(app: FastifyInstance, options: PlayerRoutesOptions): Promise<void> {
-  const { players, trustedProxy } = options;
+  const { players, access, onPlayersChanged, trustedProxy } = options;
   const online = options.mode === 'online';
 
   // Claim attempts per handle, online only. Counted here rather than by @fastify/rate-limit
@@ -115,6 +89,7 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
   app.post<{ Body: HandleBody; Reply: SignupCheckAnswer | ApiError }>(
     '/api/signup/check',
     {
+      onRequest: access.requireSignup,
       schema: {
         body: handleBody,
         response: {
@@ -139,6 +114,7 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
             ],
           },
           400: refusedOrBadRequest,
+          401: notSignedIn,
         },
       },
     },
@@ -153,11 +129,13 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
   app.post<{ Body: HandlePinBody; Reply: PlayerAnswer | ApiError }>(
     '/api/signup',
     {
+      onRequest: access.requireSignup,
       schema: {
         body: handlePinBody,
         response: {
           201: objectSchema({ player: playerSchema }),
           400: errorSchema(['refused', 'bad-pin', 'bad-request'], true),
+          401: notSignedIn,
           409: taken,
         },
       },
@@ -171,6 +149,7 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
       // Hashing took a moment, so ask again: another request may have taken the handle.
       const player = players.create(check.handle, check.key, pinHash);
       if (!player) return fail(reply, 409, 'taken');
+      onPlayersChanged();
       return reply.code(201).send({ player });
     },
   );
@@ -178,12 +157,13 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
   app.post<{ Body: HandlePinBody; Reply: PlayerAnswer | ApiError }>(
     '/api/signup/claim',
     {
+      onRequest: access.requireSignup,
       schema: {
         body: handlePinBody,
         response: {
           200: objectSchema({ player: playerSchema }),
           400: refusedOrBadRequest,
-          401: errorSchema(['wrong-pin']),
+          401: errorSchema(['wrong-pin', 'not-signed-in']),
           404: notFound,
           429: errorSchema(['too-many-tries']),
         },
@@ -219,14 +199,16 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
   );
 
   // Host (laptop) ------------------------------------------------------------------------
-  // These answer any device on the network until M3 adds host sign-in (docs/ROADMAP.md, M3).
+  // These need a host session (offline, the laptop itself counts as one).
 
   app.get<{ Reply: PlayersAnswer }>(
     '/api/players',
     {
+      onRequest: access.requireHost,
       schema: {
         response: {
           200: objectSchema({ players: { type: 'array', items: playerSchema } }),
+          401: notSignedIn,
         },
       },
     },
@@ -236,11 +218,13 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
   app.post<{ Body: HandleBody; Reply: NewPlayerAnswer | ApiError }>(
     '/api/players',
     {
+      onRequest: access.requireHost,
       schema: {
         body: handleBody,
         response: {
           201: objectSchema({ player: playerSchema, pin: pinSchema }),
           400: refusedOrBadRequest,
+          401: notSignedIn,
           // The contract lists no error for this route; a taken handle is the same 409 as a rename.
           409: taken,
         },
@@ -254,6 +238,7 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
       const pinHash = await hashPin(pin);
       const player = players.create(check.handle, check.key, pinHash);
       if (!player) return fail(reply, 409, 'taken');
+      onPlayersChanged();
       return reply.code(201).send({ player, pin });
     },
   );
@@ -261,12 +246,14 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
   app.patch<{ Params: { id: string }; Body: HandleBody; Reply: PlayerAnswer | ApiError }>(
     '/api/players/:id',
     {
+      onRequest: access.requireHost,
       schema: {
         params: idParams,
         body: handleBody,
         response: {
           200: objectSchema({ player: playerSchema }),
           400: refusedOrBadRequest,
+          401: notSignedIn,
           404: notFound,
           409: taken,
         },
@@ -287,6 +274,7 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
       // stranger's earlier tries.
       forget(before?.handle);
       wrongPins?.clear(check.key);
+      onPlayersChanged();
       return { player: result };
     },
   );
@@ -294,12 +282,14 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
   app.post<{ Params: { id: string }; Body: MergeBody; Reply: PlayerAnswer | ApiError }>(
     '/api/players/:id/merge',
     {
+      onRequest: access.requireHost,
       schema: {
         params: idParams,
         body: objectSchema({ intoId: { type: 'integer', minimum: 1 } }),
         response: {
           200: objectSchema({ player: playerSchema }),
           400: badRequest,
+          401: notSignedIn,
           404: notFound,
         },
       },
@@ -315,6 +305,7 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
       players.delete(id);
       // The merged handle no longer means this player, so its count goes with it.
       forget(merged.handle);
+      onPlayersChanged();
       return { player: kept };
     },
   );
@@ -322,11 +313,13 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
   app.post<{ Params: { id: string }; Reply: PinAnswer | ApiError }>(
     '/api/players/:id/reset-pin',
     {
+      onRequest: access.requireHost,
       schema: {
         params: idParams,
         response: {
           200: objectSchema({ pin: pinSchema }),
           400: badRequest,
+          401: notSignedIn,
           404: notFound,
         },
       },
@@ -340,6 +333,7 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
       if (!players.setPinHash(id, pinHash)) return fail(reply, 404, 'not-found');
       // A locked player is told to ask the host; the new PIN has to work right away.
       forget(player.handle);
+      // No onPlayersChanged: the list shows handles only, and a PIN reset doesn't change it.
       return { pin };
     },
   );

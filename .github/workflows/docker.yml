@@ -56,9 +56,10 @@ jobs:
           cache-to: type=gha,mode=max
 
       # The Docker check for M1: the image starts, answers /api/health, and serves the client.
+      # The image defaults to online mode, which won't start without a host password.
       - name: Smoke test
         run: |
-          docker run -d --name smoke -p 3000:3000 coliseumgrid:smoke
+          docker run -d --name smoke -p 3000:3000 -e COLISEUMGRID_HOST_PASSWORD=smoke-test-only coliseumgrid:smoke
           ok=0
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:3000/api/health | grep -q '"status":"ok"'; then ok=1; break; fi
