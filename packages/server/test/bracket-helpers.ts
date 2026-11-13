@@ -8,6 +8,7 @@ import {
   createBracket,
   recordResult,
   startTieBreak,
+  undoResult,
   type BracketState,
   type EngineAnswer,
   type HandleLookup,
@@ -38,6 +39,13 @@ export async function start(format: BracketFormat, n: number, seed: number, stat
 
 const nextResultId = (state: BracketState): number => Math.max(0, ...state.results.map((r) => r.id)) + 1;
 
+/** The number of log entries: results, undone ones included, and older undos. */
+export const logLength = (state: BracketState): number => state.results.length + state.results.filter((r) => r.undone).length;
+
+/** Undoes a result at the time of the next log entry. */
+export const undo = (state: BracketState, resultId: number): Promise<EngineAnswer> =>
+  undoResult(state, { resultId, at: at(logLength(state) + 1) }, handles);
+
 /** Picks the winner of a match: the slot index. */
 export type Pick = (match: BracketMatch) => 0 | 1;
 export const randomPick = (random: RandomSource): Pick => () => (random() < 0.5 ? 0 : 1);
@@ -45,7 +53,7 @@ export const randomPick = (random: RandomSource): Pick => () => (random() < 0.5 
 /** Records a result for one match on a station. */
 export async function play(run: Run, match: BracketMatch, winner: 0 | 1): Promise<Run> {
   const winnerId = match.slots[winner].player?.id as number;
-  const answer = await recordResult(run.state, { id: nextResultId(run.state), matchId: match.id, winnerId, at: at(run.state.results.length + 1) }, handles);
+  const answer = await recordResult(run.state, { id: nextResultId(run.state), matchId: match.id, winnerId, at: at(logLength(run.state) + 1) }, handles);
   return expectOk(answer);
 }
 
@@ -97,11 +105,12 @@ export function expectPodium(bracket: Bracket, n: number): void {
  * station, then rebuilds once. A station keeps its match until that match has a result, so
  * each of these was on a station when recorded, exactly as if the host had tapped them one
  * by one. Used where replaying after every tap would take minutes (a round robin of 32 is
- * 496 results).
+ * 496 results). `until` stops it early, before the batch after which it first holds.
  */
-export async function playOutInBatches(run: Run, random: RandomSource, pick: Pick): Promise<Run> {
+export async function playOutInBatches(run: Run, random: RandomSource, pick: Pick, until?: (state: BracketState) => boolean): Promise<Run> {
   let { state, bracket } = run;
   for (;;) {
+    if (until?.(state)) return { state, bracket };
     const live = onStations(bracket);
     if (live.length === 0) {
       if (!bracket.ties.some((t) => !t.started)) return { state, bracket };

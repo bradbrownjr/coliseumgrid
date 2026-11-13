@@ -2,11 +2,11 @@
 
 import { createSeededRandom } from '@coliseumgrid/core';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { bracketAnswer, joinLate, startTieBreak, undoResult, type BracketState } from '../src/bracket-engine.ts';
+import { bracketAnswer, joinLate, startTieBreak, type BracketState } from '../src/bracket-engine.ts';
 import { createBracketStore, type BracketStore } from '../src/bracket-store.ts';
 import { openDatabase, type Database } from '../src/database.ts';
 import { addPlayers } from './bracket-api-helpers.ts';
-import { at, expectOk, handles, ids as playerIds, onStations, play, playOutInBatches, randomPick, start } from './bracket-helpers.ts';
+import { at, expectOk, handles, ids as playerIds, onStations, play, playOutInBatches, randomPick, start, undo } from './bracket-helpers.ts';
 
 let db: Database;
 let store: BracketStore;
@@ -67,11 +67,24 @@ describe('the bracket store', () => {
     for (let i = 0; i < 4; i++) run = await play(run, onStations(run.bracket)[0] as never, 0);
     store.save(eventId, run.state);
     const older = run.state.results[1]?.id as number;
-    const undone = expectOk(await undoResult(run.state, run.state.results.at(-1)?.id as number, handles));
+    const undone = expectOk(await undo(run.state, run.state.results.at(-1)?.id as number));
     store.save(eventId, undone.state);
     expect(count('bracket_results')).toBe(3);
     expect(store.load(eventId)).toEqual(undone.state);
     expect(store.load(eventId)?.results.map((r) => r.id)).toContain(older);
+  });
+
+  it('keeps an older undo: the result stays, with the step and time of the undo', async () => {
+    let run = await start('round_robin', 6, 2, 2);
+    for (let i = 0; i < 2; i++) run = await play(run, onStations(run.bracket)[0] as never, 0);
+    const older = run.state.results[0]?.id as number;
+    const undone = expectOk(await undo(run.state, older));
+    store.save(eventId, undone.state);
+    expect(count('bracket_results')).toBe(2);
+    expect(store.load(eventId)).toEqual(undone.state);
+    expect(store.load(eventId)?.results[0]?.undone).toEqual({ step: 2, at: at(3) });
+    expect(store.load(eventId)?.results[1]).not.toHaveProperty('undone');
+    expect(await bracketAnswer(store.load(eventId) as BracketState, handles)).toEqual(undone.bracket);
   });
 
   it('keeps the answer the same after a save and load', async () => {

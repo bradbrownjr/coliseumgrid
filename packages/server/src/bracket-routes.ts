@@ -74,7 +74,9 @@ const playerBody = objectSchema({ playerId: idSchema });
 
 const nowAnswer = objectSchema({ bracket: bracketSchema });
 const badRequest = errorSchema(['bad-request']);
-const notFound = errorSchema(['not-found']);
+const noBracket = errorSchema(['no-bracket']);
+// A missing match or player, or no bracket at all.
+const notFound = errorSchema(['not-found', 'no-bracket']);
 
 export async function registerBracketRoutes(app: FastifyInstance, options: BracketRoutesOptions): Promise<void> {
   const { access, players, events, eventPlayers, store, hub, chain, now } = options;
@@ -105,18 +107,17 @@ export async function registerBracketRoutes(app: FastifyInstance, options: Brack
   };
 
   /**
-   * Runs an engine change on the current bracket, stores it, and answers `{ bracket }`.
-   * `none` is the refusal when the event has no bracket; `statuses` maps the engine's codes.
+   * Runs an engine change on the current bracket, stores it, and answers `{ bracket }`, or
+   * 404 `no-bracket` when the event has none. `statuses` maps the engine's codes.
    */
   const change = (
     reply: FastifyReply,
-    none: { status: number; error: Exclude<ApiError['error'], 'refused'> },
     work: (state: BracketState, handles: HandleLookup) => Promise<EngineAnswer>,
     statuses: Record<string, number>,
   ): Promise<FastifyReply | BracketNowAnswer> =>
     chain.run(async () => {
       const found = current();
-      if (!found) return fail(reply, none.status, none.error);
+      if (!found) return fail(reply, 404, 'no-bracket');
       const answer = await work(found.state, handleLookup());
       if (!answer.ok) return refuse(reply, answer.error, statuses);
       return { bracket: commit(found.eventId, answer) };
@@ -166,6 +167,8 @@ export async function registerBracketRoutes(app: FastifyInstance, options: Brack
         // The event is named now if the host hasn't yet, so the bracket has one to belong to.
         const { id, event, created } = events.ensureCurrent();
         if (created) hub.broadcast({ type: 'event', event });
+        // A player the host picked from "Not signed up" is here now, so the event lists them.
+        for (const playerId of playerIds) eventPlayers.add(playerId);
         return reply.code(201).send({ bracket: commit(id, answer) });
       }),
   );
@@ -189,7 +192,6 @@ export async function registerBracketRoutes(app: FastifyInstance, options: Brack
       const { matchId, winnerId } = request.body;
       const answer = await change(
         reply,
-        { status: 404, error: 'not-found' },
         (state, handles) => recordResult(state, { id: store.nextResultId(), matchId, winnerId, at: iso(now()) }, handles),
         { 'not-found': 404, 'not-on-station': 409, 'bad-request': 400 },
       );
@@ -209,6 +211,7 @@ export async function registerBracketRoutes(app: FastifyInstance, options: Brack
           200: nowAnswer,
           400: badRequest,
           401: notSignedIn,
+          404: noBracket,
           409: errorSchema(['undo-later-first', 'nothing-to-undo']),
         },
       },
@@ -216,8 +219,7 @@ export async function registerBracketRoutes(app: FastifyInstance, options: Brack
     async (request, reply) =>
       change(
         reply,
-        { status: 409, error: 'nothing-to-undo' },
-        (state, handles) => undoResult(state, request.body.resultId, handles),
+        (state, handles) => undoResult(state, { resultId: request.body.resultId, at: iso(now()) }, handles),
         { 'undo-later-first': 409, 'nothing-to-undo': 409 },
       ),
   );
@@ -237,24 +239,25 @@ export async function registerBracketRoutes(app: FastifyInstance, options: Brack
         },
       },
     },
-    async (request, reply) =>
-      change(
+    async (request, reply) => {
+      const answer = await change(
         reply,
-        { status: 404, error: 'not-found' },
         (state, handles) => joinLate(state, request.body.playerId, handles),
         { 'not-found': 404, 'late-closed': 409, 'already-in': 409 },
-      ),
+      );
+      // A late player is here now, so the event lists them.
+      if ('bracket' in answer) eventPlayers.add(request.body.playerId);
+      return answer;
+    },
   );
 
   app.post<{ Reply: BracketNowAnswer | ApiError }>(
     '/api/bracket/tie-break',
     {
       onRequest: access.requireHost,
-      schema: { response: { 200: nowAnswer, 401: notSignedIn, 409: errorSchema(['no-tie']) } },
+      schema: { response: { 200: nowAnswer, 401: notSignedIn, 404: noBracket, 409: errorSchema(['no-tie']) } },
     },
-    async (_request, reply) =>
-      // With no bracket there is no tie either.
-      change(reply, { status: 409, error: 'no-tie' }, (state, handles) => startTieBreak(state, handles), { 'no-tie': 409 }),
+    async (_request, reply) => change(reply, (state, handles) => startTieBreak(state, handles), { 'no-tie': 409 }),
   );
 
   app.delete(

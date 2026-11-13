@@ -28,6 +28,7 @@ const API_CODES: Record<ApiErrorCode, true> = {
   'already-in': true,
   'in-bracket': true,
   'no-tie': true,
+  'no-bracket': true,
 };
 const REFUSALS: Record<HandleRefusal, true> = {
   'too-short': true,

@@ -45,8 +45,9 @@ export const ERROR_WORDS: Record<ClientErrorCode, string> = {
   'nothing-to-undo': 'There is nothing to undo.',
   'late-closed': "It's too late to add a player.",
   'already-in': 'That player is already in.',
-  'in-bracket': 'That player is in a bracket. Finish it first.',
+  'in-bracket': 'That player is in the bracket. Delete the bracket to merge them.',
   'no-tie': 'Nobody is tied.',
+  'no-bracket': "There's no bracket right now.",
   failed: 'Something went wrong. Try again.',
 };
 

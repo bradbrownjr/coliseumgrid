@@ -170,6 +170,61 @@ describe('buildQueue: results that do not fit', () => {
   });
 });
 
+describe('buildQueue: an older undo', () => {
+  // An older undo is a log entry with no result. The match it reopens has a second entry,
+  // ready from the step after the undo, and marked reopened.
+  const UNDO = { matchId: null, at: T2 };
+
+  it('keeps every station and puts the reopened match at the front of Up next', () => {
+    const matches = [
+      match(1, 1, 1, [1, 2]),
+      match(2, 1, 2, [3, 4]),
+      match(3, 1, 3, [5, 6]),
+      match(1, 1, 1, [1, 2], { readyStep: 2, reopened: true }),
+    ];
+    const state = buildQueue({ stations: 1, createdAt: T0, matches, results: [{ matchId: 1, at: T1 }, UNDO] });
+    expect(slots(state)).toEqual([[1, 2, T1]]);
+    expect(state.upNext).toEqual([1, 3]);
+    // The station frees and takes the reopened match ahead of match 3.
+    const next = buildQueue({ stations: 1, createdAt: T0, matches, results: [{ matchId: 1, at: T1 }, UNDO, { matchId: 2, at: T3 }] });
+    expect(slots(next)).toEqual([[1, 1, T3]]);
+    expect(next.upNext).toEqual([3]);
+  });
+
+  it('calls the reopened match to an idle station at the time of the undo', () => {
+    const matches = [match(1, 1, 1, [1, 2]), match(2, 1, 2, [3, 4]), match(1, 1, 1, [1, 2], { readyStep: 2, reopened: true })];
+    const state = buildQueue({ stations: 2, createdAt: T0, matches, results: [{ matchId: 1, at: T1 }, UNDO] });
+    expect(slots(state)).toEqual([[1, 1, T2], [2, 2, T0]]);
+    expect(state.offStation).toEqual([]);
+  });
+
+  it('drops a match that stopped being ready from Up next and from its station', () => {
+    // Match 3 was ready from step 1 until the undo at step 2 took one of its players away.
+    const matches = [match(1, 1, 1, [1, 2]), match(2, 1, 2, [3, 4]), match(3, 2, 1, [1, 5], { readyStep: 1, until: 3 })];
+    const waiting = buildQueue({ stations: 1, createdAt: T0, matches, results: [{ matchId: 1, at: T1 }, { matchId: 2, at: T2 }] });
+    expect(slots(waiting)).toEqual([[1, 3, T2]]);
+    const dropped = buildQueue({ stations: 1, createdAt: T0, matches, results: [{ matchId: 1, at: T1 }, { matchId: 2, at: T2 }, { matchId: null, at: T3 }] });
+    expect(slots(dropped)).toEqual([[1, null, null]]);
+    expect(dropped.upNext).toEqual([]);
+  });
+
+  it('does not hold back a bye player for a reopened first-round match', () => {
+    const matches = [
+      match(10, 1, 4, [4, 5], { firstRound: true }),
+      match(20, 2, 2, [2, 3], { hasByePlayer: true }),
+      match(10, 1, 4, [4, 5], { firstRound: true, readyStep: 3, reopened: true }),
+      match(30, 2, 1, [1, 6], { readyStep: 1, hasByePlayer: true }),
+      match(40, 2, 3, [7, 8], { readyStep: 2, hasByePlayer: true }),
+    ];
+    // Round 1 was finished at step 1; match 20 was called then and its result made step 2.
+    const log = [{ matchId: 10, at: T1 }, { matchId: 20, at: T2 }, { matchId: null, at: T3 }];
+    const state = buildQueue({ stations: 1, createdAt: T0, matches, results: log });
+    // Match 40 waits on with the reopened match ahead of it, not held back.
+    expect(slots(state)).toEqual([[1, 30, T2]]);
+    expect(state.upNext).toEqual([10, 40]);
+  });
+});
+
 describe('buildQueue: the station count', () => {
   it.each([0, 9, 1.5, Number.NaN])('turns down %s stations', (stations) => {
     expect(() => buildQueue({ stations, createdAt: T0, matches: [], results: [] })).toThrow(RangeError);

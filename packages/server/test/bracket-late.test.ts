@@ -162,6 +162,39 @@ describe('late sign-up in a round robin', () => {
     expect(done.state.results.filter((r) => r.matchId < 1000)).toHaveLength(15);
   });
 
+  it('never changes an on-time match, over random play with join attempts', async () => {
+    let accepted = 0;
+    for (const n of [3, 5, 7, 9, 11]) {
+      const random = createSeededRandom(n * 17);
+      let run: Run | null = await start('round_robin', n, n, 1 + (n % 3));
+      let next = LATE;
+      while (run) {
+        if (random() < 0.3) {
+          const answer = await joinLate(run.state, next, handles);
+          expect(answer.ok).toBe(run.bracket.lateOpen);
+          if (answer.ok) {
+            expectOnTimeUnchanged(run.bracket, answer.bracket);
+            // Every pairing of two on-time players is the same match, in the same round, before
+            // and after; only the empty slot's matches change, to the late player's.
+            for (const m of run.bracket.matches) {
+              const now = answer.bracket.matches.find((x) => x.id === m.id) as BracketMatch;
+              expect([now.round, now.number]).toEqual([m.round, m.number]);
+              if (m.status === 'bye') expect(playersOf(now)).toContain(next);
+              else expect(playersOf(now)).toEqual(playersOf(m));
+            }
+            run = { state: answer.state, bracket: answer.bracket };
+            next--;
+            accepted++;
+          } else {
+            expect(answer.error).toBe('late-closed');
+          }
+        }
+        run = await step(run, random, randomPick(random));
+      }
+    }
+    expect(accepted).toBeGreaterThan(2);
+  });
+
   it('is refused with an even count', async () => {
     const run = await start('round_robin', 4, 4, 2);
     expect(run.bracket.lateOpen).toBe(false);

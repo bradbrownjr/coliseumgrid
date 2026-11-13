@@ -62,6 +62,9 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
   const { bracket, loadWords: bracketWords, reload: reloadBracket, apply: applyBracket } = useBracket();
   // Which reset the open PIN dialog is waiting on, so a reset the host closed can't reopen it.
   const resetting = useRef(0);
+  // The ref stops a second "Add to bracket" tap in the same instant; the state disables the buttons.
+  const adding = useRef(false);
+  const [addBusy, setAddBusy] = useState(false);
 
   const load = useCallback(async () => {
     const result = await listPlayers();
@@ -83,11 +86,16 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
   }, []);
 
   // The live connection reloads the player list when it changes anywhere (a sign-up tablet),
-  // and the event name when another host window renames it. A message sent while the socket
-  // was down is lost, so each (re)connect reloads both. An ended sign-in is the same as a 401.
+  // and the event name when another host window renames it. The bracket reloads with the
+  // players too, since it shows handles and a rename changes one. A message sent while the
+  // socket was down is lost, so each (re)connect reloads all three. An ended sign-in is the
+  // same as a 401.
   useLive({
     onMessage: (message) => {
-      if (message.type === 'players') void load();
+      if (message.type === 'players') {
+        void load();
+        void reloadBracket();
+      }
       if (message.type === 'event') setEvent(message.event);
       if (message.type === 'bracket') void reloadBracket();
     },
@@ -115,7 +123,12 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
   };
 
   const addToBracket = async (player: Player) => {
+    if (adding.current) return;
+    adding.current = true;
+    setAddBusy(true);
     const result = await addLatePlayer(player.id);
+    adding.current = false;
+    setAddBusy(false);
     if (!result.ok) {
       void reloadBracket();
       return say(failureWords(result));
@@ -237,6 +250,7 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
                         onResetPin={() => void reset(player)}
                         onMerge={() => setDialog({ kind: 'merge', player })}
                         onAddToBracket={inBracket && !inBracket.has(player.id) ? () => void addToBracket(player) : undefined}
+                        addBusy={addBusy}
                       />
                     </TableCell>
                   </TableRow>

@@ -310,10 +310,10 @@ describe('POST /api/bracket/results', () => {
     expect(row.at).toMatch(/^\d{4}-\d\d-\d\dT.*Z$/);
   });
 
-  it('answers 404 not-found when there is no bracket, and for a match that does not exist', async () => {
+  it('answers 404 no-bracket when there is no bracket, and not-found for a match that does not exist', async () => {
     const none = await host('POST', '/api/bracket/results', { matchId: 0, winnerId: ids[0] });
     expect(none.statusCode).toBe(404);
-    expect(none.json()).toEqual({ error: 'not-found' });
+    expect(none.json()).toEqual({ error: 'no-bracket' });
     await make('single', 4, 1);
     const missing = await host('POST', '/api/bracket/results', { matchId: 777, winnerId: ids[0] });
     expect(missing.statusCode).toBe(404);
@@ -383,10 +383,10 @@ describe('POST /api/bracket/undo', () => {
     expect(stale.json()).toEqual({ error: 'nothing-to-undo' });
   });
 
-  it('answers 409 nothing-to-undo for a result that is not in the log, or with no bracket', async () => {
+  it('answers 409 nothing-to-undo for a result that is not in the log, and 404 no-bracket with no bracket', async () => {
     const none = await host('POST', '/api/bracket/undo', { resultId: 1 });
-    expect(none.statusCode).toBe(409);
-    expect(none.json()).toEqual({ error: 'nothing-to-undo' });
+    expect(none.statusCode).toBe(404);
+    expect(none.json()).toEqual({ error: 'no-bracket' });
     await make('single', 4, 1);
     const missing = await host('POST', '/api/bracket/undo', { resultId: 42 });
     expect(missing.statusCode).toBe(409);
@@ -462,10 +462,10 @@ describe('POST /api/bracket/players', () => {
     expect(closed.json()).toEqual({ error: 'late-closed' });
   });
 
-  it('answers 404 not-found for a player who does not exist, and when there is no bracket', async () => {
+  it('answers 404 not-found for a player who does not exist, and no-bracket when there is no bracket', async () => {
     const none = await host('POST', '/api/bracket/players', { playerId: ids[0] });
     expect(none.statusCode).toBe(404);
-    expect(none.json()).toEqual({ error: 'not-found' });
+    expect(none.json()).toEqual({ error: 'no-bracket' });
     await make('single', 3, 2);
     const missing = await host('POST', '/api/bracket/players', { playerId: 9999 });
     expect(missing.statusCode).toBe(404);
@@ -481,10 +481,10 @@ describe('POST /api/bracket/players', () => {
 });
 
 describe('POST /api/bracket/tie-break', () => {
-  it('answers 409 no-tie when no tie waits, or there is no bracket', async () => {
+  it('answers 409 no-tie when no tie waits, and 404 no-bracket when there is no bracket', async () => {
     const none = await host('POST', '/api/bracket/tie-break');
-    expect(none.statusCode).toBe(409);
-    expect(none.json()).toEqual({ error: 'no-tie' });
+    expect(none.statusCode).toBe(404);
+    expect(none.json()).toEqual({ error: 'no-bracket' });
     for (const format of ['single', 'double', 'round_robin'] as const) {
       await make(format, 4, 1);
       const res = await host('POST', '/api/bracket/tie-break');

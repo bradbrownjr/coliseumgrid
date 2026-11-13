@@ -116,10 +116,11 @@ describe('migration 3 (brackets)', () => {
     const db = oldDatabase();
     const before = OLD_TABLES.map((t) => dump(db, t));
     migrate(db);
-    expect(version(db)).toBe(3);
+    expect(version(db)).toBe(MIGRATIONS.length);
     expect(OLD_TABLES.map((t) => dump(db, t))).toEqual(before);
     expect(columns(db, 'brackets')).toEqual(['id', 'event_id', 'format', 'best_of', 'stations', 'seeding', 'created_at']);
-    expect(columns(db, 'bracket_results')).toEqual(['id', 'bracket_id', 'match_id', 'winner_id', 'loser_id', 'at']);
+    // undone_at and undone_step are migration 4's.
+    expect(columns(db, 'bracket_results')).toEqual(['id', 'bracket_id', 'match_id', 'winner_id', 'loser_id', 'at', 'undone_at', 'undone_step']);
     expect(columns(db, 'bracket_late_joins')).toEqual(['bracket_id', 'position', 'player_id', 'step']);
     expect(columns(db, 'bracket_tie_breaks')).toEqual(['bracket_id', 'position', 'round', 'player_a', 'player_b', 'step']);
     expect(columns(db, 'event_players')).toEqual(['event_id', 'player_id']);
@@ -192,6 +193,43 @@ describe('migration 3 (brackets)', () => {
     db.exec('DELETE FROM bracket_results');
     db.exec("INSERT INTO bracket_results (bracket_id, match_id, winner_id, loser_id, at) VALUES (1, 0, 1, 2, 't')");
     expect(db.prepare('SELECT id FROM bracket_results').all()).toEqual([{ id: 2 }]);
+  });
+});
+
+describe('migration 4 (older undos)', () => {
+  /** A database as M4 left it: schema version 3, with a bracket and two results. */
+  function m4Database(): DatabaseSync {
+    const db = new DatabaseSync(':memory:');
+    for (const step of MIGRATIONS.slice(0, 3)) db.exec(step);
+    db.exec('PRAGMA user_version = 3');
+    db.exec(`
+      INSERT INTO events (name, created_at) VALUES ('Friday', 't1');
+      INSERT INTO brackets (event_id, format, best_of, stations, seeding, created_at) VALUES (1, 'single', 1, 2, '[1,2,3,4]', 't2');
+      INSERT INTO bracket_results (bracket_id, match_id, winner_id, loser_id, at) VALUES (1, 0, 1, 4, 't3'), (1, 1, 2, 3, 't4');
+    `);
+    return db;
+  }
+
+  it('keeps every result of an M4 bracket as standing, with no undo', () => {
+    const db = m4Database();
+    const before = db.prepare('SELECT id, bracket_id, match_id, winner_id, loser_id, at FROM bracket_results ORDER BY id').all();
+    migrate(db);
+    expect(version(db)).toBe(4);
+    expect(db.prepare('SELECT id, bracket_id, match_id, winner_id, loser_id, at FROM bracket_results ORDER BY id').all()).toEqual(before);
+    expect(db.prepare('SELECT undone_step, undone_at FROM bracket_results').all()).toEqual([
+      { undone_step: null, undone_at: null },
+      { undone_step: null, undone_at: null },
+    ]);
+    expect(db.prepare('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' });
+  });
+
+  it('takes an undo only as a step and a time together', () => {
+    const db = m4Database();
+    migrate(db);
+    expect(() => db.exec('UPDATE bracket_results SET undone_step = 2 WHERE id = 1')).toThrow(/CHECK/);
+    expect(() => db.exec("UPDATE bracket_results SET undone_at = 't5' WHERE id = 1")).toThrow(/CHECK/);
+    db.exec("UPDATE bracket_results SET undone_step = 2, undone_at = 't5' WHERE id = 1");
+    expect(db.prepare('SELECT undone_step, undone_at FROM bracket_results WHERE id = 1').get()).toEqual({ undone_step: 2, undone_at: 't5' });
   });
 });
 

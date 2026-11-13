@@ -151,12 +151,26 @@ by a newer server is refused at startup.
 The rules are in `PLAN.md`, sections 5 and 6. These are the facts a change has to keep.
 
 - **The database holds inputs.** Migration 3 stores a bracket's settings, its seeding list, its
-  late joins, its tie-break matches, and its result log. It doesn't store the library's state.
+  late joins, its tie-break matches, and its result log; migration 4 adds the step and time of
+  an older undo to a result's row. It doesn't store the library's state.
+- **The log is results and older undos.** `BracketState.results` holds every result in the
+  order recorded, and a result taken back by an older undo keeps its place with `undone: {
+  step, at }`. `logOf` in `bracket-engine.ts` merges the two into the log, entry k being step
+  k + 1. Undoing the newest entry removes the result instead, so the state is exactly the one
+  before it.
 - **Every answer is a replay.** `replayLibrary` in `bracket-library.ts` builds a new in-memory
-  store, creates the stage from the seeding, and replays the log. An undo drops one result and
-  replays. The library's `reset.matchResults` and `update.seeding` aren't called:
-  `reset.matchResults` left matches in the wrong state or threw, and `update.seeding` changed
-  matches already played (`PLAN.md`, "Late sign-up" and "Brackets API").
+  store, creates the stage from the seeding, and replays the log. At an older undo it starts a
+  new store and replays the results still standing. It returns each stretch of steps during
+  which a match was ready (`LibraryReady`), and the engine hands those to `buildQueue` as
+  `QueueMatch` entries: a match ready twice has two, a reopened one is marked `reopened`, and
+  one that lost a player carries `until`. The library's `reset.matchResults` and
+  `update.seeding` aren't called: `reset.matchResults` left matches in the wrong state or
+  threw, and `update.seeding` changed matches already played (`PLAN.md`, "Late sign-up" and
+  "Brackets API").
+- **An older undo moves no station.** `undoResult` accepts it only if every station keeps its
+  match, `calledAt`, and players, and an idle station takes nothing but the reopened match.
+  `test/bracket-undo-fuzz.test.ts` checks this over random play; keep it passing when the
+  queue or the replay changes.
 - **One file calls the library.** Only `bracket-library.ts` imports `brackets-manager`,
   `brackets-memory-db`, or `brackets-model`. Check with
   `grep -rn "brackets-" packages/server/src`.
@@ -167,8 +181,9 @@ The rules are in `PLAN.md`, sections 5 and 6. These are the facts a change has t
 - **Late joins fill the first empty slot.** `addLatePlayer` in core does it. The engine accepts the
   join only if every logged result and every called match still holds, and refuses with 409
   `late-closed` otherwise.
-- **A result's step is its place in the log,** counting from 0. The queue (`packages/core/src/queue.ts`)
-  and the late-join check read steps.
+- **A step counts log entries,** results and older undos both. A late join and a tie-break
+  record the step they were made at. The queue (`packages/core/src/queue.ts`) and the
+  late-join check read steps.
 - **Tie-break matches have their own ids.** They start at `TIE_BREAK_ID_BASE` (1000, in
   `bracket-engine.ts`) and never go to the library. The engine throws if a library match id
   reaches 1000, so library ids must stay below it.

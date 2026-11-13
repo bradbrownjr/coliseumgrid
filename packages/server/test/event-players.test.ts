@@ -114,6 +114,30 @@ describe('event_players', () => {
     expect(rows().map((r) => r.player_id)).toEqual([zap, bolt]);
   });
 
+  it('gets the players the host picks for a bracket, and a late player, when nobody signed them up today', async () => {
+    await host('PUT', '/api/event', { name: 'Friday' });
+    // Players from an earlier event: none of them is in this one.
+    const [a, b, c, late] = addPlayers(db, 4) as [number, number, number, number];
+    expect(await inEvent()).toEqual([]);
+    const made = await host('POST', '/api/bracket', { format: 'single', bestOf: 1, stations: 1, playerIds: [a, b, c] });
+    expect(made.statusCode).toBe(201);
+    expect(await inEvent()).toEqual([a, b, c]);
+    const joined = await host('POST', '/api/bracket/players', { playerId: late });
+    expect(joined.statusCode, joined.body).toBe(200);
+    expect(await inEvent()).toEqual([a, b, c, late]);
+  });
+
+  it('gets nobody from a refused bracket or a refused late join', async () => {
+    await host('PUT', '/api/event', { name: 'Friday' });
+    const [a, b, c, d, late] = addPlayers(db, 5) as [number, number, number, number, number];
+    expect((await host('POST', '/api/bracket', { format: 'double', bestOf: 1, stations: 1, playerIds: [a, b] })).statusCode).toBe(400);
+    expect(await inEvent()).toEqual([]);
+    // Four players fill four slots, so no late player fits.
+    expect((await host('POST', '/api/bracket', { format: 'single', bestOf: 1, stations: 1, playerIds: [a, b, c, d] })).statusCode).toBe(201);
+    expect((await host('POST', '/api/bracket/players', { playerId: late })).statusCode).toBe(409);
+    expect(await inEvent()).toEqual([a, b, c, d]);
+  });
+
   it('is removed with the player', async () => {
     await host('PUT', '/api/event', { name: 'Friday' });
     const zap = await signUp('Zap');

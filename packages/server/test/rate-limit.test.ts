@@ -243,9 +243,14 @@ describe('FailureLimiter', () => {
   it('handles many distinct keys in bounded time', () => {
     // Every new key used to sweep the whole map, so 40,000 keys took about 17 seconds.
     const limiter = new FailureLimiter(1, CLAIM_WINDOW_MS, () => 1_000, 100_000);
+    // The check stays out of the timed loop: 40,000 expect calls cost more than the limiter
+    // itself, and made this test fail when other test files loaded the machine.
+    let allowed = 0;
     const started = performance.now();
-    for (let i = 0; i < 40_000; i++) expect(limiter.tryAttempt(`key-${i}`)).toBe(true);
-    expect(performance.now() - started).toBeLessThan(2_000);
+    for (let i = 0; i < 40_000; i++) if (limiter.tryAttempt(`key-${i}`)) allowed++;
+    const elapsed = performance.now() - started;
+    expect(allowed).toBe(40_000);
+    expect(elapsed).toBeLessThan(2_000);
   });
 
   it('blocks new keys while the map is full of live ones, and still counts the keys it holds', () => {

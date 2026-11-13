@@ -9,7 +9,11 @@
 
 import { STATIONS_MAX, STATIONS_MIN } from './bracket-seeding.ts';
 
-/** A match that has been ready (both players known, no result) at some step. */
+/**
+ * A match that has been ready (both players known, no result) from some step. A match that
+ * was ready more than once, because an older undo reopened it or took a player away, has
+ * one entry for each time, and the times never overlap.
+ */
 export interface QueueMatch {
   id: number;
   round: number;
@@ -25,18 +29,31 @@ export interface QueueMatch {
    * at that same step, because those were called, or queued, before the player joined.
    */
   late?: boolean;
+  /**
+   * An older undo reopened it at `readyStep`. It goes ahead of every match that wasn't
+   * reopened, so it takes the next free station.
+   */
+  reopened?: boolean;
+  /**
+   * The step at which it stopped being ready without a result: an older undo took away one
+   * of its players. It leaves the queue then, and its station if it had one.
+   */
+  until?: number;
   /** In the first round of play, the round a bye skips. Never true for a round robin. */
   firstRound: boolean;
   /**
    * One of the players had a bye in the first round. These matches wait until every
-   * first-round match has a result, so the byes stay open for a late player.
+   * first-round match has a result, so the byes stay open for a late player. A reopened
+   * first-round match doesn't count.
    */
   hasByePlayer: boolean;
 }
 
+/** One log entry. */
 export interface QueueResult {
-  matchId: number;
-  /** The time the host recorded it. A station it frees is called again at this time. */
+  /** The match it records a result for; null for an older undo, which records none. */
+  matchId: number | null;
+  /** The time of the entry. A station free after it is called at this time. */
   at: string;
 }
 
@@ -46,7 +63,7 @@ export interface QueueInput {
   /** The time of step 0, when the first stations are filled. */
   createdAt: string;
   matches: readonly QueueMatch[];
-  /** In the order they were recorded. */
+  /** Every log entry in order: entry k makes step k + 1. */
   results: readonly QueueResult[];
 }
 
@@ -63,15 +80,19 @@ export interface QueueState {
   upNext: number[];
   /**
    * Results whose match was not on a station when it was recorded. A log from the live
-   * bracket never has any; an undo of an older result can leave some, and the server must
-   * then refuse it, because a later result depended on the one removed.
+   * bracket never has any; a change the server is trying out (an undo or a late join) can
+   * leave some, and the server then refuses it, because a later result depended on it.
    */
   offStation: number[];
 }
 
-/** Earliest ready first, a late player's match last among those, then round, number, and id. */
+/**
+ * Reopened first, then earliest ready, a late player's match last among those, then round,
+ * number, and id.
+ */
 function byQueue(a: QueueMatch, b: QueueMatch): number {
   return (
+    Number(b.reopened === true) - Number(a.reopened === true) ||
     a.readyStep - b.readyStep ||
     Number(a.late === true) - Number(b.late === true) ||
     a.round - b.round ||
@@ -87,49 +108,63 @@ export function buildQueue(input: QueueInput): QueueState {
   }
   const queue = [...matches].sort(byQueue);
   const stations: StationSlot[] = Array.from({ length: count }, (_, i) => ({ number: i + 1, matchId: null, calledAt: null }));
-  const done = new Set<number>();
+  // The entry each station holds, by station index; an entry's players are that time's.
+  const held: Array<QueueMatch | null> = stations.map(() => null);
+  const done = new Set<QueueMatch>();
   const offStation: number[] = [];
 
-  // Matches that could be called at `step`, in queue order: not done, not on a station, and
-  // not held back for a late player.
+  const live = (m: QueueMatch, step: number): boolean =>
+    m.readyStep <= step && (m.until === undefined || step < m.until) && !done.has(m);
+  const free = (index: number): void => {
+    held[index] = null;
+    (stations[index] as StationSlot).matchId = null;
+    (stations[index] as StationSlot).calledAt = null;
+  };
+
+  // Matches that could be called at `step`, in queue order: ready, not on a station, and
+  // not held back for a late player. A reopened first-round match doesn't hold anything back:
+  // round 1 was finished once, and the matches after it may already be on stations.
   const waitingAt = (step: number): QueueMatch[] => {
     const onStation = new Set(stations.map((s) => s.matchId));
-    const firstRoundOpen = queue.some((m) => m.firstRound && m.readyStep <= step && !done.has(m.id));
-    return queue.filter(
-      (m) => m.readyStep <= step && !done.has(m.id) && !onStation.has(m.id) && !(m.hasByePlayer && firstRoundOpen),
-    );
+    const firstRoundOpen = queue.some((m) => m.firstRound && m.reopened !== true && live(m, step));
+    return queue.filter((m) => live(m, step) && !onStation.has(m.id) && !(m.hasByePlayer && firstRoundOpen));
   };
 
   // Every idle station, lowest number first, takes the first waiting match whose players are
   // both free. A round robin has all its matches ready at once, so without the check one
   // player could be called to two stations.
   const fill = (step: number, at: string): void => {
-    for (const station of stations) {
-      if (station.matchId !== null) continue;
-      const busy = new Set<number>();
-      for (const s of stations) {
-        const held = matches.find((m) => m.id === s.matchId);
-        if (held) held.players.forEach((p) => busy.add(p));
-      }
+    stations.forEach((station, index) => {
+      if (held[index]) return;
+      const busy = new Set(held.flatMap((m) => (m ? [...m.players] : [])));
       const next = waitingAt(step).find((m) => !busy.has(m.players[0]) && !busy.has(m.players[1]));
       if (next) {
+        held[index] = next;
         station.matchId = next.id;
         station.calledAt = at;
       }
-    }
+    });
   };
 
   fill(0, createdAt);
   results.forEach((result, index) => {
-    const station = stations.find((s) => s.matchId === result.matchId);
-    if (station) {
-      station.matchId = null;
-      station.calledAt = null;
-    } else {
-      offStation.push(result.matchId);
+    const step = index + 1;
+    if (result.matchId !== null) {
+      const at = held.findIndex((m) => m?.id === result.matchId);
+      if (at >= 0) {
+        done.add(held[at] as QueueMatch);
+        free(at);
+      } else {
+        offStation.push(result.matchId);
+        const entry = queue.find((m) => m.id === result.matchId && live(m, index));
+        if (entry) done.add(entry);
+      }
     }
-    done.add(result.matchId);
-    fill(index + 1, result.at);
+    // A match no longer ready leaves its station. The server refuses the undo that does this.
+    held.forEach((m, at) => {
+      if (m && m.until !== undefined && m.until <= step) free(at);
+    });
+    fill(step, result.at);
   });
 
   return { stations, upNext: waitingAt(results.length).map((m) => m.id), offStation };

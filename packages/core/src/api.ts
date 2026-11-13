@@ -32,7 +32,8 @@ export type ApiErrorCode =
   | 'late-closed'
   | 'already-in'
   | 'in-bracket'
-  | 'no-tie';
+  | 'no-tie'
+  | 'no-bracket';
 
 export type ApiError =
   | { error: 'refused'; reason: HandleRefusal }

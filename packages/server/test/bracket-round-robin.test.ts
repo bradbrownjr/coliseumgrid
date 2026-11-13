@@ -3,8 +3,8 @@
 
 import { createSeededRandom, type Bracket, type BracketMatch } from '@coliseumgrid/core';
 import { describe, expect, it } from 'vitest';
-import { bracketAnswer, startTieBreak, undoResult } from '../src/bracket-engine.ts';
-import { expectOk, expectPodium, handles, onStations, play, playOutInBatches, randomPick, start, type Run } from './bracket-helpers.ts';
+import { bracketAnswer, startTieBreak } from '../src/bracket-engine.ts';
+import { expectOk, expectPodium, handles, onStations, play, playOutInBatches, randomPick, start, undo, type Run } from './bracket-helpers.ts';
 
 const TIE_BREAK = 'tie-break';
 
@@ -151,6 +151,31 @@ describe('round robin ties', () => {
     expect(places(run.bracket).map(([place]) => place)).toEqual([1, 2, 3, 4, 5, 5, 5]);
   });
 
+  it('plays a three-way loop for 3rd off in a tie-break round', async () => {
+    // 5 players: 1 beats everyone, 2 beats everyone but 1, and 3, 4, 5 loop.
+    const loop = loopOf([3, 4, 5]);
+    const beats = (a: number, b: number): boolean => (a <= 2 || b <= 2 ? a < b : loop(a, b));
+    let run = await playAll(await start('round_robin', 5, 4, 2), beats);
+    expect(run.bracket.finished).toBe(false);
+    expect(run.bracket.ties.map((t) => [t.place, t.players.map((p) => p.id).sort(), t.started])).toEqual([[3, [3, 4, 5], false]]);
+    expect(places(run.bracket).slice(0, 2)).toEqual([
+      [1, 1],
+      [2, 2],
+    ]);
+
+    run = expectOk(await startTieBreak(run.state, handles));
+    expect(tieBreakMatches(run.bracket)).toHaveLength(3);
+    run = await playAll(run, (a, b) => a > b);
+    expect(run.bracket.finished).toBe(true);
+    expect(places(run.bracket)).toEqual([
+      [1, 1],
+      [2, 2],
+      [3, 5],
+      [4, 4],
+      [5, 3],
+    ]);
+  });
+
   it('refuses a tie-break with no tie, and before every match has a result', async () => {
     const run = await start('round_robin', 3, 1, 1);
     expect(await startTieBreak(run.state, handles)).toEqual({ ok: false, error: 'no-tie' });
@@ -172,7 +197,7 @@ describe('round robin ties', () => {
     const done = await playAll(before, loopOf([1, 2, 3]));
     const made = expectOk(await startTieBreak(done.state, handles));
     const last = done.state.results.at(-1)?.id as number;
-    const undone = expectOk(await undoResult(made.state, last, handles));
+    const undone = expectOk(await undo(made.state, last));
     expect(undone.state.tieBreaks).toEqual([]);
     expect(undone.bracket).toEqual(before.bracket);
   });

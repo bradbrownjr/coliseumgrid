@@ -23,6 +23,8 @@ interface PlayerActionsProps {
   onMerge: () => void;
   /** Given only while the bracket can take a late player and this player isn't in it. */
   onAddToBracket?: (() => void) | undefined;
+  /** An add to the bracket is on its way, so the button waits for it. */
+  addBusy?: boolean;
 }
 
 /**
@@ -31,7 +33,7 @@ interface PlayerActionsProps {
  * buttons don't fit a row (docs/DESIGN.md, "Phone width"). One list of actions feeds both, so
  * they can't drift apart.
  */
-export function PlayerActions({ player, canMerge, onRename, onResetPin, onMerge, onAddToBracket }: PlayerActionsProps) {
+export function PlayerActions({ player, canMerge, onRename, onResetPin, onMerge, onAddToBracket, addBusy = false }: PlayerActionsProps) {
   const theme = useTheme();
   const roomForButtons = useMediaQuery(theme.breakpoints.up('sm'));
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
@@ -40,7 +42,7 @@ export function PlayerActions({ player, canMerge, onRename, onResetPin, onMerge,
     { label: 'Rename', icon: <EditIcon />, run: onRename, disabled: false },
     { label: 'Reset PIN', icon: <KeyIcon />, run: onResetPin, disabled: false },
     { label: 'Merge', icon: <MergeIcon />, run: onMerge, disabled: !canMerge },
-    ...(onAddToBracket ? [{ label: 'Add to bracket', icon: <PersonAddIcon />, run: onAddToBracket, disabled: false }] : []),
+    ...(onAddToBracket ? [{ label: 'Add to bracket', icon: <PersonAddIcon />, run: onAddToBracket, disabled: addBusy }] : []),
   ];
 
   if (roomForButtons) {

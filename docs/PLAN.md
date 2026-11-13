@@ -413,10 +413,10 @@ Planned in M4 (2026-11-13). A **station** is one console. The host picks 1 to 8 
 bracket is made, and the number is fixed for that bracket, because the assignment below is
 derived from it.
 
-Nothing about stations is stored. The server replays the result log and notes the step at
-which each match became ready (step 0 is the new bracket, step k is after the k-th result).
-`packages/core/src/queue.ts` turns that history into the stations, so undoing a result
-restores them exactly.
+Nothing about stations is stored. The server replays the log and notes the steps at which
+each match was ready (step 0 is the new bracket, step k is after the k-th log entry). An
+entry is a result, or an older undo (see below). `packages/core/src/queue.ts` turns that
+history into the stations, so the same log gives the same stations after a restart.
 
 - **Queue order:** the step a match became ready, then round, then match number, then its
   id. A late player's matches count as ready from the step they joined, so they queue behind
@@ -431,10 +431,20 @@ restores them exactly.
   time for the first matches. The TV counts up from it. There is no alarm.
 - **Up next** is the waiting matches in queue order. A match whose player is still on a
   station stays on the list and is skipped when a station is filled.
-- **Undoing an older result** is allowed only when no later result depended on it. The
-  server removes it, replays, and refuses (409 `undo-later-first`) if any later result no
-  longer replays with the same two players, or was recorded for a match that is no longer on
-  a station. Undoing the newest result always works.
+- **Undoing the newest result** takes it out of the log. The bracket is exactly what it was
+  before that result, so the match its station called goes back to Up next. This is the
+  snackbar's Undo, used within seconds. It always works.
+- **Undoing an older result** reopens that match and moves nothing being played (decided in
+  the M4 review, 2026-11-13, which found that taking the result out of the log moved matches
+  between stations). The result stays in the log, marked undone at a new step, so the stations it
+  freed stay as they were. Every match on a station keeps its station and `calledAt`; the
+  reopened match goes to the front of Up next and takes the next free station, or an idle
+  one at once. Reopened matches go in the order they were reopened. A reopened first-round
+  match doesn't hold back the matches of a player who had a bye.
+- **An older undo is refused** (409 `undo-later-first`) when something later depends on it:
+  a later result that no longer replays with the same two players, a match on a station that
+  would lose a player, or a tie-break made after it. A waiting match that loses a player
+  leaves Up next until it has two players again.
 
 ### Brackets API
 
@@ -446,32 +456,41 @@ every answer lists its fields, errors are `{ "error": code }`, and a missing ses
 as a JSON list of player ids and nulls, and the creation time), `bracket_results` (the
 bracket, the match, the winner, the loser, and the time), `bracket_late_joins` and
 `bracket_tie_breaks` (in order, each with the step it was made at), and `event_players` (the
-event and the player). An event has one bracket, and a new one replaces it. No handle is
-stored; an answer joins the current one. The server rebuilds the library's state on its
+event and the player). An event has one bracket, and a new one replaces it. Migration 4
+adds `undone_step` and `undone_at` to `bracket_results`: a result taken back by an older undo
+keeps its row, with the step and time of the undo. No handle is stored; an answer joins the
+current one. The server rebuilds the library's state on its
 in-memory store (`brackets-memory-db`) by creating the stage and replaying the log. It checks that each logged match is ready and holds the same two players.
 A tie-break match is stored by the server with the step at which it was made, and its
 result goes in the same log. Replay of 32 players took 13 ms in two lives (63 results) and
 258 ms in a round robin (496 results), so there is no cache in M4.
 
 Every bracket write runs one at a time on a promise chain, because the library is
-asynchronous and two taps could interleave. **Undo** drops one result from the log and
-replays; in a test of 4206 undos and 4206 replays at every size and format, each matched the
-live bracket exactly. The library's own `reset.matchResults` didn't (it left matches in the
-wrong state or threw), so it isn't used.
+asynchronous and two taps could interleave. **Undo** of the newest result drops it from the
+log and replays; in a test of 4206 undos and 4206 replays at every size and format, each
+matched the live bracket exactly. An older undo adds an entry to the log instead (see
+"Stations and the queue"); the replay then starts a new in-memory store at that entry and
+replays the results still standing. In a test of random play with random undos (56 brackets
+in all three formats, 3 to 16 players, 1 or 3 stations, 1269 steps), 209 newest undos and 78
+older undos were taken and 73 older undos refused. No match on a station moved, except the
+one a newest undo un-called, the stored state gave the live answer after every step, and every
+bracket finished with one player in each of places 1 to 3. The library's own
+`reset.matchResults` left matches in the wrong state or threw, so it isn't used.
 
 | Request | Who | Answer |
 |---|---|---|
 | `GET /api/bracket` | host or device | `{ bracket }`, or `{ bracket: null }` before one is made |
 | `POST /api/bracket` `{ format, bestOf, stations, playerIds }` | host | 201 `{ bracket }`; 409 `bracket-running`; 400 `too-few-players`, `too-many-players`, or `bad-request` |
-| `POST /api/bracket/results` `{ matchId, winnerId }` | host | `{ bracket, resultId }`; 409 `not-on-station`; 400 `bad-request` if the winner isn't in the match; 404 `not-found` |
-| `POST /api/bracket/undo` `{ resultId }` | host | `{ bracket }`; 409 `undo-later-first` or `nothing-to-undo` |
-| `POST /api/bracket/players` `{ playerId }` | host | `{ bracket }`; 409 `late-closed` or `already-in`; 404 `not-found` |
+| `POST /api/bracket/results` `{ matchId, winnerId }` | host | `{ bracket, resultId }`; 409 `not-on-station`; 400 `bad-request` if the winner isn't in the match; 404 `not-found` for a match that isn't there |
+| `POST /api/bracket/undo` `{ resultId }` | host | `{ bracket }`; 409 `undo-later-first`, or `nothing-to-undo` for a result not in the log or already undone |
+| `POST /api/bracket/players` `{ playerId }` | host | `{ bracket }`; 409 `late-closed` or `already-in`; 404 `not-found` for a player who isn't there |
 | `POST /api/bracket/tie-break` | host | `{ bracket }` with the tie-break matches made; 409 `no-tie` if the bracket answer lists no tie that still needs matches |
 | `DELETE /api/bracket` | host | 204; the host screen asks first, since it can't be undone |
 | `GET /api/event/players` | host | `{ playerIds }`: the players signed up to the current event |
 
-`format` is `single`, `double`, or `round_robin`; `bestOf` is 1, 3, or 5; `stations` is 1 to
-8. A new bracket replaces a finished one. A running bracket answers 409 `bracket-running`.
+The four `POST` routes under `/api/bracket/` answer 404 `no-bracket` when the event has no
+bracket. `format` is `single`, `double`, or `round_robin`; `bestOf` is 1, 3, or 5; `stations`
+is 1 to 8. A new bracket replaces a finished one. A running bracket answers 409 `bracket-running`.
 `playerIds` are 2 to 32 players (3 or more for `double`).
 
 The bracket answer is:
@@ -483,7 +502,7 @@ interface Bracket {
   bestOf: 1 | 3 | 5;
   finished: boolean;        // every place is decided, no tie waiting
   lateOpen: boolean;        // the host can still add a player (see "Late sign-up")
-  lastResultId: number | null;
+  lastResultId: number | null;  // the newest result not undone
   stations: { number: number; match: BracketMatch | null; calledAt: string | null }[];
   upNext: BracketMatch[];
   matches: BracketMatch[];
@@ -512,19 +531,21 @@ is true while they exist. Every field of every answer is named in a schema in
 
 **Error codes** (the client turns each into words in `packages/client/src/api/errors.ts`):
 `bracket-running`, `too-few-players`, `too-many-players`, `not-on-station`,
-`undo-later-first`, `nothing-to-undo`, `late-closed`, `already-in`, `in-bracket`, and
-`no-tie`.
+`undo-later-first`, `nothing-to-undo`, `late-closed`, `already-in`, `in-bracket`, `no-tie`,
+and `no-bracket`.
 
 **Live.** The server sends `{ type: "bracket" }` when the bracket changes, and screens
-reload it. The Display also reloads on `players`, for renames.
+reload it. The Display and the host screen also reload it on `players`, for renames.
 
 **Who is in a bracket.** Players are kept across events and attendance isn't tracked, so
 `event_players` lists who signed up to the current event. Sign-up, claim, and the host's
 "Add player" fill it, and the start dialog pre-checks the event's players. A player who
 signs up before the host has named an event goes into one the server makes then, named
-"ColiseumGrid" (what the Display shows with no event), and the host can rename it. Merging
-away a player who is in a bracket of the current event, running or finished, answers 409
-`in-bracket`, so the bracket's answer can always be made; deleting the bracket frees them. A
+"ColiseumGrid" (what the Display shows with no event), and the host can rename it. Starting a
+bracket adds every player in it to the event, so a player picked from "Not signed up to this
+event" is in the event from then on, and so does adding a late player. Merging away a player
+who is in a bracket of the current event, running or finished, answers 409 `in-bracket`, so
+the bracket's answer can always be made; deleting the bracket frees them. A
 merge keeps the merged player's place in the event for the player kept.
 
 

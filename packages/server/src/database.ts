@@ -111,6 +111,14 @@ export const MIGRATIONS: readonly string[] = [
     PRIMARY KEY (bracket_id, position)
   );
   `,
+  // M4 review: an older undo leaves the result in the log, marked with the step of the undo
+  // and its time (docs/PLAN.md, "Stations and the queue"). Both are null on a result that
+  // stands, which is every row written before this migration. A CHECK on an added column is
+  // tested against the rows already there (https://sqlite.org/lang_altertable.html).
+  `
+  ALTER TABLE bracket_results ADD COLUMN undone_at TEXT;
+  ALTER TABLE bracket_results ADD COLUMN undone_step INTEGER CHECK ((undone_step IS NULL) = (undone_at IS NULL));
+  `,
 ];
 
 export function migrate(db: Database): void {
