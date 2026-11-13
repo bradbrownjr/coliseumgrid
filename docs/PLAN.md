@@ -113,6 +113,50 @@ Host screens need a host session.
 - **The event name** (Brad, 2026-11-13): in M3 the host types the current event's name for
   the Display frame. The M7 setup wizard takes this over.
 
+### Devices and host API
+
+Planned in M3 (2026-11-13). The rules of the players API apply: bodies are JSON, every
+answer lists its fields, errors are `{ "error": code }`.
+
+**Sessions.** The host has a session cookie, `cg_host`; a paired device has `cg_device`.
+Both are random tokens stored hashed on the server, `HttpOnly` and `SameSite=Strict`, and
+`Secure` when the request came over HTTPS. Separate cookies let one laptop browser be the
+host and a display at once. A host session lasts 12 hours; a device token lasts until the
+host unpairs it.
+
+| Request | Who | Answer |
+|---|---|---|
+| `GET /api/host/session` | anyone | `{ signedIn, passwordSet, canSetUp }`; `canSetUp` is true only offline, from `localhost`, with no password yet |
+| `POST /api/host/setup` `{ password }` | offline `localhost`, no password yet | 204 and a session; otherwise 403 `{ error: "forbidden" }` |
+| `POST /api/host/sign-in` `{ password }` | anyone | 204 and a session; 401 `wrong-password`; 429 `too-many-tries` |
+| `POST /api/host/sign-out` | host | 204 |
+| `POST /api/pairing/codes` `{ role }` | host | 201 `{ code, role, expiresAt }`; `role` is `"display"` or `"signup"` |
+| `POST /api/devices/join` `{ code }` | anyone | 201 `{ device }` and the device cookie; 404 `wrong-code` for unknown, used, or expired; 429 `too-many-tries` |
+| `GET /api/devices/me` | device | `{ device }`; 401 `not-paired` |
+| `GET /api/devices` | host | `{ devices: [device] }` |
+| `DELETE /api/devices/:id` | host | 204; the device's token stops working and its live connection closes |
+| `GET /api/event` | host or device | `{ event }`, or `{ event: null }` before one is named |
+| `PUT /api/event` `{ name }` | host | `{ event }` |
+| `GET /api/live` (WebSocket) | host or device | messages from the server, below |
+
+A device leaves the server as `{ id, role, label, lastSeen }`, where `label` is a short name
+the server gives it ("Display 1", "Sign-up 2"). An event is `{ name }` for now.
+
+The host picks the role when making a code, so a TV only has to type the code. The host
+password itself is never sent back. Wrong codes and wrong passwords are rate limited per
+client IP in both modes (`CLAUDE.md`, rule 7), with the IP taken by rule 6.
+
+From M3, the M2 host routes need a host session (offline `localhost` signs in without the
+password), and the sign-up routes need a Sign-up device or a host session.
+
+**Live messages** are JSON with a `type`: `{ type: "event", event }` when the event changes,
+`{ type: "players" }` when the player list changes (the host page reloads it), and
+`{ type: "unpaired" }` just before the server closes an unpaired device's connection. A
+client reconnects with a growing delay after a drop.
+
+**The Display frame** in M3 shows the event name, live. "Up next" and the match timer have
+their places on the screen but show a waiting message until M4 brings matches.
+
 ## 4. Players
 
 ### Handles
