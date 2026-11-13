@@ -11,8 +11,7 @@ in [`PLAN.md`](PLAN.md).
 
 | Item | What it delivers | Stage |
 |---|---|---|
-| [M4 1 vs 1 brackets](#m4-1-vs-1-brackets) | Single and double elimination, round robin, stations, the queue, and undo. | Next |
-| [M5 Races and free-for-all](#m5-races-and-free-for-all) | Heats with placement points, rounds, and a final. | Planned |
+| [M5 Races and free-for-all](#m5-races-and-free-for-all) | Heats with placement points, rounds, and a final. | Next |
 | [M6 Player view](#m6-player-view) | Players follow their own matches and standings on their phones, with an alert when they're up next. | Planned |
 | [M7 Setup wizard](#m7-setup-wizard) | The three-step setup and the time estimate. | Planned |
 | [M8 Name tags](#m8-name-tags) | Event graphics and printed name tags. | Planned |
@@ -27,44 +26,6 @@ Each milestone is finished only when its acceptance checks pass. Work them in or
 start the next until the current one is done.
 
 ---
-
-## M4 1 vs 1 brackets
-
-Tasks:
-
-- Single elimination (with a 3rd-place match), double elimination (two lives, from 3
-  players), and round robin through `brackets-manager`, for 2 to 32 players. Best of 1, 3,
-  or 5 as a label, with one tap per match. Random seeding (`PLAN.md` section 5).
-- The bracket stored as settings, a seeding list, and a result log, rebuilt by replay
-  (`PLAN.md`, "Brackets API"). Migration 3, `event_players`, and the routes.
-- Stations (1 to 8, fixed at creation) and the queue, with the bye hold-back and the
-  count-up timer (`PLAN.md`, "Stations and the queue").
-- One-tap results. Undo of any result when no later result depends on it.
-- Ties: a round robin's places 1 to 3 are never shared, with a tie-break round when head-to-head
-  doesn't settle them (`PLAN.md`, "Ties").
-- Late sign-up: a late player takes a first-round bye until round 1 is finished, and takes
-  a round robin's empty slot when the count is odd (`PLAN.md`, "Late sign-up").
-- Merging away a player in the current event's bracket, running or finished, is refused
-  (409 `in-bracket`).
-- The host's Bracket section, and the bracket on the Display screen.
-
-Acceptance checks:
-
-- Tests run every bracket size from 2 to 32 players in each format to a finish (two lives
-  from 3), with byes and the double-elimination final's rematch.
-- Single elimination plays a 3rd-place match, and places 1 to 3 are unique in every format.
-- A late player fills a bye and plays that match; with no bye left, with an even-count round
-  robin, or once round 1 is finished, the late sign-up is refused and on-time players'
-  matches don't change.
-- Undoing any result restores the bracket exactly as it was, and undoing an older result
-  works when nothing later depends on it and is refused (`undo-later-first`) when something
-  does.
-- A round robin with a tie for 1st, 2nd, or 3rd plays a tie-break round and ends with each of
-  those places held by one player, including a three-way loop and a tie-break round that is
-  itself tied.
-- Two lives with 2 players is refused (`too-few-players`).
-
-**Docs:** `PLAN.md` sections 3, 5, 6, and 9, `DESIGN.md`, `DEVELOPMENT.md`, `PLAYTEST.md`.
 
 ## M5 Races and free-for-all
 

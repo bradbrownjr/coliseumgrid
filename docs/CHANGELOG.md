@@ -8,6 +8,24 @@ use **New Features**, **Improvements**, and **Bug Fixes**, in that order.
 
 ---
 
+# November 13, 2026
+
+## Milestones
+
+* **M4 1 vs 1 brackets.** The host starts a bracket from the host screen: One life (single
+  elimination with a 3rd-place match), Two lives (double elimination with the rematch for
+  the title), or Everyone plays everyone (round robin), best of 1, 3, or 5, on 1 to 8
+  stations. Byes go to the top seeds of a seeded shuffle. Each station shows its match with
+  a big winner button per player; a tap records the result, and any result can be undone:
+  the newest exactly, an older one by reopening its match at the front of Up next without
+  moving anyone being played. Places 1 to 3 are never shared, so a round robin tie there
+  gets a tie-break round. A late player fills a first-round bye until round 1 is finished,
+  only if no played or called match changes. The TV shows the stations with timers, Up next,
+  and the bracket in round columns, readable at 32 players on one screen. The server keeps
+  each bracket as a result log and rebuilds it with `brackets-manager`, because the
+  library's own undo and late seeding left brackets wrong in testing. Hand tests are in
+  `PLAYTEST.md`.
+
 # November 12, 2026
 
 ## Milestones
