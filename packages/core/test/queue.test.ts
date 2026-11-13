@@ -235,3 +235,30 @@ describe('buildQueue: the station count', () => {
     expect(state.stations.map((s) => s.number)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
   });
 });
+
+describe('buildQueue: heats of up to 4 players', () => {
+  const heat = (id: number, number: number, players: number[], extra: Partial<QueueMatch> = {}): QueueMatch => ({
+    id,
+    round: 1,
+    number,
+    players,
+    readyStep: 0,
+    firstRound: false,
+    hasByePlayer: false,
+    ...extra,
+  });
+
+  it('calls each heat to its own station', () => {
+    const matches = [heat(101, 1, [1, 2, 3, 4]), heat(102, 2, [5, 6, 7])];
+    const state = buildQueue({ stations: 2, createdAt: T0, matches, results: [] });
+    expect(slots(state)).toEqual([[1, 101, T0], [2, 102, T0]]);
+  });
+
+  it('skips a heat while any of its players is on another station', () => {
+    // A tie-break heat holding player 3 is ready while 3's heat is still being played.
+    const matches = [heat(101, 1, [1, 2, 3, 4]), heat(1000, 1, [3, 5]), heat(102, 2, [6, 7, 8])];
+    const state = buildQueue({ stations: 2, createdAt: T0, matches, results: [] });
+    expect(slots(state)).toEqual([[1, 101, T0], [2, 102, T0]]);
+    expect(state.upNext).toEqual([1000]);
+  });
+});

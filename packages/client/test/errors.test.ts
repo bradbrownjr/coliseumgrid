@@ -29,6 +29,7 @@ const API_CODES: Record<ApiErrorCode, true> = {
   'in-bracket': true,
   'no-tie': true,
   'no-bracket': true,
+  'no-heats': true,
 };
 const REFUSALS: Record<HandleRefusal, true> = {
   'too-short': true,
@@ -93,6 +94,12 @@ describe('words for the bracket codes', () => {
     expect(failureWords({ error: 'undo-later-first' })).toBe('Undo the later results first.');
     expect(failureWords({ error: 'too-many-players' })).toBe('Pick 32 players at most.');
     expect(failureWords({ error: 'late-closed' })).toBe("It's too late to add a player.");
+  });
+});
+
+describe('words for the heats codes', () => {
+  it('calls a heat a group', () => {
+    expect(failureWords({ error: 'no-heats' })).toBe('No groups are running.');
   });
 });
 

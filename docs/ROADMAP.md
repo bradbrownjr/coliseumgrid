@@ -29,24 +29,47 @@ start the next until the current one is done.
 
 ## M5 Races and free-for-all
 
+Heats with placement points, qualifying rounds, and a final. On screen a heat is a "Group".
+Design: `PLAN.md`, "Races and free-for-all" and "Heats API".
+
 Tasks:
 
-- Heats, the points table, races per heat, regrouping by points, and the final, in
-  `packages/core`.
-- Recording a heat by tapping players in finishing order. Undo.
-- Late sign-up: a late player joins a round 1 heat that hasn't run and has room, until
+- Heats in `packages/core/src/heats.ts`: group sizes, round 1 from the seeding, regrouping
+  by points for later rounds, the points table (editable, default 4, 3, 2, 1), standings by
+  points, the cut for the final and its tie-break heats, the final's places, and where a late
+  player goes. The shared API types in `api.ts`. `QueueMatch.players` takes up to 4 players.
+- `heat-engine.ts` in `packages/server`: replay of the log, late joins, undo, and tie-breaks,
+  on the M4 pattern.
+- Migration 5, `heat-store.ts`, the `/api/heats` routes and their schemas, one competition
+  per event on the shared write chain, and the merge guard over both stores.
+- Recording a heat by tapping players in finishing order, once per heat; races per heat is a
+  label. Undo.
+- Late sign-up: a late player joins the smallest round 1 heat still waiting with room, until
   round 1 is finished (`PLAN.md`, "Late sign-up").
-- Heat standings on the Display screen.
+- The host's start dialog and heats section, and heat standings on the Display screen with
+  the line for the final.
 
 Acceptance checks:
 
-- Tests run every player count from 2 to 32 to a final.
-- A late player plays the same number of heats as everyone else, and no heat already run
-  changes.
-- Ties are settled by the rule in `PLAN.md`, "Ties": one tie-break race among the tied
-  players, at the cut line for the final and for places 1 to 3 of the final.
+- Tests run every player count from 2 to 32 to a finished final, with 1 to 8 stations and 1
+  to 3 rounds: places 1 to 3 are unique, and every player plays the same number of qualifying
+  heats.
+- Group sizes for every count from 2 to 32 add up to the count, are 2 to 4, and differ by at
+  most 1.
+- A late player plays the same number of heats as everyone else, and no heat already run or
+  called changes. A late join is refused when no round 1 heat is waiting with room, or round 1
+  is finished.
+- Ties are settled by the rule in `PLAN.md`, "Ties": one tie-break race among the players
+  level across the cut for the final, played again for whoever is still level. Ties of 2, 4,
+  and 6 players settle.
+- Undo follows the M4 rules: undoing the newest result restores the answer exactly, and an
+  older undo moves no heat on a station or is refused with `undo-later-first`.
+- One competition per event: heats can't start while a bracket is running, or a bracket while
+  heats are running. A player in heats can't be merged away.
+- `bracket-undo-fuzz.test.ts` and the other M4 tests still pass.
 
-**Docs:** `PLAN.md` section 5.
+**Docs:** `PLAN.md` section 5 and "Heats API", `DEVELOPMENT.md` ("Heats"), `DESIGN.md`,
+`DOC-STYLE.md`, `PLAYTEST.md`.
 
 ## M6 Player view
 
@@ -152,4 +175,5 @@ Acceptance checks:
 
 These need Brad's answer before the work that depends on them. Don't guess.
 
-- **Default points table** (M5): 4, 3, 2, 1 is the plan's starting point.
+None open. The default points table, 4, 3, 2, 1, was decided by Brad on 2026-11-13 (`PLAN.md`,
+"Races and free-for-all").

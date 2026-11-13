@@ -52,6 +52,7 @@ either, once explained.
 | Bracket reset | Rematch for the title |
 | Winners bracket | No losses |
 | Losers bracket | One life left |
+| Heat | Group |
 
 ### Plain wording
 

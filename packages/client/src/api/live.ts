@@ -24,7 +24,7 @@ export function liveUrl(location: Pick<Location, 'protocol' | 'host'>): string {
   return `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api/live`;
 }
 
-/** The message in a frame, or null for anything that isn't one of the three the server sends. */
+/** The message in a frame, or null for anything that isn't one the server sends. */
 export function parseLiveMessage(data: unknown): LiveMessage | null {
   if (typeof data !== 'string') return null;
   let json: unknown;
@@ -35,7 +35,9 @@ export function parseLiveMessage(data: unknown): LiveMessage | null {
   }
   if (typeof json !== 'object' || json === null) return null;
   const message = json as { type?: unknown; event?: unknown };
-  if (message.type === 'players' || message.type === 'unpaired' || message.type === 'bracket') return { type: message.type };
+  if (message.type === 'players' || message.type === 'unpaired' || message.type === 'bracket' || message.type === 'heats') {
+    return { type: message.type };
+  }
   if (message.type !== 'event') return null;
   if (message.event === null) return { type: 'event', event: null };
   const event = message.event as { name?: unknown } | undefined;

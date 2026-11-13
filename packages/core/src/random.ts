@@ -25,3 +25,15 @@ export function createSeededRandom(seed: number): RandomSource {
     return ((z ^ (z >>> 14)) >>> 0) / 0x100000000;
   };
 }
+
+/** A shuffled copy (Fisher-Yates), so every order is equally likely. */
+export function shuffle<T>(items: readonly T[], random: RandomSource): T[] {
+  const order = [...items];
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    const held = order[i] as T;
+    order[i] = order[j] as T;
+    order[j] = held;
+  }
+  return order;
+}

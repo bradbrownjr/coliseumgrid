@@ -33,7 +33,8 @@ export type ApiErrorCode =
   | 'already-in'
   | 'in-bracket'
   | 'no-tie'
-  | 'no-bracket';
+  | 'no-bracket'
+  | 'no-heats';
 
 export type ApiError =
   | { error: 'refused'; reason: HandleRefusal }
@@ -148,6 +149,7 @@ export type LiveMessage =
   | { type: 'event'; event: EventInfo | null }
   | { type: 'players' }
   | { type: 'bracket' }
+  | { type: 'heats' }
   | { type: 'unpaired' };
 
 // Brackets API (docs/PLAN.md, "Brackets API"), from M4. A player is always `Player`, so no
@@ -275,4 +277,119 @@ export interface BracketPlayerBody {
 /** GET /api/event/players: the players signed up to the current event. */
 export interface EventPlayersAnswer {
   playerIds: number[];
+}
+
+// Heats API (docs/PLAN.md, "Heats API"), from M5. On screen a heat is a "Group"
+// (docs/DOC-STYLE.md); the code and the API say heat.
+
+/** A label for the host, like `BestOf`. One tap sequence records a whole heat. */
+export type RacesPerHeat = 1 | 2 | 3 | 4;
+
+/** `round`: a qualifying round. `tie-break`: a race at the cut for the final. `final`: the final. */
+export type HeatKind = 'round' | 'tie-break' | 'final';
+
+/** `ready`: in the queue. `playing`: on a station. `done`: it has a finishing order. */
+export type HeatStatus = 'ready' | 'playing' | 'done';
+
+export interface Heat {
+  id: number;
+  kind: HeatKind;
+  /** The qualifying round from 1; for `tie-break` the pass from 1; 1 for the final. */
+  round: number;
+  /** From 1 within its round or pass. */
+  number: number;
+  status: HeatStatus;
+  /** 2 to 4, in the order they were grouped. */
+  players: Player[];
+  /** The finishing order once recorded, 1st first. */
+  order: Player[] | null;
+  /** The result to undo; null until the heat is done. */
+  resultId: number | null;
+}
+
+/** `calledAt` is an ISO 8601 time; the TV's timer counts up from it. */
+export interface HeatStation {
+  number: number;
+  heat: Heat | null;
+  calledAt: string | null;
+}
+
+/** Players level on points share a `place`. Places 1 to 3 are never shared once the final is done. */
+export interface HeatStandingsRow {
+  place: number;
+  player: Player;
+  /** Qualifying points; tie-break heats and the final score nothing. */
+  points: number;
+  /** Qualifying heats played. */
+  heatsPlayed: number;
+}
+
+export interface Heats {
+  id: number;
+  races: RacesPerHeat;
+  /** Qualifying rounds, 1 to 3; 0 when 2 to 4 players play only the final. */
+  rounds: number;
+  /** Points for 1st to 4th. */
+  points: number[];
+  /** The final has a result and no tie is waiting. */
+  finished: boolean;
+  /** True while the host can still add a player. */
+  lateOpen: boolean;
+  lastResultId: number | null;
+  /** The qualifying round being played; null once qualifying is over (tie-breaks and the final). */
+  round: number | null;
+  stations: HeatStation[];
+  upNext: Heat[];
+  /** Every heat made so far, in the order made. Later rounds appear when the one before is done. */
+  heats: Heat[];
+  standings: HeatStandingsRow[];
+  /** Places 1 to `finalSize` reach the final: 4, or every player when there are 2 to 4. */
+  finalSize: number;
+  /** A tie across the cut for the final that isn't settled. */
+  ties: TieNotice[];
+}
+
+/** GET /api/heats */
+export interface HeatsAnswer {
+  heats: Heats | null;
+}
+
+/** POST /api/heats, POST /api/heats/undo, POST /api/heats/players, POST /api/heats/tie-break */
+export interface HeatsNowAnswer {
+  heats: Heats;
+}
+
+/** POST /api/heats */
+export interface NewHeatsBody {
+  /** 1 to 8, fixed for the life of the heats. */
+  stations: number;
+  races: RacesPerHeat;
+  /** 1 to 3. Ignored, and stored as 0, with 2 to 4 players. */
+  rounds: number;
+  /** 4 whole numbers from 0 to 20, never rising, 1st at least 1 (`isPointsTable`). */
+  points: number[];
+  playerIds: number[];
+}
+
+/** POST /api/heats/results */
+export interface HeatResultBody {
+  heatId: number;
+  /** Every player of the heat once, 1st first. */
+  order: number[];
+}
+
+/** POST /api/heats/results */
+export interface HeatResultAnswer {
+  heats: Heats;
+  resultId: number;
+}
+
+/** POST /api/heats/undo */
+export interface HeatUndoBody {
+  resultId: number;
+}
+
+/** POST /api/heats/players */
+export interface HeatPlayerBody {
+  playerId: number;
 }

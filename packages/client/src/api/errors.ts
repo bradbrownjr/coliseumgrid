@@ -37,7 +37,7 @@ export const ERROR_WORDS: Record<ClientErrorCode, string> = {
   'wrong-password': "That password doesn't match. Try again.",
   'wrong-code': "That code doesn't work. Ask the host for a new one.",
   'not-paired': 'This screen needs a code from the host.',
-  'bracket-running': 'A bracket is already running. Finish it or delete it first.',
+  'bracket-running': 'A bracket or groups are already running. Finish or delete them first.',
   'too-few-players': 'Pick more players to start.',
   'too-many-players': `Pick ${BRACKET_PLAYERS_MAX} players at most.`,
   'not-on-station': "That match isn't on a station.",
@@ -45,9 +45,10 @@ export const ERROR_WORDS: Record<ClientErrorCode, string> = {
   'nothing-to-undo': 'There is nothing to undo.',
   'late-closed': "It's too late to add a player.",
   'already-in': 'That player is already in.',
-  'in-bracket': 'That player is in the bracket. Delete the bracket to merge them.',
+  'in-bracket': 'That player is playing right now. Delete the bracket or groups to merge them.',
   'no-tie': 'Nobody is tied.',
   'no-bracket': "There's no bracket right now.",
+  'no-heats': 'No groups are running.',
   failed: 'Something went wrong. Try again.',
 };
 

@@ -292,15 +292,66 @@ Three formats, all run by `brackets-manager`. Checked against version 1.11.1 on 
 
 ### Races and free-for-all
 
-The same engine runs Mario Kart races and 4-player Smash free-for-alls: a heat is a group
-of players, and each finishing place earns points.
+Planned in M5 (2026-11-13). The same format runs Mario Kart races and 4-player Smash
+free-for-alls: a **heat** is a group of 2 to 4 players who play together on one station, and
+each finishing place earns points. On screen a heat is a "Group" (Brad, 2026-11-13), because
+Smash has no races. The rules are in `packages/core/src/heats.ts`.
 
-- Heat size: up to the station's player count (4 for the games planned).
-- Points table: editable, with a default of 4, 3, 2, 1 for first to fourth.
-- Races per heat: 1 to 4.
-- Rounds: each round regroups players by points so far. The top players by points go to a
-  final heat.
-- Ties are settled by one tie-break race (see "Ties").
+| Setting | Range | Default |
+|---|---|---|
+| Stations | 1 to 8 | |
+| Races per heat | 1 to 4 | |
+| Rounds before the final | 1 to 3 | 2 |
+| Points for 1st to 4th | Whole numbers 0 to 20, never rising, 1st at least 1 | 4, 3, 2, 1 |
+
+- **Group sizes.** `n` players make `ceil(n / 4)` heats, as even as possible, larger heats
+  first: 5 is 3 + 2, 6 is 3 + 3, 7 is 4 + 3, 9 is 3 + 3 + 3, 10 is 4 + 3 + 3. There is never a
+  heat of 1, and a heat of 2 only at 2 and 5 players. The UT Austin Mario Kart 8 Deluxe
+  tournament FAQ splits players "into groups as evenly numbered as possible"
+  (<https://universityunions.utexas.edu/sites/default/files/Mario%20Kart%20Tourney%20FAQ.pdf>),
+  and the Delaware DSEL Mario Kart 8 rules put 4 players on each Switch
+  (<https://education.delaware.gov/wp-content/uploads/2025/09/dsel_mario_kart_8_rules.pdf>).
+- **2 to 4 players** play no qualifying rounds. The one heat is the final.
+- **Round 1** is the seeding, a shuffle with the caller's random source (the same
+  Fisher-Yates shuffle as a bracket), cut into heats in order. SMASH! Kart Grand Prix 2025
+  shuffles its 32 racers into groups the same way
+  (<https://2025.smash.org.au/whats-on/competitions/gaming-competitions/smash-kart-grand-prix>).
+- **Later rounds** regroup the players by points so far, cut into heats in that order, with
+  players level on points kept in seeding order, so no new randomness is used. The larger
+  heats take the top of the order: a heat of 3 averages more points per player than a heat of
+  4, so that edge goes to the players furthest from the cut. A round is made when every heat
+  of the round before has a result. This is our rule, modeled on the Swiss system, where each
+  round pairs players with "the same or similar score", "the number of rounds is fixed in
+  advance", and nobody is knocked out
+  (<https://en.wikipedia.org/wiki/Swiss-system_tournament>). No event we found regroups by
+  points between rounds; the ones found shuffle once, then cut.
+- **Points** come from the one table by finishing place, in every heat: a heat of 3 scores
+  places 1 to 3, and a heat of 2 places 1 and 2 (Brad, 2026-11-13). The host can edit the table
+  for each event. The Delaware DSEL rules add up points by place over a cup
+  (15, 12, 10, and down to 1); 4, 3, 2, 1 is the same idea sized for heats of 4. The table is
+  checked by `isPointsTable`: 1st has to score at least 1, so winning a heat always counts.
+- **Recording** is once per heat (Brad, 2026-11-13): the host taps the players in finishing
+  order from the game's results screen after the cup. **Races per heat is a label**, like
+  best of in a bracket. Entering every race would be 16 taps a heat.
+- **Fairness.** Everyone plays the same number of qualifying heats, `rounds`, before the
+  final, late players included (see "Late sign-up"). Tie-break heats score nothing.
+- **The final.** The top 4 by points play one more heat, the final, and its finishing order
+  alone gives places 1 to 4 (Brad, 2026-11-13), so places 1 to 3 can't tie. The SMASH! Grand
+  Prix also starts its final fresh. Places 5 and down are by qualifying points, shared when
+  level, after any tie-break at the cut. The Nintendo Live 2023 Mario Kart 8 Deluxe qualifier
+  also sends the top of each group's leaderboard on and gives no points table or tie rule
+  (<https://nintendo.com/nintendo-live/tournaments/mario-kart-8-deluxe-championship-2023-qualifier>).
+- **Stations.** Heats go on stations through the same queue as bracket matches (see
+  "Stations and the queue"): one heat per station, and a heat waits while any of its players
+  is on another station. Stations sit idle at the end of a round, because the next round waits
+  for every result.
+- **Undo** works as in a bracket. Undoing the newest result takes it out of the log. An older
+  undo reopens its heat at a new step and moves nothing on a station; it is refused (409
+  `undo-later-first`) when a later round, a tie-break, or the final was made from it. The heats
+  of one round don't depend on each other, so an older undo works within a round.
+
+With 32 players and 2 rounds there are 16 qualifying heats, then any tie-breaks and the
+final. The 4, 3, 2, 1 table gives many ties, so the cut often needs a tie-break race.
 
 ### Ties
 
@@ -331,8 +382,17 @@ matches go on stations like any match, and are recorded and undone like any resu
 are the server's own matches (side `tie-break`), not the library's. The rules are in
 `packages/core/src/ties.ts`.
 
-**Heats (M5).** One tie-break race among only the tied players, at the cut line for the
-final and for places 1 to 3 of the final. Other ties are shared.
+**Heats (M5).** Ties are played off only at the cut for the final. After the last
+qualifying round, players level on points who straddle 4th and 5th are listed in `ties`, and
+"Play tie-break" makes one tie-break race among only them; its finishing order settles their
+order. More than 4 tied are split into heats by the group sizes rule and ordered by place in
+their tie-break heat (the 1st places level with each other, then the 2nd places), and whoever
+is still level across the cut plays again. Each pass leaves at most one player from each heat
+in a level, so it ends. The order a tie-break sets stands below the cut too. Other ties are
+shared. The final's own finishing order sets places 1 to 4, so places 1 to 3 never tie. The
+SMASH! Kart Grand Prix 2025 settles a draw for the last advancing spot with one Sudden Death
+race
+(<https://2025.smash.org.au/whats-on/competitions/gaming-competitions/smash-kart-grand-prix>).
 
 The practice behind these rules, from published rules (checked 2026-11-13, except FIDE,
 whose page was unreachable that day and is cited from the earlier research):
@@ -386,7 +446,7 @@ On-time players are never moved or made to replay.
 |---|---|---|
 | Single and double elimination | Takes a first-round bye, and plays the player who would have moved on | No bye is left, or round 1 is finished |
 | Round robin | Takes the empty slot, so the player who sat out each round now plays them. Only with an odd number of players; with an even number there is no empty slot and the sign-up is refused | The count is even, or round 1 is finished |
-| Heats | Goes into a round 1 heat that hasn't run and has room | No such heat is left, or round 1 is finished |
+| Heats | Goes into the smallest round 1 heat that is still waiting (not on a station) and has fewer than 4 players, the lowest number on a tie. Later rounds are split from the new count, so a late player plays as many heats as everyone else | No such heat is left, or round 1 is finished |
 
 **What the research found (2026-11-13).** The library's `update.seeding` can't be used.
 With `keepSameSize`, filling one bye turned every other bye into an empty slot to be
@@ -407,6 +467,11 @@ count would redraw them.
 The queue holds matches with a player who had a first-round bye until round 1 is finished,
 so the byes stay open (see "Stations and the queue").
 
+**Heats.** A late join stores the heat and the step it was made at, and changes no heat
+already called. When there are as many stations as round 1 heats, every heat is called at the
+start and late sign-up closes then (Brad, 2026-11-13). With 2 to 4 players the one heat is the
+final, called at the start, so there is no late sign-up.
+
 ### Stations and the queue
 
 Planned in M4 (2026-11-13). A **station** is one console. The host picks 1 to 8 when the
@@ -422,8 +487,9 @@ history into the stations, so the same log gives the same stations after a resta
   id. A late player's matches count as ready from the step they joined, so they queue behind
   matches already waiting.
 - **Calling a match:** when a result is recorded, its station is free. Every free station,
-  lowest number first, takes the first waiting match whose two players are not on another
-  station. A round robin needs the check, because all its matches are ready at once.
+  lowest number first, takes the first waiting match none of whose players is on another
+  station. A round robin needs the check, because all its matches are ready at once. A heat
+  goes through the same queue with up to 4 players (see "Races and free-for-all").
 - **Bye hold-back:** while any first-round match has no result, a match with a player who
   had a first-round bye waits. The cost is that with two stations one may sit idle near the
   end of round 1.
@@ -548,6 +614,88 @@ who is in a bracket of the current event, running or finished, answers 409 `in-b
 the bracket's answer can always be made; deleting the bracket frees them. A
 merge keeps the merged player's place in the event for the player kept.
 
+### Heats API
+
+Planned in M5 (2026-11-13). The rules of "Brackets API" apply: bodies are JSON, every answer
+lists its fields, errors are `{ "error": code }`, and a missing session is 401
+`not-signed-in`. The shared types are in `packages/core/src/api.ts`.
+
+**Storage.** Heats get their own tables, engine, and routes. Sharing the bracket tables would
+mean rebuilding `brackets` (its format `CHECK`) and `bracket_results` (`winner_id` and
+`loser_id` are `NOT NULL`), since SQLite's `ALTER TABLE` can't change those
+(<https://sqlite.org/lang_altertable.html#otheralter>), and branching an engine built around
+`brackets-manager`. Migration 5 adds:
+
+- `heat_runs`: the event (`UNIQUE`), stations, races, rounds, the points table and the
+  seeding as JSON, and the creation time.
+- `heat_results`: the run, the heat, the finishing order as a JSON list of player ids, the
+  time, and `undone_step` and `undone_at` for an older undo.
+- `heat_late_joins`: the run, its position, the player, the heat, and the step.
+- `heat_tie_breaks`: the run, its position, the players as JSON, and the step.
+
+Ids and times only (`CLAUDE.md`, rule 1); an answer joins the current handle.
+`heat-engine.ts` follows the bracket engine: state in, state and answer out, the log made by
+`logOf`, every answer a replay, no clock, no database. Rounds 2 and on, the final, and the
+tie-break heats are derived on replay. A heat's id is `round * 100 + number`; tie-break heats
+start at 1000 and the final is 2000.
+
+| Request | Who | Answer |
+|---|---|---|
+| `GET /api/heats` | host or device | `{ heats }`, or `{ heats: null }` before any are made |
+| `POST /api/heats` `{ stations, races, rounds, points, playerIds }` | host | 201 `{ heats }`; 409 `bracket-running`; 400 `too-few-players`, `too-many-players`, or `bad-request` |
+| `POST /api/heats/results` `{ heatId, order }` | host | `{ heats, resultId }`; 409 `not-on-station`; 400 `bad-request` if `order` isn't the heat's players, each once; 404 `not-found` for a heat that isn't there |
+| `POST /api/heats/undo` `{ resultId }` | host | `{ heats }`; 409 `undo-later-first`, or `nothing-to-undo` for a result not in the log or already undone |
+| `POST /api/heats/players` `{ playerId }` | host | `{ heats }`; 409 `late-closed` or `already-in`; 404 `not-found` for a player who isn't there |
+| `POST /api/heats/tie-break` | host | `{ heats }` with the tie-break heats made; 409 `no-tie` if no tie at the cut still needs heats |
+| `DELETE /api/heats` | host | 204; the host screen asks first, since it can't be undone |
+
+The four `POST` routes under `/api/heats/` answer 404 `no-heats` when the event has no heats.
+`stations` is 1 to 8, `races` 1 to 4, `rounds` 1 to 3, and `points` 4 whole numbers that pass
+`isPointsTable`. `playerIds` are 2 to 32 players; with 2 to 4, `rounds` is stored as 0.
+
+The heats answer is:
+
+```ts
+interface Heats {
+  id: number;
+  races: 1 | 2 | 3 | 4;
+  rounds: number;           // 0 when 2 to 4 players play only the final
+  points: number[];         // for 1st to 4th
+  finished: boolean;        // the final has a result
+  lateOpen: boolean;
+  lastResultId: number | null;
+  round: number | null;     // the qualifying round being played; null for tie-breaks and the final
+  stations: { number: number; heat: Heat | null; calledAt: string | null }[];
+  upNext: Heat[];
+  heats: Heat[];            // every heat made so far
+  standings: { place: number; player: Player; points: number; heatsPlayed: number }[];
+  finalSize: number;        // places 1 to finalSize reach the final
+  ties: { place: number; players: Player[]; started: boolean }[];
+}
+interface Heat {
+  id: number;
+  kind: 'round' | 'tie-break' | 'final';
+  round: number;            // the round; a tie-break's pass; 1 for the final
+  number: number;           // from 1 within its round or pass
+  status: 'ready' | 'playing' | 'done';
+  players: Player[];        // 2 to 4
+  order: Player[] | null;   // the finishing order once recorded
+  resultId: number | null;  // what to send to /undo
+}
+```
+
+`points` in a standings row are qualifying points; `heatsPlayed` counts qualifying heats.
+Every field is named in a schema in `api-schemas.ts` with `additionalProperties: false`.
+
+**Error codes:** as for brackets, plus `no-heats`.
+
+**Live.** The server sends `{ type: "heats" }` when the heats change, and screens reload
+them, and on `players` for renames.
+
+**One competition per event.** An event runs a bracket or heats, not both. Both create routes
+run on the one shared write chain and answer 409 `bracket-running` while either is running; a
+new one of either kind replaces a finished one. The merge guard (409 `in-bracket`) checks
+both, so a player in heats of the current event can't be merged away.
 
 ## 7. Name tags
 

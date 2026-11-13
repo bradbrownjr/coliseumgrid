@@ -3,7 +3,7 @@
 // byes, so the top seeds skip round 1 and two byes never meet.
 
 import type { BracketFormat } from './api.ts';
-import type { RandomSource } from './random.ts';
+import { shuffle, type RandomSource } from './random.ts';
 
 export const BRACKET_PLAYERS_MAX = 32;
 export const STATIONS_MIN = 1;
@@ -39,16 +39,9 @@ export function seedPlayers(format: BracketFormat, playerIds: readonly number[],
   }
   if (new Set(playerIds).size !== playerIds.length) throw new RangeError('a player is listed twice');
 
-  // Fisher-Yates, so every order is equally likely.
-  const order = [...playerIds];
-  for (let i = order.length - 1; i > 0; i--) {
-    const j = Math.floor(random() * (i + 1));
-    const held = order[i] as number;
-    order[i] = order[j] as number;
-    order[j] = held;
-  }
-  const seeding: Array<number | null> = order;
-  while (seeding.length < bracketSize(format, order.length)) seeding.push(null);
+  const seeding: Array<number | null> = shuffle(playerIds, random);
+  const size = bracketSize(format, playerIds.length);
+  while (seeding.length < size) seeding.push(null);
   return seeding;
 }
 

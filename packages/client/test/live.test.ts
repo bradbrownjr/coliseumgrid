@@ -39,6 +39,7 @@ describe('live messages', () => {
     expect(parseLiveMessage('{"type":"players"}')).toEqual({ type: 'players' });
     expect(parseLiveMessage('{"type":"unpaired"}')).toEqual({ type: 'unpaired' });
     expect(parseLiveMessage('{"type":"bracket"}')).toEqual({ type: 'bracket' });
+    expect(parseLiveMessage('{"type":"heats"}')).toEqual({ type: 'heats' });
     expect(parseLiveMessage('{"type":"event","event":{"name":"Smash Bash"}}')).toEqual({
       type: 'event',
       event: { name: 'Smash Bash' },

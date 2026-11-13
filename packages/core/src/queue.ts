@@ -18,7 +18,11 @@ export interface QueueMatch {
   id: number;
   round: number;
   number: number;
-  players: readonly [number, number];
+  /**
+   * Two for a bracket match; 2 to 4 for a heat (docs/PLAN.md, "Races and free-for-all"),
+   * which shares this queue.
+   */
+  players: readonly number[];
   /**
    * The step at which the match became ready. A late player's matches carry the step at
    * which the player joined, so they queue behind matches that were already waiting.
@@ -130,14 +134,14 @@ export function buildQueue(input: QueueInput): QueueState {
     return queue.filter((m) => live(m, step) && !onStation.has(m.id) && !(m.hasByePlayer && firstRoundOpen));
   };
 
-  // Every idle station, lowest number first, takes the first waiting match whose players are
-  // both free. A round robin has all its matches ready at once, so without the check one
-  // player could be called to two stations.
+  // Every idle station, lowest number first, takes the first waiting match none of whose
+  // players is on another station. A round robin has all its matches ready at once, so without
+  // the check one player could be called to two stations.
   const fill = (step: number, at: string): void => {
     stations.forEach((station, index) => {
       if (held[index]) return;
       const busy = new Set(held.flatMap((m) => (m ? [...m.players] : [])));
-      const next = waitingAt(step).find((m) => !busy.has(m.players[0]) && !busy.has(m.players[1]));
+      const next = waitingAt(step).find((m) => m.players.every((id) => !busy.has(id)));
       if (next) {
         held[index] = next;
         station.matchId = next.id;
