@@ -104,6 +104,14 @@ Host screens need a host session.
   and signs it in. From any other address, the host password is needed.
 - **Online mode:** the host password is always needed. The `localhost` sign-in is off,
   because behind a reverse proxy every request arrives from `localhost`.
+- **Setting the password** (Brad, 2026-11-13): the `COLISEUMGRID_HOST_PASSWORD` environment
+  variable sets it, masked in the Unraid template; the Docker image and online mode need
+  it. Offline, the laptop can instead set it on first run from `localhost`, so no other
+  device on the network can claim the host. It is stored hashed, like PINs.
+- **Sign-up devices** (Brad, 2026-11-13): from M3, only a paired Sign-up device can create
+  players or claim a handle. M6's player phones get their own sign-in.
+- **The event name** (Brad, 2026-11-13): in M3 the host types the current event's name for
+  the Display frame. The M7 setup wizard takes this over.
 
 ## 4. Players
 

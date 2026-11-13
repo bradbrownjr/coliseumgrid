@@ -208,3 +208,7 @@ These need Brad's answer before the work that depends on them. Don't guess.
 
 - **Heat tie-breaks** (M5): best single finish, then a tie-break race? Or shared place?
 - **Default points table** (M5): 4, 3, 2, 1 is the plan's starting point.
+- **Late sign-up** (M4, M5), Brad's son's question (2026-11-13): can players join after the
+  event starts, and until when? Proposal: a bracket holds its first-round byes open for late
+  players until the first round is finished (then sign-up closes for it); heats take late
+  players into the next round with no points until the final.
