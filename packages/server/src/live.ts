@@ -20,6 +20,13 @@ const OPEN = 1;
 const CLOSE_NORMAL = 1000;
 const CLOSE_POLICY = 1008;
 
+/**
+ * How long a closing connection gets to finish before it is cut. A client that has stopped
+ * reading never completes a send and never answers a close frame, and ws itself waits 30
+ * seconds for that answer, so without this a removed device's socket could stay open.
+ */
+export const CLOSE_GRACE_MS = 2000;
+
 /** The part of a ws WebSocket the hub uses, so tests can stand in for one. */
 export interface LiveSocket {
   readonly readyState: number;
@@ -56,6 +63,19 @@ interface Connection extends LiveConnectionInfo {
   alive: boolean;
 }
 
+/** Cuts the connection if it is still open once the grace period is over. */
+function terminateSoon(socket: LiveSocket): void {
+  const timer = setTimeout(() => socket.terminate(), CLOSE_GRACE_MS);
+  // A pending cut must not keep the process alive after the app closes.
+  timer.unref();
+  socket.on('close', () => clearTimeout(timer));
+}
+
+function closeSocket(socket: LiveSocket, code: number, reason: string): void {
+  socket.close(code, reason);
+  terminateSoon(socket);
+}
+
 function sendJson(socket: LiveSocket, message: LiveMessage, then?: () => void): void {
   if (socket.readyState !== OPEN) return;
   socket.send(JSON.stringify(message), then && (() => then()));
@@ -73,7 +93,7 @@ export function createLiveHub(heartbeatMs: number = HEARTBEAT_MS): LiveHub {
         socket.terminate();
       } else if (!connection.stillAllowed()) {
         connections.delete(connection);
-        socket.close(CLOSE_POLICY, 'not-signed-in');
+        closeSocket(socket, CLOSE_POLICY, 'not-signed-in');
       } else {
         connection.alive = false;
         socket.ping();
@@ -103,14 +123,17 @@ export function createLiveHub(heartbeatMs: number = HEARTBEAT_MS): LiveHub {
         connections.delete(connection);
         // Close after the message is written, or the client could see only the close.
         const { socket } = connection;
-        if (socket.readyState === OPEN) sendJson(socket, { type: 'unpaired' }, () => socket.close(CLOSE_NORMAL));
+        if (socket.readyState !== OPEN) continue;
+        sendJson(socket, { type: 'unpaired' }, () => socket.close(CLOSE_NORMAL));
+        // The send's callback never runs for a client that isn't reading, so the cut doesn't wait for it.
+        terminateSoon(socket);
       }
     },
     endSession(sessionHash) {
       for (const connection of connections) {
         if (connection.sessionHash !== sessionHash) continue;
         connections.delete(connection);
-        connection.socket.close(CLOSE_POLICY, 'not-signed-in');
+        closeSocket(connection.socket, CLOSE_POLICY, 'not-signed-in');
       }
     },
     stop: () => clearInterval(timer),

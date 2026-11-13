@@ -145,6 +145,13 @@ describe('the per-IP limit (online)', () => {
     expect((await claim(server, 'Nobody Else', '1234', '198.51.100.8')).statusCode).toBe(404);
   });
 
+  it('counts an IPv6 address by its /64, so rotating inside one range gets no fresh claims', async () => {
+    const server = await start('online');
+    for (let i = 0; i < CLAIM_MAX_PER_IP; i++) await claim(server, 'Nobody', '1234', `2001:db8:1:2::${i + 1}`);
+    expect((await claim(server, 'Nobody', '1234', '2001:db8:1:2:aaaa:bbbb:cccc:dddd')).statusCode).toBe(429);
+    expect((await claim(server, 'Nobody', '1234', '2001:db8:1:3::1')).statusCode).toBe(404);
+  });
+
   it('only limits the claim route', async () => {
     const server = await start('online');
     for (let i = 0; i < CLAIM_MAX_PER_IP + 5; i++) {
@@ -231,5 +238,57 @@ describe('FailureLimiter', () => {
     expect(limiter.tryAttempt('zap')).toBe(false);
     limiter.clear('zap');
     expect(limiter.tryAttempt('zap')).toBe(true);
+  });
+
+  it('handles many distinct keys in bounded time', () => {
+    // Every new key used to sweep the whole map, so 40,000 keys took about 17 seconds.
+    const limiter = new FailureLimiter(1, CLAIM_WINDOW_MS, () => 1_000, 100_000);
+    const started = performance.now();
+    for (let i = 0; i < 40_000; i++) expect(limiter.tryAttempt(`key-${i}`)).toBe(true);
+    expect(performance.now() - started).toBeLessThan(2_000);
+  });
+
+  it('blocks new keys while the map is full of live ones, and still counts the keys it holds', () => {
+    let now = 1_000;
+    const limiter = new FailureLimiter(2, CLAIM_WINDOW_MS, () => now, 3);
+    for (const key of ['a', 'b', 'c']) expect(limiter.tryAttempt(key)).toBe(true);
+    expect(limiter.tryAttempt('d')).toBe(false);
+    // A key already held keeps its own count.
+    expect(limiter.tryAttempt('a')).toBe(true);
+    expect(limiter.tryAttempt('a')).toBe(false);
+    // Clearing a key frees a place.
+    limiter.clear('b');
+    expect(limiter.tryAttempt('d')).toBe(true);
+    expect(limiter.tryAttempt('e')).toBe(false);
+  });
+
+  it('makes room again when the held keys expire, oldest first, including a reused key', () => {
+    let now = 1_000;
+    const limiter = new FailureLimiter(1, CLAIM_WINDOW_MS, () => now, 2);
+    expect(limiter.tryAttempt('a')).toBe(true);
+    now += 10;
+    expect(limiter.tryAttempt('b')).toBe(true);
+    expect(limiter.tryAttempt('c')).toBe(false);
+
+    // Only a has expired. Reusing it must not leave b's older expiry hidden behind it.
+    now = 1_000 + CLAIM_WINDOW_MS;
+    expect(limiter.tryAttempt('a')).toBe(true);
+    expect(limiter.tryAttempt('c')).toBe(false);
+    now = 1_010 + CLAIM_WINDOW_MS;
+    expect(limiter.tryAttempt('c')).toBe(true);
+    expect(limiter.tryAttempt('a')).toBe(false);
+  });
+
+  it('refund gives one attempt back and never goes below zero', () => {
+    const limiter = new FailureLimiter(1, CLAIM_WINDOW_MS);
+    expect(limiter.tryAttempt('x')).toBe(true);
+    expect(limiter.tryAttempt('x')).toBe(false);
+    limiter.refund('x');
+    expect(limiter.tryAttempt('x')).toBe(true);
+    limiter.refund('x');
+    limiter.refund('x');
+    limiter.refund('unknown');
+    expect(limiter.tryAttempt('x')).toBe(true);
+    expect(limiter.tryAttempt('x')).toBe(false);
   });
 });

@@ -4,19 +4,19 @@ import { parseCookies, serializeCookie } from '../src/cookies.ts';
 describe('parseCookies', () => {
   it('reads several cookies from one header', () => {
     expect([...parseCookies('cg_host=abc; cg_device=def')]).toEqual([
-      ['cg_host', 'abc'],
-      ['cg_device', 'def'],
+      ['cg_host', ['abc']],
+      ['cg_device', ['def']],
     ]);
   });
 
-  it('takes the first of a repeated name', () => {
-    expect(parseCookies('a=1; a=2').get('a')).toBe('1');
+  it('keeps every value of a repeated name, in the order the browser sent them', () => {
+    expect(parseCookies('a=1; b=x; a=2; a=1').get('a')).toEqual(['1', '2', '1']);
   });
 
   it('keeps an = inside a value, trims spaces, and strips quotes', () => {
     const cookies = parseCookies('  a = x=y ;b="quoted"; c');
-    expect(cookies.get('a')).toBe('x=y');
-    expect(cookies.get('b')).toBe('quoted');
+    expect(cookies.get('a')).toEqual(['x=y']);
+    expect(cookies.get('b')).toEqual(['quoted']);
     expect(cookies.has('c')).toBe(false);
   });
 
@@ -54,6 +54,6 @@ describe('serializeCookie', () => {
 
   it('round-trips a token', () => {
     const header = serializeCookie('cg_device', 'Ab-_09', { maxAgeSeconds: 5, secure: false });
-    expect(parseCookies(header.split(';')[0]).get('cg_device')).toBe('Ab-_09');
+    expect(parseCookies(header.split(';')[0]).get('cg_device')).toEqual(['Ab-_09']);
   });
 });

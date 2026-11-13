@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { buildApp } from './app.ts';
 import { loadConfig } from './config.ts';
 import { openDatabase } from './database.ts';
+import { startupWarnings } from './startup-warnings.ts';
 
 let config;
 try {
@@ -24,6 +25,7 @@ try {
 
 // The default is found from this file, not the working directory, so it works from any folder.
 const clientDist = process.env['CLIENT_DIST'] || fileURLToPath(new URL('../../client/dist', import.meta.url));
+for (const warning of startupWarnings(config)) console.warn(`Warning: ${warning}`);
 const db = openDatabase(join(config.dataDir, 'coliseumgrid.db'));
 const app = await buildApp({
   clientDist,

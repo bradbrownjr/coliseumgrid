@@ -9,11 +9,13 @@ const NAME_PATTERN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 const VALUE_PATTERN = /^[\x21\x23-\x2B\x2D-\x3A\x3C-\x5B\x5D-\x7E]*$/;
 
 /**
- * The cookies in a Cookie header. When a name appears twice, the first one wins: browsers list
- * the cookie with the most specific path first.
+ * The cookies in a Cookie header: every value of each name, in the order sent. A name can
+ * appear more than once, and another page of the same site can add a cookie of ours with a
+ * narrower Path, which browsers list first. The caller decides which value is real; taking
+ * the first would let that page shadow the real cookie.
  */
-export function parseCookies(header: string | undefined): Map<string, string> {
-  const cookies = new Map<string, string>();
+export function parseCookies(header: string | undefined): Map<string, string[]> {
+  const cookies = new Map<string, string[]>();
   if (!header) return cookies;
   for (const part of header.split(';')) {
     const equals = part.indexOf('=');
@@ -21,7 +23,7 @@ export function parseCookies(header: string | undefined): Map<string, string> {
     const name = part.slice(0, equals).trim();
     let value = part.slice(equals + 1).trim();
     if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
-    if (name && !cookies.has(name)) cookies.set(name, value);
+    if (name) cookies.set(name, [...(cookies.get(name) ?? []), value]);
   }
   return cookies;
 }

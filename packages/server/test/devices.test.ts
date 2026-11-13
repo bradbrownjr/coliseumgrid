@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp, type AppOptions } from '../src/app.ts';
 import { openDatabase, type Database } from '../src/database.ts';
 import { LAST_SEEN_THROTTLE_MS, PAIRING_CODE_MS } from '../src/devices.ts';
-import { GUESS_WINDOW_MS, JOIN_MAX_WRONG_PER_IP } from '../src/rate-limit.ts';
+import { GUESS_WINDOW_MS, JOIN_MAX_WRONG_GLOBAL, JOIN_MAX_WRONG_PER_IP } from '../src/rate-limit.ts';
 import { cookieFrom, HOST_PASSWORD, pairDevice, REMOTE, signInHost } from './helpers.ts';
 
 const START = Date.parse('2027-07-10T12:00:00Z');
@@ -232,6 +232,12 @@ describe('wrong pairing codes are rate limited per client IP', () => {
     expect((await join('ZZZZZZ')).statusCode).toBe(429);
   });
 
+  it('counts an IPv6 address by its /64, so rotating inside one range gets no fresh tries', async () => {
+    for (let i = 0; i < JOIN_MAX_WRONG_PER_IP; i++) await join('ZZZZZZ', `2001:db8:1:2::${i + 1}`);
+    expect((await join('ZZZZZZ', '2001:db8:1:2:aaaa:bbbb:cccc:dddd')).statusCode).toBe(429);
+    expect((await join('ZZZZZZ', '2001:db8:1:3::1')).statusCode).toBe(404);
+  });
+
   it('keeps other addresses unaffected', async () => {
     for (let i = 0; i < JOIN_MAX_WRONG_PER_IP + 3; i++) await join('ZZZZZZ');
     expect((await join((await makeCode()).code, '198.51.100.99')).statusCode).toBe(201);
@@ -247,6 +253,42 @@ describe('wrong pairing codes are rate limited per client IP', () => {
     expect((await join('ZZZZZZ', '10.0.0.1', { 'x-forwarded-for': '203.0.113.250, 192.0.2.51' })).statusCode).toBe(404);
     for (let i = 0; i < JOIN_MAX_WRONG_PER_IP; i++) await join('ZZZZZZ', REMOTE, { 'x-forwarded-for': `203.0.113.${i}` });
     expect((await join('ZZZZZZ', REMOTE, { 'x-forwarded-for': '203.0.113.200' })).statusCode).toBe(429);
+  });
+});
+
+describe('wrong pairing codes are rate limited across all callers', () => {
+  // A different address for each guess, so only the global limit can be what stops them.
+  const address = (n: number) => `203.0.${Math.floor(n / 250)}.${(n % 250) + 1}`;
+  const guess = (n: number) => join('ZZZZZZ', address(n));
+
+  it.each(['offline', 'online'] as const)('in %s mode: answers 429 to every join once the cap is used up', async (mode) => {
+    await app.close();
+    await start({ mode });
+    const { code } = await makeCode();
+    for (let n = 0; n < JOIN_MAX_WRONG_GLOBAL; n++) expect((await guess(n)).statusCode).toBe(404);
+    for (const text of ['ZZZZZZ', code]) {
+      const res = await join(text, '198.51.100.99');
+      expect(res.statusCode).toBe(429);
+      expect(res.json()).toEqual({ error: 'too-many-tries' });
+    }
+    // The refused join did not spend the live code. It pairs once the window has ended.
+    clock = START + GUESS_WINDOW_MS;
+    expect((await join((await makeCode()).code, '198.51.100.99')).statusCode).toBe(201);
+  });
+
+  it('counts only guesses the per-IP limit let through', async () => {
+    // 50 tries from one address: 10 are answered and counted, the other 40 are refused uncounted.
+    for (let i = 0; i < 50; i++) await join('ZZZZZZ', '198.51.100.1');
+    for (let n = 0; n < JOIN_MAX_WRONG_GLOBAL - JOIN_MAX_WRONG_PER_IP - 1; n++) await guess(n);
+    expect((await guess(1000)).statusCode).toBe(404);
+    expect((await guess(1001)).statusCode).toBe(429);
+  });
+
+  it('does not count joins that work', async () => {
+    for (let n = 0; n < JOIN_MAX_WRONG_GLOBAL + 20; n++) {
+      expect((await join((await makeCode()).code, address(n))).statusCode).toBe(201);
+    }
+    expect((await guess(5000)).statusCode).toBe(404);
   });
 });
 

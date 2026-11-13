@@ -11,7 +11,7 @@ import type { Mode } from './config.ts';
 import type { Devices } from './devices.ts';
 import { HOST_SESSION_MS, type HostStore } from './host-store.ts';
 import { hashPin, verifyPin } from './pin-hash.ts';
-import { isHttps, isLocalRequest } from './request-info.ts';
+import { hasForeignOrigin, isHttps, isLocalRequest } from './request-info.ts';
 import { hashToken, newToken } from './tokens.ts';
 
 export const HOST_COOKIE = 'cg_host';
@@ -22,6 +22,14 @@ export const DEVICE_COOKIE = 'cg_device';
 // (https://developer.chrome.com/blog/cookie-max-age-expires). The server never expires it.
 const DEVICE_COOKIE_SECONDS = 400 * 24 * 60 * 60;
 const HOST_COOKIE_SECONDS = HOST_SESSION_MS / 1000;
+
+/**
+ * An onRequest hook: answers 403 forbidden to a request sent by a page on another origin
+ * (see hasForeignOrigin). It runs before the body is read, and before anyone is identified.
+ */
+export async function rejectForeignOrigin(request: FastifyRequest, reply: FastifyReply): Promise<FastifyReply | undefined> {
+  return hasForeignOrigin(request.headers) ? fail(reply, 403, 'forbidden') : undefined;
+}
 
 export interface Identity {
   /** Signed in as the host, by cookie or by being the laptop. */
@@ -69,6 +77,13 @@ export async function createAccess(options: AccessOptions): Promise<Access> {
   // Hashed once at startup, so the plain text isn't kept and the check costs the same as a
   // stored password's.
   const envHash = options.hostPassword === undefined ? undefined : await hashPin(options.hostPassword);
+  // A session outlives a restart, so when the variable names a different password than the
+  // one the sessions were made under, they must end. The stored hash records which password
+  // that was; if the variable doesn't match it, store the new one and drop every session.
+  if (envHash !== undefined && options.hostPassword !== undefined) {
+    const stored = hostStore.getPasswordHash();
+    if (stored === undefined || !(await verifyPin(options.hostPassword, stored))) hostStore.replacePasswordHash(envHash);
+  }
   const currentHash = (): string | undefined => envHash ?? hostStore.getPasswordHash();
 
   // Several hooks and the handler all ask who the caller is; ask the database once per request.
@@ -80,12 +95,23 @@ export async function createAccess(options: AccessOptions): Promise<Access> {
     const cookies = parseCookies(request.headers.cookie);
     const local = isLocalRequest(request, mode);
 
-    const hostToken = cookies.get(HOST_COOKIE);
-    const hostHash = hostToken === undefined ? undefined : hashToken(hostToken);
-    const hasSession = hostHash !== undefined && hostStore.sessionValid(hostHash);
+    // A name can hold several values (cookie tossing, see parseCookies): the first one that is
+    // a real session or device is the one.
+    let hostHash: string | undefined;
+    for (const token of cookies.get(HOST_COOKIE) ?? []) {
+      const hash = hashToken(token);
+      if (hostStore.sessionValid(hash)) {
+        hostHash = hash;
+        break;
+      }
+    }
+    const hasSession = hostHash !== undefined;
 
-    const deviceToken = cookies.get(DEVICE_COOKIE);
-    const device = deviceToken === undefined ? undefined : devices.getByTokenHash(hashToken(deviceToken));
+    let device: Device | undefined;
+    for (const token of cookies.get(DEVICE_COOKIE) ?? []) {
+      device = devices.getByTokenHash(hashToken(token));
+      if (device) break;
+    }
     // Device activity counts as the device being seen; the write is throttled.
     if (device) devices.touch(device.id, true);
 

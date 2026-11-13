@@ -1,7 +1,9 @@
-// Two questions about a request that decide how much to trust it: did it come from this very
-// machine (the offline "localhost" sign-in), and did it arrive over HTTPS (the Secure cookie
-// flag). Both start from the socket, never from a header a caller can write (CLAUDE.md, rule 6).
+// Questions about a request that decide how much to trust it: did it come from this very
+// machine (the offline "localhost" sign-in), did it arrive over HTTPS (the Secure cookie
+// flag), and did a page on another origin send it. The first two start from the socket, never
+// from a header a caller can write (CLAUDE.md, rule 6).
 
+import type { IncomingHttpHeaders } from 'node:http';
 import type { FastifyRequest } from 'fastify';
 import { getPeerIp, isFromTrustedProxy } from './client-ip.ts';
 import type { Mode } from './config.ts';
@@ -16,6 +18,27 @@ function hostnameOf(host: string | undefined): string | undefined {
     return new URL(`http://${host}`).hostname;
   } catch {
     return undefined;
+  }
+}
+
+/**
+ * True when the request carries an Origin that is not the host it was sent to. Browsers set
+ * Origin on every cross-origin request, on every POST, and on every WebSocket handshake, and a
+ * page's script can't change it, so a different Origin means a page on another origin
+ * (another port or subdomain counts, though SameSite would let its cookies through). A
+ * request with no Origin comes from a tool or an older request style, not from a page, so it
+ * is not foreign. An Origin of "null" (a sandboxed page) or one that isn't a URL counts as
+ * foreign. Origin and Host are compared as host and port after URL parsing, so the scheme is
+ * ignored: behind an HTTPS proxy the server sees plain HTTP. Behind a reverse proxy this needs
+ * the original Host to arrive unchanged (docs/DEVELOPMENT.md, "Docker").
+ */
+export function hasForeignOrigin(headers: IncomingHttpHeaders): boolean {
+  const origin = headers.origin;
+  if (origin === undefined) return false;
+  try {
+    return new URL(origin).host !== new URL(`http://${headers.host}`).host;
+  } catch {
+    return true;
   }
 }
 
@@ -50,15 +73,7 @@ export function isLocalRequest(request: FastifyRequest, mode: Mode): boolean {
   }
   const hostname = hostnameOf(headers.host);
   if (hostname === undefined || !LOCAL_NAMES.has(hostname)) return false;
-  const origin = headers.origin;
-  if (origin !== undefined) {
-    try {
-      if (new URL(origin).host !== new URL(`http://${headers.host}`).host) return false;
-    } catch {
-      return false;
-    }
-  }
-  return true;
+  return !hasForeignOrigin(headers);
 }
 
 /**

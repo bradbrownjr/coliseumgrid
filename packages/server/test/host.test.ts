@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp, type AppOptions } from '../src/app.ts';
 import { openDatabase, type Database } from '../src/database.ts';
 import { HOST_SESSION_MS } from '../src/host-store.ts';
@@ -408,6 +411,100 @@ describe('wrong passwords are rate limited per client IP', () => {
       await signIn(server, 'wrong password', REMOTE, { 'x-forwarded-for': `203.0.113.${i}` });
     }
     expect((await signIn(server, HOST_PASSWORD, REMOTE, { 'x-forwarded-for': '203.0.113.200' })).statusCode).toBe(429);
+  });
+
+  it('counts an IPv6 address by its /64, so rotating inside one range gets no fresh tries', async () => {
+    const server = await start({ hostPassword: HOST_PASSWORD });
+    for (let i = 0; i < SIGN_IN_MAX_WRONG_PER_IP; i++) await signIn(server, 'wrong password', `2001:db8:1:2::${i + 1}`);
+    expect((await signIn(server, HOST_PASSWORD, '2001:db8:1:2:aaaa:bbbb:cccc:dddd')).statusCode).toBe(429);
+    // The next /64 and an IPv4 address are separate clients.
+    expect((await signIn(server, HOST_PASSWORD, '2001:db8:1:3::1')).statusCode).toBe(204);
+    expect((await signIn(server, HOST_PASSWORD, '198.51.100.99')).statusCode).toBe(204);
+  });
+
+  it('keeps an IPv4-mapped IPv6 address per address, like plain IPv4', async () => {
+    const server = await start({ hostPassword: HOST_PASSWORD });
+    for (let i = 0; i < SIGN_IN_MAX_WRONG_PER_IP; i++) await signIn(server, 'wrong password', '::ffff:198.51.100.50');
+    expect((await signIn(server, HOST_PASSWORD, '198.51.100.50')).statusCode).toBe(429);
+    expect((await signIn(server, HOST_PASSWORD, '198.51.100.51')).statusCode).toBe(204);
+    expect((await signIn(server, HOST_PASSWORD, '::ffff:198.51.100.52')).statusCode).toBe(204);
+  });
+});
+
+describe('a host password that changes between starts', () => {
+  const OLD = 'the old password';
+  const NEW = 'the new password';
+  let folder = '';
+  afterEach(() => rmSync(folder, { recursive: true, force: true }));
+
+  /** Starts the app on the same database file as the last start, as a restart would. */
+  async function restart(options: AppOptions): Promise<FastifyInstance> {
+    await app?.close();
+    folder ||= mkdtempSync(join(tmpdir(), 'coliseumgrid-test-'));
+    db = openDatabase(join(folder, 'test.db'));
+    clock = START;
+    app = await buildApp({ db, now: () => clock, ...options });
+    return app;
+  }
+
+  const sessionCookie = async (server: FastifyInstance, password: string) => {
+    const res = await signIn(server, password);
+    expect(res.statusCode).toBe(204);
+    return cookieFrom(res);
+  };
+  const isHost = async (server: FastifyInstance, cookie: string) =>
+    (await withCookie(server, cookie, { url: '/api/players' })).statusCode === 200;
+
+  beforeEach(() => {
+    folder = '';
+  });
+
+  it('keeps sessions across a restart with the same password', async () => {
+    const first = await restart({ hostPassword: OLD });
+    const cookie = await sessionCookie(first, OLD);
+    const second = await restart({ hostPassword: OLD });
+    expect(await isHost(second, cookie)).toBe(true);
+  });
+
+  it('ends every session made under the old password, and the new password works', async () => {
+    const first = await restart({ hostPassword: OLD });
+    const cookie = await sessionCookie(first, OLD);
+    expect(await isHost(first, cookie)).toBe(true);
+
+    const second = await restart({ hostPassword: NEW });
+    expect(await isHost(second, cookie)).toBe(false);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM host_sessions').get()).toEqual({ n: 0 });
+    expect((await signIn(second, OLD)).statusCode).toBe(401);
+    expect(await isHost(second, await sessionCookie(second, NEW))).toBe(true);
+  });
+
+  it('stores the new password, so it stays the password if the variable is later removed', async () => {
+    await restart({ hostPassword: OLD });
+    await restart({ hostPassword: NEW });
+    const third = await restart({});
+    expect((await signIn(third, OLD)).statusCode).toBe(401);
+    expect((await signIn(third, NEW)).statusCode).toBe(204);
+  });
+
+  it('ends sessions made under a password set from the laptop when the variable takes over', async () => {
+    const first = await restart({});
+    const setup = await call(first, 'POST', '/api/host/setup', { remoteAddress: LOCAL, payload: { password: OLD } });
+    const cookie = cookieFrom(setup);
+    expect(await isHost(first, cookie)).toBe(true);
+
+    const second = await restart({ hostPassword: NEW });
+    expect(await isHost(second, cookie)).toBe(false);
+  });
+
+  it('leaves a device paired before the change paired', async () => {
+    const first = await restart({ hostPassword: OLD });
+    const hostCookie = await sessionCookie(first, OLD);
+    const made = await withCookie(first, hostCookie, { method: 'POST', url: '/api/pairing/codes', payload: { role: 'display' } });
+    const joined = await call(first, 'POST', '/api/devices/join', { payload: { code: made.json().code } });
+    const deviceCookie = cookieFrom(joined);
+
+    const second = await restart({ hostPassword: NEW });
+    expect((await withCookie(second, deviceCookie, { url: '/api/devices/me' })).statusCode).toBe(200);
   });
 });
 

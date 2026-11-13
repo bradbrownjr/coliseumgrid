@@ -53,11 +53,11 @@ afterEach(async () => {
 
 async function connect(
   cookie: string | undefined,
-  options: { remoteAddress?: string; host?: string; noPong?: boolean } = {},
+  options: { remoteAddress?: string; host?: string; origin?: string; noPong?: boolean } = {},
 ): Promise<Connection> {
   const connection: Connection = { messages: [], closed: undefined, terminate: () => undefined };
   const upgradeContext = {
-    headers: { ...(cookie && { cookie }), host: options.host ?? 'localhost' },
+    headers: { ...(cookie && { cookie }), host: options.host ?? 'localhost', ...(options.origin !== undefined && { origin: options.origin }) },
     socket: { remoteAddress: options.remoteAddress ?? REMOTE },
   };
   const ws = await app.injectWS('/api/live', upgradeContext as never, {
@@ -114,6 +114,26 @@ describe('who may connect', () => {
 
   it('does not accept a page from another site posing as the laptop', async () => {
     await expect(connect(undefined, { remoteAddress: '127.0.0.1', host: 'evil.example.com' })).rejects.toThrow(/401/);
+  });
+});
+
+describe('the Origin of the handshake', () => {
+  // A page on another origin (another port, a sibling subdomain) is the same site, so the host's
+  // cookie would ride along; the handshake is refused before the socket opens.
+  it.each(['http://10.6.26.2:8080', 'http://evil.10.6.26.2:3000', 'null', 'not a url', ''])(
+    'refuses a handshake from the origin "%s"',
+    async (origin) => {
+      await expect(connect(host, { host: '10.6.26.2:3000', origin })).rejects.toThrow(/403/);
+    },
+  );
+
+  it('accepts the page it serves, and a client that sends no Origin', async () => {
+    expect((await connect(host, { host: '10.6.26.2:3000', origin: 'http://10.6.26.2:3000' })).closed).toBeUndefined();
+    expect((await connect(host, { host: '10.6.26.2:3000' })).closed).toBeUndefined();
+  });
+
+  it('refuses a foreign origin even with no cookie, and does not tell it whether a sign-in exists', async () => {
+    await expect(connect(undefined, { host: '10.6.26.2:3000', origin: 'http://10.6.26.2:8080' })).rejects.toThrow(/403/);
   });
 });
 

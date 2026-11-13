@@ -142,3 +142,36 @@ describe('online: the laptop address is nobody special', () => {
     }
   });
 });
+
+// A page on a sibling subdomain, or another port of the same address, can set a second cookie
+// of the same name with a narrower Path. A browser lists that one first, so a bogus value can
+// sit in front of the real one.
+describe('a repeated cookie name (cookie tossing)', () => {
+  beforeEach(() => start('online'));
+
+  const tossed = (cookie: string) => `${cookie.split('=')[0]}=bogus; ${cookie}`;
+
+  it('finds the host session behind a bogus cg_host value', async () => {
+    expect(await status(HOST_ROUTES[0] as Route, tossed(host))).toBe(200);
+    expect(await status(HOST_ROUTES[0] as Route, `${host}; cg_host=bogus`)).toBe(200);
+  });
+
+  it('finds the device behind a bogus cg_device value', async () => {
+    for (const cookie of [signup, display]) {
+      const res = await app.inject({ url: '/api/devices/me', remoteAddress: REMOTE, headers: { cookie: tossed(cookie) } });
+      expect(res.statusCode).toBe(200);
+    }
+    expect(await status(SIGNUP_ROUTES[0] as Route, tossed(signup))).toBe(200);
+  });
+
+  it('still refuses when every value is bogus', async () => {
+    expect(await status(HOST_ROUTES[0] as Route, 'cg_host=bogus; cg_host=worse')).toBe(401);
+    expect(await status(SIGNUP_ROUTES[0] as Route, 'cg_device=bogus; cg_device=worse')).toBe(401);
+  });
+
+  it('signs out the real session, not the bogus one in front of it', async () => {
+    const res = await app.inject({ method: 'POST', url: '/api/host/sign-out', remoteAddress: REMOTE, headers: { cookie: tossed(host) } });
+    expect(res.statusCode).toBe(204);
+    expect(await status(HOST_ROUTES[0] as Route, host)).toBe(401);
+  });
+});

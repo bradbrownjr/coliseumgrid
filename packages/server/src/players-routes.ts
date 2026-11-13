@@ -21,7 +21,7 @@ import rateLimit from '@fastify/rate-limit';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { Access } from './access.ts';
 import { errorSchema, fail, idParams, notSignedIn, objectSchema } from './api-schemas.ts';
-import { getClientIp } from './client-ip.ts';
+import { getClientKey } from './client-ip.ts';
 import type { Mode } from './config.ts';
 import { hashPin, verifyPin } from './pin-hash.ts';
 import type { Players } from './players.ts';
@@ -40,7 +40,7 @@ export interface PlayerRoutesOptions {
   /** Called after the player list changes, so the host page reloads it (a "players" live message). */
   onPlayersChanged: () => void;
   mode: Mode;
-  /** See getClientIp. */
+  /** See getClientKey. */
   trustedProxy?: string;
 }
 
@@ -174,7 +174,7 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
             rateLimit: {
               max: CLAIM_MAX_PER_IP,
               timeWindow: CLAIM_WINDOW_MS,
-              keyGenerator: (request: Parameters<typeof getClientIp>[0]) => getClientIp(request, trustedProxy),
+              keyGenerator: (request: Parameters<typeof getClientKey>[0]) => getClientKey(request, trustedProxy),
               // The error handler in app.ts turns any 429 into { error: "too-many-tries" }.
               errorResponseBuilder: (_request: unknown, context: { statusCode: number }) =>
                 Object.assign(new Error('too many tries'), { statusCode: context.statusCode }),

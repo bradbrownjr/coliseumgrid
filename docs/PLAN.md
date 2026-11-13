@@ -144,7 +144,22 @@ the server gives it ("Display 1", "Sign-up 2"). An event is `{ name }` for now.
 
 The host picks the role when making a code, so a TV only has to type the code. The host
 password itself is never sent back. Wrong codes and wrong passwords are rate limited per
-client IP in both modes (`CLAUDE.md`, rule 7), with the IP taken by rule 6.
+client IP in both modes (`CLAUDE.md`, rule 7), with the IP taken by rule 6. An IPv6 client
+counts by its /64, so a caller can't get fresh tries by changing the end of its address.
+Wrong codes are also capped across all callers (100 per 10 minutes), so a guesser with many
+addresses can't search the code space; once the cap is used up, every join answers 429 until
+the window ends.
+
+**Origin.** `SameSite=Strict` doesn't stop a page on another port of the same address, or on
+a sibling subdomain. So any request that isn't a `GET`, `HEAD`, or `OPTIONS`, and the
+`GET /api/live` handshake, is refused with 403 `{ "error": "forbidden" }` when it carries an
+`Origin` header whose host and port differ from the `Host` header (an `Origin` of `null` or
+one that isn't a URL counts as different). A request with no `Origin` comes from a tool, not
+a page, and passes. The reverse proxy has to pass `Host` through unchanged.
+
+**Password changes.** Sessions outlive a restart. When `COLISEUMGRID_HOST_PASSWORD` names a
+different password than the stored one, the server stores the new one and ends every host
+session at startup. Paired devices stay paired.
 
 From M3, the M2 host routes need a host session (offline `localhost` signs in without the
 password), and the sign-up routes need a Sign-up device or a host session. Without one, a
@@ -217,8 +232,9 @@ Host (laptop):
 | `POST /api/players/:id/merge` `{ intoId }` | `{ player }` (the one kept); the merged player is deleted; 404 |
 | `POST /api/players/:id/reset-pin` | `{ pin }`, a new suggested PIN, shown once |
 
-Until M3 adds host sign-in, the host requests answer any device on the network (see
-`ROADMAP.md`, M3).
+The host requests need a host session (offline, `localhost` counts as one), and the sign-up
+requests need a Sign-up device or a host session ("Devices and host API"). Without one, a
+route answers 401 `{ "error": "not-signed-in" }`.
 
 PIN attempts on `/api/signup/claim` are rate limited per handle and per client IP in online mode, with the
 client IP taken by rule 6. Offline, a wrong PIN only costs a retry.

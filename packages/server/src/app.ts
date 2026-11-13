@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
-import { createAccess } from './access.ts';
+import { createAccess, rejectForeignOrigin } from './access.ts';
 import type { Clock } from './clock.ts';
 import type { Mode } from './config.ts';
 import { openDatabase, type Database } from './database.ts';
@@ -74,6 +74,16 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
     request.log.error(error);
     return reply.code(500).send({ error: 'server-error' });
   });
+
+  // A request that changes something must come from our own pages. SameSite=Strict doesn't
+  // cover a page on another port of the same address, or on a sibling subdomain, and a POST
+  // with no body needs no CORS preflight, so the check is on Origin for every method that can
+  // change state. GET (including the /api/live handshake, which checks Origin itself) reads only.
+  app.addHook('onRequest', async (request, reply) =>
+    request.method === 'GET' || request.method === 'HEAD' || request.method === 'OPTIONS'
+      ? undefined
+      : rejectForeignOrigin(request, reply),
+  );
 
   // The response schema lists each field, so a field added to the handler later can't
   // leave the server unless it is added here too (CLAUDE.md, rule 1).

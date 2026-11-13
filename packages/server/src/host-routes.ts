@@ -15,15 +15,21 @@ import {
   type PasswordBody,
 } from '@coliseumgrid/core';
 import type { FastifyInstance } from 'fastify';
-import type { Access } from './access.ts';
+import { rejectForeignOrigin, type Access } from './access.ts';
 import { errorSchema, fail, idParams, notSignedIn, objectSchema } from './api-schemas.ts';
-import { getClientIp } from './client-ip.ts';
+import { getClientKey } from './client-ip.ts';
 import type { Clock } from './clock.ts';
 import { HOST_PASSWORD_MAX, HOST_PASSWORD_MIN } from './config.ts';
 import type { Devices } from './devices.ts';
 import { cleanEventName, EVENT_NAME_MAX, type Events } from './events.ts';
 import type { LiveHub } from './live.ts';
-import { FailureLimiter, GUESS_WINDOW_MS, JOIN_MAX_WRONG_PER_IP, SIGN_IN_MAX_WRONG_PER_IP } from './rate-limit.ts';
+import {
+  FailureLimiter,
+  GUESS_WINDOW_MS,
+  JOIN_MAX_WRONG_GLOBAL,
+  JOIN_MAX_WRONG_PER_IP,
+  SIGN_IN_MAX_WRONG_PER_IP,
+} from './rate-limit.ts';
 import { secureRandom } from './secure-random.ts';
 import { hashToken, newToken } from './tokens.ts';
 
@@ -33,7 +39,7 @@ export interface HostRoutesOptions {
   events: Events;
   hub: LiveHub;
   now: Clock;
-  /** See getClientIp. */
+  /** See getClientKey. */
   trustedProxy?: string;
 }
 
@@ -66,6 +72,9 @@ export async function registerHostRoutes(app: FastifyInstance, options: HostRout
   // that arrive while a hash is running can't all slip past the limit.
   const signInTries = new FailureLimiter(SIGN_IN_MAX_WRONG_PER_IP, GUESS_WINDOW_MS, now);
   const joinTries = new FailureLimiter(JOIN_MAX_WRONG_PER_IP, GUESS_WINDOW_MS, now);
+  // One count for every caller, for a guesser who has many addresses.
+  const joinTriesAll = new FailureLimiter(JOIN_MAX_WRONG_GLOBAL, GUESS_WINDOW_MS, now);
+  const ALL_CALLERS = 'all';
 
   // Host sign-in ------------------------------------------------------------------------
 
@@ -113,7 +122,7 @@ export async function registerHostRoutes(app: FastifyInstance, options: HostRout
       },
     },
     async (request, reply) => {
-      const ip = getClientIp(request, trustedProxy);
+      const ip = getClientKey(request, trustedProxy);
       // No await between here and the reservation, so concurrent guesses each take their own slot.
       if (!signInTries.tryAttempt(ip)) return fail(reply, 429, 'too-many-tries');
       if (!(await access.verifyPassword(request.body.password))) return fail(reply, 401, 'wrong-password');
@@ -164,14 +173,17 @@ export async function registerHostRoutes(app: FastifyInstance, options: HostRout
       },
     },
     async (request, reply) => {
-      const ip = getClientIp(request, trustedProxy);
-      if (!joinTries.tryAttempt(ip)) return fail(reply, 429, 'too-many-tries');
+      const ip = getClientKey(request, trustedProxy);
+      // Both are reserved up front, and everything up to the answer is synchronous.
+      if (!joinTries.tryAttempt(ip) || !joinTriesAll.tryAttempt(ALL_CALLERS)) return fail(reply, 429, 'too-many-tries');
       // A code that can't be read counts as a wrong guess, like one that isn't live.
       const code = parseJoinCode(request.body.code);
       const token = newToken();
       const device = code === null ? null : devices.pair(code, hashToken(token));
       if (!device) return fail(reply, 404, 'wrong-code');
       joinTries.clear(ip);
+      // Only wrong codes count against everyone, so a right one gives its slot back.
+      joinTriesAll.refund(ALL_CALLERS);
       // A browser that was already paired and pairs again replaces its old device, so the
       // host's list doesn't keep a screen that no longer exists.
       const old = access.identify(request).device;
@@ -244,7 +256,9 @@ export async function registerHostRoutes(app: FastifyInstance, options: HostRout
 
   app.get(
     '/api/live',
-    { websocket: true, onRequest: access.requireHostOrDevice },
+    // A browser sends Origin on every WebSocket handshake, and cookies ride along from any page
+    // of the same site, so the handshake is checked like a state-changing request (app.ts).
+    { websocket: true, onRequest: [rejectForeignOrigin, access.requireHostOrDevice] },
     (socket, request) => {
       const identity = access.identify(request);
       // Connecting counts as being seen, whatever the throttle says.
