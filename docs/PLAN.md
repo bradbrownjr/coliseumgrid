@@ -147,7 +147,8 @@ password itself is never sent back. Wrong codes and wrong passwords are rate lim
 client IP in both modes (`CLAUDE.md`, rule 7), with the IP taken by rule 6.
 
 From M3, the M2 host routes need a host session (offline `localhost` signs in without the
-password), and the sign-up routes need a Sign-up device or a host session.
+password), and the sign-up routes need a Sign-up device or a host session. Without one, a
+route answers 401 `{ error: "not-signed-in" }`.
 
 **Live messages** are JSON with a `type`: `{ type: "event", event }` when the event changes,
 `{ type: "players" }` when the player list changes (the host page reloads it), and

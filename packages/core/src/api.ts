@@ -17,7 +17,12 @@ export type ApiErrorCode =
   | 'not-found'
   | 'too-many-tries'
   | 'bad-request'
-  | 'server-error';
+  | 'server-error'
+  | 'not-signed-in'
+  | 'forbidden'
+  | 'wrong-password'
+  | 'wrong-code'
+  | 'not-paired';
 
 export type ApiError =
   | { error: 'refused'; reason: HandleRefusal }
@@ -61,3 +66,74 @@ export interface NewPlayerAnswer {
 export interface PinAnswer {
   pin: string;
 }
+
+// Devices and host API (docs/PLAN.md, "Devices and host API"), from M3.
+
+export type DeviceRole = 'display' | 'signup';
+
+/** The only device fields that leave the server. `lastSeen` is an ISO 8601 time. */
+export interface Device {
+  id: number;
+  role: DeviceRole;
+  label: string;
+  lastSeen: string;
+}
+
+export interface EventInfo {
+  name: string;
+}
+
+/** GET /api/host/session */
+export interface HostSessionAnswer {
+  signedIn: boolean;
+  passwordSet: boolean;
+  canSetUp: boolean;
+}
+
+/** POST /api/host/setup and POST /api/host/sign-in */
+export interface PasswordBody {
+  password: string;
+}
+
+/** POST /api/pairing/codes */
+export interface PairingCodeBody {
+  role: DeviceRole;
+}
+
+/** POST /api/pairing/codes. `code` is the canonical 6 characters; `expiresAt` is ISO 8601. */
+export interface PairingCodeAnswer {
+  code: string;
+  role: DeviceRole;
+  expiresAt: string;
+}
+
+/** POST /api/devices/join */
+export interface JoinBody {
+  code: string;
+}
+
+/** POST /api/devices/join and GET /api/devices/me */
+export interface DeviceAnswer {
+  device: Device;
+}
+
+/** GET /api/devices */
+export interface DevicesAnswer {
+  devices: Device[];
+}
+
+/** GET and PUT /api/event */
+export interface EventAnswer {
+  event: EventInfo | null;
+}
+
+/** PUT /api/event */
+export interface EventBody {
+  name: string;
+}
+
+/** Messages the server sends on GET /api/live. */
+export type LiveMessage =
+  | { type: 'event'; event: EventInfo | null }
+  | { type: 'players' }
+  | { type: 'unpaired' };
