@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-/** The current time in milliseconds, refreshed every second while `active`. */
+/** The current time in milliseconds, refreshed every second while `active`, for the count-up timers on the host and the Display. */
 export function useNow(active: boolean): number {
   const [now, setNow] = useState(Date.now);
   useEffect(() => {

@@ -20,7 +20,7 @@ import { Results, Standings, TieNotices, UpNext } from './BracketLists.tsx';
 import { byePlayer, doneMatches, formatName, resultWords } from './bracketWords.ts';
 import { StartBracketDialog } from './StartBracketDialog.tsx';
 import { StationGrid } from './StationGrid.tsx';
-import { useNow } from './useNow.ts';
+import { useNow } from '../../components/useNow.ts';
 
 /** Shows a message in the host screen's snackbar, with an Undo button when `undo` is given. */
 export type Say = (message: string, undo?: () => void) => void;

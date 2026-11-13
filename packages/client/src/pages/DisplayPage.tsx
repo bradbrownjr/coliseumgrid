@@ -1,12 +1,19 @@
-import type { EventInfo } from '@coliseumgrid/core';
+import type { Bracket, EventInfo } from '@coliseumgrid/core';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import type { ReactNode } from 'react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { getBracket } from '../api/bracket.ts';
 import { getEvent } from '../api/host.ts';
 import { AccessGate, useGoToJoin } from '../components/AccessGate.tsx';
 import { Logo } from '../components/Logo.tsx';
 import { useLive } from '../components/useLive.ts';
+import { BracketSections } from './display/BracketSections.tsx';
+import { FinalStandings } from './display/FinalStandings.tsx';
+import { StandingsTable } from './display/StandingsTable.tsx';
+import { StationsPanel } from './display/StationsPanel.tsx';
+import { TieBanner } from './display/TieBanner.tsx';
+import { UpNextPanel } from './display/UpNextPanel.tsx';
+import { WaitingPanels } from './display/WaitingPanels.tsx';
 
 /**
  * The TV is always dark. The `mode-dark` class matches the theme's colorSchemeSelector, so
@@ -33,32 +40,75 @@ export function DisplayPage() {
 }
 
 /**
- * The frame the bracket and standings will fill (docs/PLAN.md, "Devices and host API"): the
- * event name, live, and a place each for "Up next" and the match timer. Those two wait for
- * matches, which arrive in M4. Nothing here takes input.
+ * The TV (docs/PLAN.md, "Devices and host API" and "Stations and the queue"): the event name,
+ * then, once a bracket exists, the stations with their timers, "Up next", and the bracket or
+ * the standings. Before that, the two waiting messages. It reloads the bracket on each
+ * `bracket` and `players` message (a rename changes a handle) and nothing here takes input.
  */
 function DisplayFrame() {
   const [event, setEvent] = useState<EventInfo | null>(null);
+  const [bracket, setBracket] = useState<Bracket | null>(null);
+  const latestLoad = useRef(0);
   const goToJoin = useGoToJoin();
 
-  const load = useCallback(async () => {
+  const loadEvent = useCallback(async () => {
     const result = await getEvent();
     if (result.ok) setEvent(result.data.event);
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const loadBracket = useCallback(async () => {
+    // Two loads can finish out of order; only the newest request may set the screen.
+    const mine = ++latestLoad.current;
+    const result = await getBracket();
+    if (result.ok && mine === latestLoad.current) setBracket(result.data.bracket);
+  }, []);
 
-  // A message sent while the socket was down is lost, so each connect reads the event again.
+  useEffect(() => {
+    void loadEvent();
+    void loadBracket();
+  }, [loadEvent, loadBracket]);
+
+  // A message sent while the socket was down is lost, so each connect reads everything again.
   useLive({
     onMessage: (message) => {
       if (message.type === 'event') setEvent(message.event);
+      if (message.type === 'bracket' || message.type === 'players') void loadBracket();
     },
-    onOpen: () => void load(),
+    onOpen: () => {
+      void loadEvent();
+      void loadBracket();
+    },
     onEnded: goToJoin,
   });
 
+  const name = event?.name ?? 'ColiseumGrid';
+
+  if (bracket === null) {
+    return (
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: { xs: 3, md: 6 },
+          p: { xs: 2, md: 6 },
+          textAlign: 'center',
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
+      >
+        <Logo size={16} />
+        {/* The theme's largest heading, scaled by its breakpoints. */}
+        <Typography variant="h1" component="h1" sx={{ overflowWrap: 'anywhere' }}>
+          {name}
+        </Typography>
+        <WaitingPanels />
+      </Box>
+    );
+  }
+
+  // From a tablet up the page is exactly one screen tall: a TV can't scroll.
   return (
     <Box
       component="main"
@@ -66,50 +116,45 @@ function DisplayFrame() {
         flexGrow: 1,
         display: 'flex',
         flexDirection: 'column',
-        gap: { xs: 3, md: 6 },
-        p: { xs: 2, md: 6 },
-        textAlign: 'center',
-        justifyContent: 'center',
-        alignItems: 'center',
-      }}
-    >
-      <Logo size={16} />
-      {/* The theme's largest heading, scaled by its breakpoints. The TV's minimum type size is
-          set in M3 by testing on the real TV (docs/DESIGN.md, "Display (TV)"). */}
-      <Typography variant="h1" component="h1" sx={{ overflowWrap: 'anywhere' }}>
-        {event?.name ?? 'ColiseumGrid'}
-      </Typography>
-      <Box sx={{ width: '100%', display: 'grid', gridTemplateColumns: { xs: '1fr', md: '2fr 1fr' }, gap: { xs: 2, md: 4 } }}>
-        <Panel title="Up next" accent>
-          Waiting for the first match.
-        </Panel>
-        <Panel title="Match timer">Starts with the first match.</Panel>
-      </Box>
-    </Box>
-  );
-}
-
-function Panel({ title, accent = false, children }: { title: string; accent?: boolean; children: ReactNode }) {
-  return (
-    <Box
-      component="section"
-      sx={{
-        border: 2,
-        // Up next is blue (docs/DESIGN.md, "Colors"); the heading also says it in words.
-        borderColor: accent ? 'upNext.main' : 'divider',
-        borderRadius: 2,
-        p: { xs: 2, md: 4 },
-        display: 'flex',
-        flexDirection: 'column',
         gap: 2,
+        p: { xs: 2, md: 2, xl: 3 },
+        minHeight: 0,
+        height: { md: '100dvh' },
+        overflow: { md: 'hidden' },
       }}
     >
-      <Typography variant="h3" component="h2" sx={accent ? { color: 'upNext.main' } : undefined}>
-        {title}
-      </Typography>
-      <Typography variant="h4" component="p" sx={{ color: 'text.secondary' }}>
-        {children}
-      </Typography>
+      <Box component="header" sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+        <Logo size={6} />
+        <Typography component="h1" sx={{ typography: { xs: 'h4', xl: 'h3' }, overflowWrap: 'anywhere', lineHeight: 1.1 }}>
+          {name}
+        </Typography>
+      </Box>
+      {bracket.finished ? (
+        <FinalStandings standings={bracket.standings} />
+      ) : (
+        <Box
+          sx={{
+            flex: 1,
+            minHeight: 0,
+            display: 'grid',
+            gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 1fr) minmax(0, 3fr)' },
+            gap: { xs: 2, md: 3 },
+          }}
+        >
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, minHeight: 0 }}>
+            <StationsPanel stations={bracket.stations} />
+            <UpNextPanel matches={bracket.upNext} />
+          </Box>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, minHeight: 0 }}>
+            <TieBanner ties={bracket.ties} />
+            {bracket.format === 'round_robin' ? (
+              <StandingsTable rows={bracket.standings} />
+            ) : (
+              <BracketSections bracket={bracket} />
+            )}
+          </Box>
+        </Box>
+      )}
     </Box>
   );
 }
