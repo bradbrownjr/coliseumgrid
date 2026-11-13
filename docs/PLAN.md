@@ -68,8 +68,11 @@ Push also goes through the browser maker's push service (Apple's for iOS), so it
 internet (<https://www.w3.org/TR/push-api/>). Offline, the page alert works only while the
 page is open and the screen is on. Whether a page's sound keeps playing on a locked phone is
 undocumented; WebKit bug reports say iOS stops it
-(<https://bugs.webkit.org/show_bug.cgi?id=173332>). `PLAYTEST.md` tests it on real phones
-before anything relies on it.
+(<https://bugs.webkit.org/show_bug.cgi?id=173332>). On Android there is one first-hand
+report: Pattern Break's jukebox keeps playing with the screen locked on a Samsung Galaxy S25
+(Brad, 2026-11-13). That is sound already playing; an alert has to start a sound later,
+which is still untested. `PLAYTEST.md` tests both on real phones before anything relies on
+it.
 
 An option not yet planned: a real certificate for a hostname that points at the laptop on
 the venue network would make the page a secure context offline, which allows the wake lock
