@@ -6,7 +6,6 @@
 
 import type {
   ApiError,
-  ApiErrorCode,
   BracketAnswer,
   BracketNowAnswer,
   BracketPlayerBody,
@@ -26,6 +25,7 @@ import {
   notSignedIn,
   nullableBracketSchema,
   objectSchema,
+  refuse,
 } from './api-schemas.ts';
 import {
   bracketAnswer,
@@ -40,19 +40,20 @@ import {
 } from './bracket-engine.ts';
 import type { BracketStore } from './bracket-store.ts';
 import { iso, type Clock } from './clock.ts';
+import type { Competition } from './competition.ts';
 import type { EventPlayers } from './event-players.ts';
 import type { Events } from './events.ts';
 import type { LiveHub } from './live.ts';
-import type { Players } from './players.ts';
 import { secureRandom } from './secure-random.ts';
 import type { WriteChain } from './write-chain.ts';
 
 export interface BracketRoutesOptions {
   access: Access;
-  players: Players;
   events: Events;
   eventPlayers: EventPlayers;
   store: BracketStore;
+  /** Knows the event's heats too: one competition per event. */
+  competition: Competition;
   hub: LiveHub;
   chain: WriteChain;
   now: Clock;
@@ -79,10 +80,10 @@ const noBracket = errorSchema(['no-bracket']);
 const notFound = errorSchema(['not-found', 'no-bracket']);
 
 export async function registerBracketRoutes(app: FastifyInstance, options: BracketRoutesOptions): Promise<void> {
-  const { access, players, events, eventPlayers, store, hub, chain, now } = options;
+  const { access, events, eventPlayers, store, competition, hub, chain, now } = options;
 
   /** Every current handle, read when the answer is made so a rename shows at once. */
-  const handleLookup = (): HandleLookup => new Map(players.list().map((p) => [p.id, p.handle]));
+  const handleLookup = competition.handles;
 
   /** The current event's bracket, or null. */
   const current = (): { eventId: number; state: BracketState } | null => {
@@ -96,14 +97,6 @@ export async function registerBracketRoutes(app: FastifyInstance, options: Brack
     store.save(eventId, answer.state);
     hub.broadcast({ type: 'bracket' });
     return answer.bracket;
-  };
-
-  /** Refuses with the engine's code at the status the route's table gives it. */
-  const refuse = (reply: FastifyReply, error: ApiErrorCode, statuses: Record<string, number>): FastifyReply => {
-    const status = statuses[error];
-    // A code the route doesn't list can't be sent: its response schema would refuse it.
-    if (status === undefined) throw new Error(`the engine refused with ${error}, which this route does not answer`);
-    return fail(reply, status, error as Exclude<ApiError['error'], 'refused'>);
   };
 
   /**
@@ -154,9 +147,9 @@ export async function registerBracketRoutes(app: FastifyInstance, options: Brack
     async (request, reply) =>
       chain.run(async () => {
         const handles = handleLookup();
-        const old = current();
-        // A finished bracket is replaced; one still being played is not.
-        if (old && !(await bracketAnswer(old.state, handles)).finished) return fail(reply, 409, 'bracket-running');
+        // A finished bracket or heats is replaced; one still being played is not.
+        const eventId = events.currentId();
+        if (eventId !== null && (await competition.running(eventId, handles))) return fail(reply, 409, 'bracket-running');
         const { format, bestOf, stations, playerIds } = request.body;
         const answer = await createBracket(
           { id: store.nextBracketId(), format, bestOf, stations, playerIds, createdAt: iso(now()) },
@@ -169,7 +162,10 @@ export async function registerBracketRoutes(app: FastifyInstance, options: Brack
         if (created) hub.broadcast({ type: 'event', event });
         // A player the host picked from "Not signed up" is here now, so the event lists them.
         for (const playerId of playerIds) eventPlayers.add(playerId);
-        return reply.code(201).send({ bracket: commit(id, answer) });
+        // Finished heats the event had are gone with it, so the screens that showed them reload.
+        if (competition.startBracket(id, answer.state)) hub.broadcast({ type: 'heats' });
+        hub.broadcast({ type: 'bracket' });
+        return reply.code(201).send({ bracket: answer.bracket });
       }),
   );
 

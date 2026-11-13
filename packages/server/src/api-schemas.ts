@@ -2,7 +2,7 @@
 // body or an answer, so a field added to a handler later can't leave the server unless it is
 // added here too (CLAUDE.md, rule 1).
 
-import type { ApiError, BracketFormat, HandleRefusal, MatchSide, MatchStatus } from '@coliseumgrid/core';
+import type { ApiError, ApiErrorCode, BracketFormat, HandleRefusal, HeatKind, HeatStatus, MatchSide, MatchStatus } from '@coliseumgrid/core';
 import type { FastifyReply } from 'fastify';
 
 // Written as a Record so a reason added to core fails the type check until it is listed here.
@@ -37,6 +37,14 @@ export const notSignedIn = errorSchema(['not-signed-in']);
 
 export function fail(reply: FastifyReply, status: number, error: Exclude<ApiError['error'], 'refused'>): FastifyReply {
   return reply.code(status).send({ error } satisfies ApiError);
+}
+
+/** Refuses with an engine's code at the status the route's table gives it. */
+export function refuse(reply: FastifyReply, error: ApiErrorCode, statuses: Record<string, number>): FastifyReply {
+  const status = statuses[error];
+  // A code the route doesn't list can't be sent: its response schema would refuse it.
+  if (status === undefined) throw new Error(`the engine refused with ${error}, which this route does not answer`);
+  return fail(reply, status, error as Exclude<ApiError['error'], 'refused'>);
 }
 
 /** A player leaves the server as an id and a handle and nothing more (CLAUDE.md, rule 1). */
@@ -77,6 +85,9 @@ const matchSchema = objectSchema({
   resultId: { type: ['integer', 'null'] },
 });
 
+/** A tie that has to be played off, in a bracket or in heats. */
+const tieSchema = objectSchema({ place: { type: 'integer' }, players: { type: 'array', items: playerSchema }, started: { type: 'boolean' } });
+
 export const bracketSchema = objectSchema({
   id: { type: 'integer' },
   format: { type: 'string', enum: BRACKET_FORMATS },
@@ -99,10 +110,47 @@ export const bracketSchema = objectSchema({
       losses: { type: 'integer' },
     }),
   },
-  ties: {
-    type: 'array',
-    items: objectSchema({ place: { type: 'integer' }, players: { type: 'array', items: playerSchema }, started: { type: 'boolean' } }),
-  },
+  ties: { type: 'array', items: tieSchema },
 });
 
 export const nullableBracketSchema = nullable(bracketSchema);
+
+// Heats (docs/PLAN.md, "Heats API"). Written like the bracket shapes: every object is closed.
+const HEAT_KINDS = Object.keys({ round: true, 'tie-break': true, final: true } satisfies Record<HeatKind, true>);
+const HEAT_STATUSES = Object.keys({ ready: true, playing: true, done: true } satisfies Record<HeatStatus, true>);
+
+const heatSchema = objectSchema({
+  id: { type: 'integer' },
+  kind: { type: 'string', enum: HEAT_KINDS },
+  round: { type: 'integer' },
+  number: { type: 'integer' },
+  status: { type: 'string', enum: HEAT_STATUSES },
+  players: { type: 'array', items: playerSchema },
+  order: nullable({ type: 'array', items: playerSchema }),
+  resultId: { type: ['integer', 'null'] },
+});
+
+export const heatsSchema = objectSchema({
+  id: { type: 'integer' },
+  races: { type: 'integer', enum: [1, 2, 3, 4] },
+  rounds: { type: 'integer' },
+  points: { type: 'array', items: { type: 'integer' } },
+  finished: { type: 'boolean' },
+  lateOpen: { type: 'boolean' },
+  lastResultId: { type: ['integer', 'null'] },
+  round: { type: ['integer', 'null'] },
+  stations: {
+    type: 'array',
+    items: objectSchema({ number: { type: 'integer' }, heat: nullable(heatSchema), calledAt: { type: ['string', 'null'] } }),
+  },
+  upNext: { type: 'array', items: heatSchema },
+  heats: { type: 'array', items: heatSchema },
+  standings: {
+    type: 'array',
+    items: objectSchema({ place: { type: 'integer' }, player: playerSchema, points: { type: 'integer' }, heatsPlayed: { type: 'integer' } }),
+  },
+  finalSize: { type: 'integer' },
+  ties: { type: 'array', items: tieSchema },
+});
+
+export const nullableHeatsSchema = nullable(heatsSchema);

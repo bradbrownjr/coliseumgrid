@@ -119,6 +119,54 @@ export const MIGRATIONS: readonly string[] = [
   ALTER TABLE bracket_results ADD COLUMN undone_at TEXT;
   ALTER TABLE bracket_results ADD COLUMN undone_step INTEGER CHECK ((undone_step IS NULL) = (undone_at IS NULL));
   `,
+  // M5: heats (docs/PLAN.md, "Heats API"). Same shape as the bracket tables, with their own
+  // columns because `brackets` and `bracket_results` can't be altered to fit (SQLite's ALTER
+  // TABLE can't change a CHECK or drop NOT NULL). A run is its settings, the points table and
+  // the seeding as JSON, and three ordered lists; the server rebuilds the rest by replay. The
+  // event has at most one run, and deleting a run removes its lists. AUTOINCREMENT ids are never
+  // reused, so an undone result's id can't later name another result. Player ids inside a run
+  // are plain numbers with no foreign key: merging a player away is refused while they are in
+  // the current event's heats (players-routes.ts). No handle is stored. `finish_order` is the
+  // JSON list of player ids, 1st first. An older undo keeps its result's row with the step and
+  // time of the undo, both or neither.
+  `
+  CREATE TABLE heat_runs (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id   INTEGER NOT NULL UNIQUE REFERENCES events(id),
+    stations   INTEGER NOT NULL CHECK (stations BETWEEN 1 AND 8),
+    races      INTEGER NOT NULL CHECK (races BETWEEN 1 AND 4),
+    rounds     INTEGER NOT NULL CHECK (rounds BETWEEN 0 AND 3),
+    points     TEXT NOT NULL,
+    seeding    TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE heat_results (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id       INTEGER NOT NULL REFERENCES heat_runs(id) ON DELETE CASCADE,
+    heat_id      INTEGER NOT NULL,
+    finish_order TEXT NOT NULL,
+    at           TEXT NOT NULL,
+    undone_step  INTEGER,
+    undone_at    TEXT,
+    CHECK ((undone_step IS NULL) = (undone_at IS NULL))
+  );
+  CREATE INDEX heat_results_run ON heat_results (run_id, id);
+  CREATE TABLE heat_late_joins (
+    run_id    INTEGER NOT NULL REFERENCES heat_runs(id) ON DELETE CASCADE,
+    position  INTEGER NOT NULL,
+    player_id INTEGER NOT NULL,
+    heat_id   INTEGER NOT NULL,
+    step      INTEGER NOT NULL,
+    PRIMARY KEY (run_id, position)
+  );
+  CREATE TABLE heat_tie_breaks (
+    run_id   INTEGER NOT NULL REFERENCES heat_runs(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    players  TEXT NOT NULL,
+    step     INTEGER NOT NULL,
+    PRIMARY KEY (run_id, position)
+  );
+  `,
 ];
 
 export function migrate(db: Database): void {
@@ -141,18 +189,32 @@ export function migrate(db: Database): void {
   }
 }
 
-/** Runs `work` in one transaction: all its writes happen, or none do. */
+/** How many `inTransaction` calls are open, for naming a savepoint. The work is synchronous, so one counter is enough. */
+let savepointDepth = 0;
+
+/**
+ * Runs `work` in one transaction: all its writes happen, or none do. Inside another
+ * transaction it is a savepoint (https://sqlite.org/lang_savepoint.html), so a store's save can
+ * be one step of a larger change that is also all or nothing.
+ */
 export function inTransaction<T>(db: Database, work: () => T): T {
-  db.exec('BEGIN');
+  const nested = db.isTransaction;
+  // A savepoint's name only has to differ from the ones it sits inside.
+  const name = `nested_${savepointDepth}`;
+  db.exec(nested ? `SAVEPOINT ${name}` : 'BEGIN');
+  savepointDepth += 1;
   try {
     const result = work();
-    db.exec('COMMIT');
+    db.exec(nested ? `RELEASE ${name}` : 'COMMIT');
     return result;
   } catch (error) {
-    db.exec('ROLLBACK');
+    db.exec(nested ? `ROLLBACK TO ${name}; RELEASE ${name}` : 'ROLLBACK');
     throw error;
+  } finally {
+    savepointDepth -= 1;
   }
 }
+
 
 /**
  * Opens the database at `file`, creating its folder, and brings the schema up to date.

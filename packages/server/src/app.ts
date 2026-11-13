@@ -9,12 +9,15 @@ import { createAccess, rejectForeignOrigin } from './access.ts';
 import { registerBracketRoutes } from './bracket-routes.ts';
 import { createBracketStore } from './bracket-store.ts';
 import type { Clock } from './clock.ts';
+import { createCompetition } from './competition.ts';
 import type { Mode } from './config.ts';
 import { openDatabase, type Database } from './database.ts';
 import { createDevices } from './devices.ts';
 import { createEventPlayers } from './event-players.ts';
 import { createEvents } from './events.ts';
 import { registerHostRoutes } from './host-routes.ts';
+import { registerHeatRoutes } from './heat-routes.ts';
+import { createHeatStore } from './heat-store.ts';
 import { createHostStore } from './host-store.ts';
 import { createLiveHub } from './live.ts';
 import { createPlayers } from './players.ts';
@@ -127,8 +130,10 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
   const players = createPlayers(db);
   const eventPlayers = createEventPlayers(db, events, (event) => hub.broadcast({ type: 'event', event }));
   const store = createBracketStore(db);
-  // Every bracket write, and a merge that could delete a player a bracket is about to take,
-  // goes through this one chain (docs/PLAN.md, "Brackets API").
+  const heatStore = createHeatStore(db);
+  const competition = createCompetition(db, store, heatStore, players);
+  // Every bracket and heats write, and a merge that could delete a player either is about to
+  // take, goes through this one chain (docs/PLAN.md, "Brackets API", "Heats API").
   const chain = createWriteChain();
 
   await registerHostRoutes(app, {
@@ -145,7 +150,7 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
     eventPlayers,
     inBracket: (playerId) => {
       const eventId = events.currentId();
-      return eventId !== null && store.hasPlayer(eventId, playerId);
+      return eventId !== null && competition.hasPlayer(eventId, playerId);
     },
     exclusive: (task) => chain.run(task),
     access,
@@ -154,7 +159,8 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
     ...(options.trustedProxy && { trustedProxy: options.trustedProxy }),
   });
 
-  await registerBracketRoutes(app, { access, players, events, eventPlayers, store, hub, chain, now });
+  await registerBracketRoutes(app, { access, events, eventPlayers, store, competition, hub, chain, now });
+  await registerHeatRoutes(app, { access, events, eventPlayers, store: heatStore, competition, hub, chain, now });
 
   // @fastify/static throws on a relative root while existsSync accepts one, so resolve it here
   // (against the working directory) in the factory rather than in each caller.

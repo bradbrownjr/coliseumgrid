@@ -38,9 +38,9 @@ export interface PlayerRoutesOptions {
   players: Players;
   /** Who signed up to the current event: sign-up, claim, and the host's Add player fill it. */
   eventPlayers: EventPlayers;
-  /** True if the player is in a bracket of the current event (merging them away is refused). */
+  /** True if the player is in a bracket or in heats of the current event (merging them away is refused). */
   inBracket: (playerId: number) => boolean;
-  /** Runs a task after the bracket writes already queued, so a merge can't land inside one. */
+  /** Runs a task after the bracket and heats writes already queued, so a merge can't land inside one. */
   exclusive: <T>(task: () => T | Promise<T>) => Promise<T>;
   /** Decides who may call each route (docs/PLAN.md, "Devices and host API"). */
   access: Access;
@@ -310,8 +310,8 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
         const merged = players.get(id);
         const kept = players.get(intoId);
         if (!merged || !kept) return fail(reply, 404, 'not-found');
-        // A bracket holds its players by id, running or finished, and its answer needs every
-        // handle. Deleting the bracket frees them.
+        // A bracket or heats holds its players by id, running or finished, and its answer needs
+        // every handle. Deleting it frees them.
         if (inBracket(id)) return fail(reply, 409, 'in-bracket');
         // Attendance follows the player kept; nothing else references a player yet.
         eventPlayers.move(id, intoId);
