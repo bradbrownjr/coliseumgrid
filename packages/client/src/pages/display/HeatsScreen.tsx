@@ -11,18 +11,16 @@ import { UpNextPanel } from './UpNextPanel.tsx';
 import {
   finalHeat,
   finalists,
-  heatCutAfter,
   heatLines,
   heatRoundText,
   heatStationCards,
   heatStationLayout,
   heatTableType,
-  heatTieMessage,
   heatUpNext,
-  noResultsYet,
   scaleType,
 } from './model.ts';
 import { useScreen } from './useScreen.ts';
+import { heatCutAfter, heatTieMessage, noResultsYet } from '../../heatsWords.ts';
 
 /**
  * The TV for races and free-for-alls (docs/PLAN.md, "Races and free-for-all"): the stations and

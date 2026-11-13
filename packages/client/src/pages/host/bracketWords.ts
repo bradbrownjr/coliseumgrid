@@ -14,6 +14,12 @@ import {
   type TieNotice,
 } from '@coliseumgrid/core';
 import { ERROR_WORDS } from '../../api/errors.ts';
+import { joinHandles } from '../../handles.ts';
+
+/** "1 station", "3 stations". */
+export function stationWords(count: number): string {
+  return count === 1 ? '1 station' : `${count} stations`;
+}
 
 /** 1 to "1st", 2 to "2nd", 3 to "3rd", 4 to "4th", 11 to "11th", 22 to "22nd". */
 export function placeWords(place: number): string {
@@ -23,12 +29,7 @@ export function placeWords(place: number): string {
   return `${place}${suffix}`;
 }
 
-/** "Zap", "Zap and Kai", "Zap, Kai, and Blaze". */
-export function joinHandles(players: readonly Pick<Player, 'handle'>[]): string {
-  const handles = players.map((player) => player.handle);
-  if (handles.length <= 2) return handles.join(' and ');
-  return `${handles.slice(0, -1).join(', ')}, and ${handles.at(-1)}`;
-}
+export { joinHandles };
 
 /** "Tie for 1st: Zap and Kai". */
 export function tieWords(tie: Pick<TieNotice, 'place' | 'players'>): string {

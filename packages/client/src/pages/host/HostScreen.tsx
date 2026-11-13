@@ -21,22 +21,25 @@ import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { addLatePlayer } from '../../api/bracket.ts';
+import { addLateHeatPlayer } from '../../api/heats.ts';
 import { failureWords } from '../../api/errors.ts';
 import { getEvent, getHostSession, signOutHost } from '../../api/host.ts';
 import { addPlayer, listPlayers, renamePlayer, resetPin } from '../../api/players.ts';
 import { ColorModePicker } from '../../components/ColorModePicker.tsx';
 import { Logo } from '../../components/Logo.tsx';
 import { useLive } from '../../components/useLive.ts';
-import { BracketSection } from './BracketSection.tsx';
 import { playersInBracket } from './bracketWords.ts';
+import { CompetitionSection } from './CompetitionSection.tsx';
 import { DeviceList } from './DeviceList.tsx';
 import { EventName } from './EventName.tsx';
+import { playersInHeats } from './groupWords.ts';
 import { HandleDialog } from './HandleDialog.tsx';
 import { MergeDialog } from './MergeDialog.tsx';
 import { PairingPanel } from './PairingPanel.tsx';
 import { PinDialog } from './PinDialog.tsx';
 import { PlayerActions } from './PlayerActions.tsx';
 import { useBracket } from './useBracket.ts';
+import { useHeats } from './useHeats.ts';
 
 type Dialog =
   | { kind: 'add' }
@@ -59,7 +62,10 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
   // adds an Undo button (docs/DESIGN.md, "Undo, not Are you sure").
   const [notice, setNotice] = useState<{ id: number; message: string; undo?: () => void } | null>(null);
   const [noticeOpen, setNoticeOpen] = useState(false);
-  const { bracket, loadWords: bracketWords, reload: reloadBracket, apply: applyBracket } = useBracket();
+  const bracketState = useBracket();
+  const heatsState = useHeats();
+  const { value: bracket, reload: reloadBracket, apply: applyBracket } = bracketState;
+  const { value: heats, reload: reloadHeats, apply: applyHeats } = heatsState;
   // Which reset the open PIN dialog is waiting on, so a reset the host closed can't reopen it.
   const resetting = useRef(0);
   // The ref stops a second "Add to bracket" tap in the same instant; the state disables the buttons.
@@ -86,23 +92,26 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
   }, []);
 
   // The live connection reloads the player list when it changes anywhere (a sign-up tablet),
-  // and the event name when another host window renames it. The bracket reloads with the
-  // players too, since it shows handles and a rename changes one. A message sent while the
-  // socket was down is lost, so each (re)connect reloads all three. An ended sign-in is the
+  // and the event name when another host window renames it. The bracket and the groups reload
+  // with the players too, since they show handles and a rename changes one. A message sent while
+  // the socket was down is lost, so each (re)connect reloads all of them. An ended sign-in is the
   // same as a 401.
   useLive({
     onMessage: (message) => {
       if (message.type === 'players') {
         void load();
         void reloadBracket();
+        void reloadHeats();
       }
       if (message.type === 'event') setEvent(message.event);
       if (message.type === 'bracket') void reloadBracket();
+      if (message.type === 'heats') void reloadHeats();
     },
     onOpen: () => {
       void load();
       void loadEvent();
       void reloadBracket();
+      void reloadHeats();
     },
     onEnded: onSignedOut,
   });
@@ -122,23 +131,31 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
     setNoticeOpen(true);
   };
 
-  const addToBracket = async (player: Player) => {
+  const addToCompetition = async (player: Player) => {
     if (adding.current) return;
     adding.current = true;
     setAddBusy(true);
-    const result = await addLatePlayer(player.id);
+    // Whichever competition is running takes the late player.
+    const result = heats && !bracket ? await addLateHeatPlayer(player.id) : await addLatePlayer(player.id);
     adding.current = false;
     setAddBusy(false);
     if (!result.ok) {
       void reloadBracket();
+      void reloadHeats();
       return say(failureWords(result));
     }
-    applyBracket(result.data.bracket);
-    say(`Added ${player.handle} to the bracket`);
+    if ('heats' in result.data) {
+      applyHeats(result.data.heats);
+      say(`Added ${player.handle} to a group`);
+    } else {
+      applyBracket(result.data.bracket);
+      say(`Added ${player.handle} to the bracket`);
+    }
   };
 
-  // Late players come in while the bracket says so, and only the players not in it yet.
-  const inBracket = bracket && bracket.lateOpen ? playersInBracket(bracket) : null;
+  // Late players come in while the competition says so, and only the players not in it yet.
+  const alreadyIn = bracket && bracket.lateOpen ? playersInBracket(bracket) : heats && heats.lateOpen ? playersInHeats(heats) : null;
+  const lateLabel = heats && !bracket ? 'Add to group' : 'Add to bracket';
 
   const close = () => {
     resetting.current += 1;
@@ -193,7 +210,7 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
           <DeviceList onUnpaired={say} />
         </Section>
 
-        <BracketSection bracket={bracket} loadWords={bracketWords} players={players} apply={applyBracket} reload={reloadBracket} say={say} />
+        <CompetitionSection bracket={bracketState} heats={heatsState} players={players} say={say} />
 
         <Box component="section">
         <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', mb: 3 }}>
@@ -249,7 +266,7 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
                         onRename={() => setDialog({ kind: 'rename', player })}
                         onResetPin={() => void reset(player)}
                         onMerge={() => setDialog({ kind: 'merge', player })}
-                        onAddToBracket={inBracket && !inBracket.has(player.id) ? () => void addToBracket(player) : undefined}
+                        addLate={alreadyIn && !alreadyIn.has(player.id) ? { label: lateLabel, run: () => void addToCompetition(player) } : undefined}
                         addBusy={addBusy}
                       />
                     </TableCell>

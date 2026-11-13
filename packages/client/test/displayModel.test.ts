@@ -6,7 +6,6 @@ import {
   chunk,
   densityFor,
   elapsedText,
-  joinHandles,
   loserWords,
   ordinal,
   scaleType,
@@ -21,6 +20,7 @@ import {
   totalRows,
   windowRounds,
 } from '../src/pages/display/model.ts';
+import { joinHandles } from '../src/handles.ts';
 
 const player = (id: number, handle = `P${id}`): Player => ({ id, handle });
 let nextId = 1;

@@ -3,24 +3,21 @@ import { describe, expect, it } from 'vitest';
 import {
   bracketStationCards,
   bracketUpNext,
-  cutAfter,
   finalHeat,
   finalists,
-  heatCutAfter,
   heatLabel,
   heatLines,
   heatRoundText,
   heatStationCards,
   heatStationLayout,
   heatTableType,
-  heatTieMessage,
   heatUpNext,
-  noResultsYet,
   pointsText,
   splitPodium,
   splitTable,
   tableTypeFor,
 } from '../src/pages/display/model.ts';
+import { cutAfter, heatCutAfter, heatTieMessage, noResultsYet } from '../src/heatsWords.ts';
 
 const player = (id: number, handle = `P${id}`): Player => ({ id, handle });
 const group = (ids: number[], kind: HeatKind = 'round', number = 1, status: Heat['status'] = 'ready'): Heat => ({

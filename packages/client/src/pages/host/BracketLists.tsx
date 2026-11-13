@@ -20,10 +20,24 @@ import { useState } from 'react';
 import { byePlayer, matchTitle, matchWords, placeWords, resultWords, tieWords } from './bracketWords.ts';
 
 /** How many rows a long list shows before "Show all". A 32-player round robin has 496 matches. */
-const SHORT_LIST = 8;
+export const SHORT_LIST = 8;
 
-/** "Tie for 1st: Zap and Kai", with one "Play tie-break" button for the ties not started. */
-export function TieNotices({ ties, busy, onPlay }: { ties: TieNotice[]; busy: boolean; onPlay: () => void }) {
+/** "Tie for 1st: Zap and Kai", and a note once the tie-break matches are on the stations. */
+const withTieBreakNote = (tie: TieNotice): string => `${tieWords(tie)}${tie.started ? ' (tie-break is on the stations)' : ''}`;
+
+/** The ties, one line each, with one "Play tie-break" button for the ties not started. */
+export function TieNotices({
+  ties,
+  busy,
+  onPlay,
+  message = withTieBreakNote,
+}: {
+  ties: TieNotice[];
+  busy: boolean;
+  onPlay: () => void;
+  /** The line for one tie; groups word it by what is at stake. */
+  message?: (tie: TieNotice) => string;
+}) {
   if (ties.length === 0) return null;
   const waiting = ties.some((tie) => !tie.started);
   return (
@@ -32,8 +46,7 @@ export function TieNotices({ ties, busy, onPlay }: { ties: TieNotice[]; busy: bo
         <Stack sx={{ gap: 0.5 }}>
           {ties.map((tie) => (
             <Typography key={tie.place} sx={{ overflowWrap: 'anywhere' }}>
-              {tieWords(tie)}
-              {tie.started && ' (tie-break is on the stations)'}
+              {message(tie)}
             </Typography>
           ))}
         </Stack>
@@ -88,6 +101,22 @@ interface ResultsProps {
   onUndo: (match: BracketMatch) => void;
 }
 
+/** A result's Undo button. The icon goes on a phone so a long handle keeps its room. */
+export function UndoButton({ busy, label, onClick }: { busy: boolean; label: string; onClick: () => void }) {
+  return (
+    <Button
+      variant="outlined"
+      startIcon={<UndoIcon />}
+      disabled={busy}
+      sx={(theme) => ({ flexShrink: 0, [theme.breakpoints.down('sm')]: { '.MuiButton-startIcon': { display: 'none' } } })}
+      aria-label={label}
+      onClick={onClick}
+    >
+      Undo
+    </Button>
+  );
+}
+
 /** Every recorded result with an Undo (CLAUDE.md, hard rule 5), then the players who move on without playing. */
 export function Results({ done, byes, busy, onUndo }: ResultsProps) {
   const [all, setAll] = useState(false);
@@ -118,17 +147,7 @@ export function Results({ done, byes, busy, onUndo }: ResultsProps) {
                   secondary={matchTitle(match)}
                   slotProps={{ primary: { sx: { overflowWrap: 'anywhere' } } }}
                 />
-                <Button
-                  variant="outlined"
-                  startIcon={<UndoIcon />}
-                  disabled={busy}
-                  // The icon goes on a phone so a long handle keeps its room.
-                  sx={(theme) => ({ flexShrink: 0, [theme.breakpoints.down('sm')]: { '.MuiButton-startIcon': { display: 'none' } } })}
-                  aria-label={`Undo: ${resultWords(match)}`}
-                  onClick={() => onUndo(match)}
-                >
-                  Undo
-                </Button>
+                <UndoButton busy={busy} label={`Undo: ${resultWords(match)}`} onClick={() => onUndo(match)} />
               </ListItem>
             ))}
           </List>

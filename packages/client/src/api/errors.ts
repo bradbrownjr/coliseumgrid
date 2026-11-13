@@ -40,7 +40,7 @@ export const ERROR_WORDS: Record<ClientErrorCode, string> = {
   'bracket-running': 'A bracket or groups are already running. Finish or delete them first.',
   'too-few-players': 'Pick more players to start.',
   'too-many-players': `Pick ${BRACKET_PLAYERS_MAX} players at most.`,
-  'not-on-station': "That match isn't on a station.",
+  'not-on-station': "That isn't on a station.",
   'undo-later-first': 'Undo the later results first.',
   'nothing-to-undo': 'There is nothing to undo.',
   'late-closed': "It's too late to add a player.",

@@ -21,19 +21,19 @@ interface PlayerActionsProps {
   onRename: () => void;
   onResetPin: () => void;
   onMerge: () => void;
-  /** Given only while the bracket can take a late player and this player isn't in it. */
-  onAddToBracket?: (() => void) | undefined;
-  /** An add to the bracket is on its way, so the button waits for it. */
+  /** Given only while the bracket or the groups can take a late player and this player isn't in. */
+  addLate?: { label: string; run: () => void } | undefined;
+  /** A late add is on its way, so the button waits for it. */
   addBusy?: boolean;
 }
 
 /**
- * The things a host does to a player: three always, and "Add to bracket" while a late player can
- * join. They are buttons from the sm breakpoint up and one menu button below it, where the
+ * The things a host does to a player: three always, and "Add to bracket" or "Add to group" while a
+ * late player can join. They are buttons from the sm breakpoint up and one menu button below it, where the
  * buttons don't fit a row (docs/DESIGN.md, "Phone width"). One list of actions feeds both, so
  * they can't drift apart.
  */
-export function PlayerActions({ player, canMerge, onRename, onResetPin, onMerge, onAddToBracket, addBusy = false }: PlayerActionsProps) {
+export function PlayerActions({ player, canMerge, onRename, onResetPin, onMerge, addLate, addBusy = false }: PlayerActionsProps) {
   const theme = useTheme();
   const roomForButtons = useMediaQuery(theme.breakpoints.up('sm'));
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
@@ -42,7 +42,7 @@ export function PlayerActions({ player, canMerge, onRename, onResetPin, onMerge,
     { label: 'Rename', icon: <EditIcon />, run: onRename, disabled: false },
     { label: 'Reset PIN', icon: <KeyIcon />, run: onResetPin, disabled: false },
     { label: 'Merge', icon: <MergeIcon />, run: onMerge, disabled: !canMerge },
-    ...(onAddToBracket ? [{ label: 'Add to bracket', icon: <PersonAddIcon />, run: onAddToBracket, disabled: addBusy }] : []),
+    ...(addLate ? [{ label: addLate.label, icon: <PersonAddIcon />, run: addLate.run, disabled: addBusy }] : []),
   ];
 
   if (roomForButtons) {
