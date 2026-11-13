@@ -32,25 +32,38 @@ start the next until the current one is done.
 
 Tasks:
 
-- Single elimination, double elimination, and round robin through `brackets-manager`.
-- Best of 1, 3, or 5. Random seeding.
-- Stations and the queue. One-tap results with undo.
-- Late sign-up: a late player takes a first-round bye until round 1 is finished, and joins
-  a round robin until its first result (`PLAN.md`, "Late sign-up"). First check whether
-  `brackets-manager` can fill a bye after round 1 has started; its seeding guide allows an
-  update "as long as the seeding update does not impact existing results" but doesn't say
-  what counts.
-- The bracket on the Display screen.
+- Single elimination (with a 3rd-place match), double elimination (two lives, from 3
+  players), and round robin through `brackets-manager`, for 2 to 32 players. Best of 1, 3,
+  or 5 as a label, with one tap per match. Random seeding (`PLAN.md` section 5).
+- The bracket stored as settings, a seeding list, and a result log, rebuilt by replay
+  (`PLAN.md`, "Brackets API"). Migration 3, `event_players`, and the routes.
+- Stations (1 to 8, fixed at creation) and the queue, with the bye hold-back and the
+  count-up timer (`PLAN.md`, "Stations and the queue").
+- One-tap results. Undo of any result when no later result depends on it.
+- Ties: a round robin's places 1 to 3 are never shared, with a tie-break round when head-to-head
+  doesn't settle them (`PLAN.md`, "Ties").
+- Late sign-up: a late player takes a first-round bye until round 1 is finished, and takes
+  a round robin's empty slot when the count is odd (`PLAN.md`, "Late sign-up").
+- Merging away a player in an unfinished bracket is refused (409 `in-bracket`).
+- The host's Bracket section, and the bracket on the Display screen.
 
 Acceptance checks:
 
-- Tests run every bracket size from 2 to 32 players in each format to a finish, with byes
-  and the double-elimination final's rematch.
-- A late player fills a bye and plays that match; with no bye left, or once round 1 is
-  finished, the late sign-up is refused and on-time players' matches don't change.
-- Undoing any result restores the bracket exactly as it was.
+- Tests run every bracket size from 2 to 32 players in each format to a finish (two lives
+  from 3), with byes and the double-elimination final's rematch.
+- Single elimination plays a 3rd-place match, and places 1 to 3 are unique in every format.
+- A late player fills a bye and plays that match; with no bye left, with an even-count round
+  robin, or once round 1 is finished, the late sign-up is refused and on-time players'
+  matches don't change.
+- Undoing any result restores the bracket exactly as it was, and undoing an older result
+  works when nothing later depends on it and is refused (`undo-later-first`) when something
+  does.
+- A round robin with a tie for 1st, 2nd, or 3rd plays a tie-break round and ends with each of
+  those places held by one player, including a three-way loop and a tie-break round that is
+  itself tied.
+- Two lives with 2 players is refused (`too-few-players`).
 
-**Docs:** `PLAN.md` section 5.
+**Docs:** `PLAN.md` sections 3, 5, 6, and 9, `DESIGN.md`, `DEVELOPMENT.md`, `PLAYTEST.md`.
 
 ## M5 Races and free-for-all
 
@@ -68,7 +81,8 @@ Acceptance checks:
 - Tests run every player count from 2 to 32 to a final.
 - A late player plays the same number of heats as everyone else, and no heat already run
   changes.
-- Ties are settled by the rule chosen in "Open decisions".
+- Ties are settled by the rule in `PLAN.md`, "Ties": one tie-break race among the tied
+  players, at the cut line for the final and for places 1 to 3 of the final.
 
 **Docs:** `PLAN.md` section 5.
 
@@ -176,5 +190,4 @@ Acceptance checks:
 
 These need Brad's answer before the work that depends on them. Don't guess.
 
-- **Heat tie-breaks** (M5): best single finish, then a tie-break race? Or shared place?
 - **Default points table** (M5): 4, 3, 2, 1 is the plan's starting point.

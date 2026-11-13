@@ -256,10 +256,39 @@ The setup wizard offers three cards. Each has its options under "More options".
 
 ### 1 vs 1 bracket
 
-- Best of 1, 3, or 5.
-- Seeding: random, or by past results for returning handles.
-- Byes go to the top seeds. On screen a bye reads as "Moves on this round" (see
-  `DOC-STYLE.md`, "Tournament words on screen").
+Three formats, all run by `brackets-manager`. Checked against version 1.11.1 on 2026-11-13.
+
+| On screen | Format | Players | Results to a finish |
+|---|---|---|---|
+| One life | Single elimination, with a 3rd-place match | 2 to 32 | n - 1, plus 1 for the 3rd-place match from 4 players |
+| Two lives | Double elimination: out after a second loss | 3 to 32 | 2n - 2, or 2n - 1 when the rematch for the title is played |
+| Everyone plays everyone | Round robin, one group | 2 to 32 | n(n - 1) / 2 |
+
+- **Two lives needs 3 players.** With 2 the library makes one match and no final
+  (`isDoubleEliminationNecessary` in its `helpers.js`), and `finalStandings` then throws.
+- **Best of 1, 3, or 5 is a label** on the host screen and the TV. The host taps the winner
+  of the whole match, one tap per match. The library can record each game of a match
+  (`matchesChildCount`); we don't use it.
+- **Seeding is random.** `packages/core` shuffles the player ids with the caller's random
+  source and pads the list with empty slots at the end, up to a power of two for
+  elimination and an even count for a round robin. The library gives the first spots the
+  byes, so byes go to the top seeds of the shuffle and two byes never meet. The library has
+  no randomness of its own. On screen a bye reads "Moves on this round" (see `DOC-STYLE.md`,
+  "Tournament words on screen"). Seeding by past results is M10.
+- **Single elimination has a 3rd-place match**, between the two semi-final losers, so 3rd is
+  decided by play. It is the library's `consolationFinal` setting, which needs a bracket of
+  4 or more slots. Checked 2026-11-13: sizes 3 to 32 run to a finish with it; with 2 players
+  the library throws, so there is only the final. With 3 players the semi-final bye leaves
+  the other semi-final's loser in 3rd without a match.
+- **Two lives** has unique places 1 to 3 already: the 3rd place is the player knocked out in
+  the losers' final. The library is set to `grandFinal: 'double'`, so the rematch for the
+  title is played only when the player coming from the losers' side wins the first final
+  (brackets-model, `input.d.ts`).
+- **Stations are 1 to 8**, picked at creation and fixed for that bracket (see "Stations and
+  the queue").
+- **Everyone plays everyone** is one group in the library's `simple` mode. An odd number of
+  players gets an empty slot, so one player sits out each round. It ranks by wins; see
+  "Ties". With 32 players it is 496 matches.
 
 ### Races and free-for-all
 
@@ -271,7 +300,58 @@ of players, and each finishing place earns points.
 - Races per heat: 1 to 4.
 - Rounds: each round regroups players by points so far. The top players by points go to a
   final heat.
-- Tie-breaks are an open decision (see `ROADMAP.md`).
+- Ties are settled by one tie-break race (see "Ties").
+
+### Ties
+
+Brad, 2026-11-13: prizes can't be split, so **places 1 to 3 are never shared**. A tie that
+touches them is played off. Ties further down the order are shared (two players both 5th).
+
+**Elimination.** Play decides every place from 1 to 3. Single elimination has the 3rd-place
+match; two lives has unique places by its structure (see "1 vs 1 bracket"). Other places
+are shared by the round in which a player went out.
+
+**Round robin.** Order by wins. For players level on wins:
+
+1. **Two players:** the winner of the match between them ranks higher.
+2. **Three or more:** count wins only in the matches among the tied players, and order by
+   that. Apply the same step again to whoever is still level.
+3. **Still level** (a loop such as A beat B, B beat C, C beat A, or everyone level): if the
+   tie touches places 1 to 3, the tied players play a **tie-break round**. It is a round
+   robin among only those players, each match best of 1. A tie-break round that leaves some
+   players level is played again among only those players, until each podium place has one
+   player. A group still level below 3rd is shared.
+
+A complete round robin always separates a two-way tie, because the two played each other, so
+a shared place comes only from a loop of three or more below 3rd. Before every match has a
+result, the order is provisional and no tie-break is asked for.
+
+The host sees "Tie for 1st: Zap and Kai" and a "Play tie-break" button. The tie-break
+matches go on stations like any match, and are recorded and undone like any result. They
+are the server's own matches (side `tie-break`), not the library's. The rules are in
+`packages/core/src/ties.ts`.
+
+**Heats (M5).** One tie-break race among only the tied players, at the cut line for the
+final and for places 1 to 3 of the final. Other ties are shared.
+
+The practice behind these rules, from published rules (checked 2026-11-13, except FIDE,
+whose page was unreachable that day and is cited from the earlier research):
+
+- PlayVS scholastic Mario Kart 8 Deluxe rulebook, section 1.7: when two teams are level at
+  the end of a game, "an additional one (1) race will be set up" and the team with more
+  points in it wins
+  (<http://help.playvs.com/en/articles/5872507-playvs-scholastic-mario-kart-8-deluxe-rulebook>).
+  This is the model for the heat tie-break race.
+- SmashWiki, "Round Robin": a round robin may have no clear winner, and one way to settle it
+  is to have the top two play one more set
+  (<https://www.ssbwiki.com/Round_Robin>). This is the model for the tie-break round.
+- FIFA 2026 World Cup group stage, via NBC Sports: the first tie-break between teams level on
+  points is the head-to-head match
+  (<https://www.nbcsports.com/soccer/news/what-are-the-new-group-stage-tiebreaker-rules-at-the-2026-world-cup>).
+  The article doesn't say whether it is applied again to the teams still level; applying it
+  again among only the tied players is our rule.
+- FIDE tie-break regulations, "direct encounter" among tied players
+  (<https://handbook.fide.com/chapter/TieBreakRegulations2023>).
 
 ### Teams
 
@@ -305,11 +385,143 @@ On-time players are never moved or made to replay.
 | Format | A late player | Closes when |
 |---|---|---|
 | Single and double elimination | Takes a first-round bye, and plays the player who would have moved on | No bye is left, or round 1 is finished |
-| Round robin | Is added to the schedule, so everyone plays one more match | The first result is recorded |
+| Round robin | Takes the empty slot, so the player who sat out each round now plays them. Only with an odd number of players; with an even number there is no empty slot and the sign-up is refused | The count is even, or round 1 is finished |
 | Heats | Goes into a round 1 heat that hasn't run and has room | No such heat is left, or round 1 is finished |
 
-Whether `brackets-manager` can fill a bye after round 1 has started is unverified; M4
-checks it first.
+**What the research found (2026-11-13).** The library's `update.seeding` can't be used.
+With `keepSameSize`, filling one bye turned every other bye into an empty slot to be
+decided, dropped winners already moved into round 2, and in two lives wiped a finished
+loser-bracket match. Its own guard only looks at round 1 for matches that are running or
+archived. The server never calls it.
+
+**How the server does it.** A bracket is stored as its settings, a seeding list (player ids
+and empty slots), and the ordered log of results (see "Brackets API"). A late join puts the
+player in the first empty slot of the list, rebuilds the bracket from scratch on an
+in-memory store by replaying the log, and accepts the change only if every logged result
+still replays with the same two players and every match on a station keeps its two players
+and its station. Otherwise the join is refused (409 `late-closed`). In a test of random play
+at every size and format, 151 joins were accepted and 406 refused, and no recorded match
+changed. In a round robin an odd count gains a player without changing any pairing; an even
+count would redraw them.
+
+The queue holds matches with a player who had a first-round bye until round 1 is finished,
+so the byes stay open (see "Stations and the queue").
+
+### Stations and the queue
+
+Planned in M4 (2026-11-13). A **station** is one console. The host picks 1 to 8 when the
+bracket is made, and the number is fixed for that bracket, because the assignment below is
+derived from it.
+
+Nothing about stations is stored. The server replays the result log and notes the step at
+which each match became ready (step 0 is the new bracket, step k is after the k-th result).
+`packages/core/src/queue.ts` turns that history into the stations, so undoing a result
+restores them exactly.
+
+- **Queue order:** the step a match became ready, then round, then match number, then its
+  id. A late player's matches count as ready from the step they joined, so they queue behind
+  matches already waiting.
+- **Calling a match:** when a result is recorded, its station is free. Every free station,
+  lowest number first, takes the first waiting match whose two players are not on another
+  station. A round robin needs the check, because all its matches are ready at once.
+- **Bye hold-back:** while any first-round match has no result, a match with a player who
+  had a first-round bye waits. The cost is that with two stations one may sit idle near the
+  end of round 1.
+- **`calledAt`** is the time of the result that freed the station, or the bracket's creation
+  time for the first matches. The TV counts up from it. There is no alarm.
+- **Up next** is the waiting matches in queue order. A match whose player is still on a
+  station stays on the list and is skipped when a station is filled.
+- **Undoing an older result** is allowed only when no later result depended on it. The
+  server removes it, replays, and refuses (409 `undo-later-first`) if any later result no
+  longer replays with the same two players, or was recorded for a match that is no longer on
+  a station. Undoing the newest result always works.
+
+### Brackets API
+
+Planned in M4 (2026-11-13). The rules of "Devices and host API" apply: bodies are JSON,
+every answer lists its fields, errors are `{ "error": code }`, and a missing session is 401
+`not-signed-in`. The shared types are in `packages/core/src/api.ts`.
+
+**Storage.** Migration 3 adds `brackets` (the event, format, best of, stations, the seeding
+as a JSON list of player ids and nulls, and the creation time), `bracket_results` (the
+bracket, the match, the winner, the loser, and the time), and `event_players` (the event and
+the player). No handle is stored; an answer joins the current one. The server rebuilds the
+library's state on its in-memory store (`brackets-memory-db`) by creating the stage and
+replaying the log. It checks that each logged match is ready and holds the same two players.
+A tie-break match is stored by the server with the step at which it was made, and its
+result goes in the same log. Replay of 32 players took 13 ms in two lives (63 results) and
+258 ms in a round robin (496 results), so there is no cache in M4.
+
+Every bracket write runs one at a time on a promise chain, because the library is
+asynchronous and two taps could interleave. **Undo** drops one result from the log and
+replays; in a test of 4206 undos and 4206 replays at every size and format, each matched the
+live bracket exactly. The library's own `reset.matchResults` didn't (it left matches in the
+wrong state or threw), so it isn't used.
+
+| Request | Who | Answer |
+|---|---|---|
+| `GET /api/bracket` | host or device | `{ bracket }`, or `{ bracket: null }` before one is made |
+| `POST /api/bracket` `{ format, bestOf, stations, playerIds }` | host | 201 `{ bracket }`; 409 `bracket-running`; 400 `too-few-players`, `too-many-players`, or `bad-request` |
+| `POST /api/bracket/results` `{ matchId, winnerId }` | host | `{ bracket, resultId }`; 409 `not-on-station`; 400 `bad-request` if the winner isn't in the match; 404 `not-found` |
+| `POST /api/bracket/undo` `{ resultId }` | host | `{ bracket }`; 409 `undo-later-first` or `nothing-to-undo` |
+| `POST /api/bracket/players` `{ playerId }` | host | `{ bracket }`; 409 `late-closed` or `already-in`; 404 `not-found` |
+| `POST /api/bracket/tie-break` | host | `{ bracket }` with the tie-break matches made; 409 `no-tie` if the bracket answer lists no tie that still needs matches |
+| `DELETE /api/bracket` | host | 204; the host screen asks first, since it can't be undone |
+| `GET /api/event/players` | host | `{ playerIds }`: the players signed up to the current event |
+
+`format` is `single`, `double`, or `round_robin`; `bestOf` is 1, 3, or 5; `stations` is 1 to
+8. A new bracket replaces a finished one. A running bracket answers 409 `bracket-running`.
+`playerIds` are 2 to 32 players (3 or more for `double`).
+
+The bracket answer is:
+
+```ts
+interface Bracket {
+  id: number;
+  format: 'single' | 'double' | 'round_robin';
+  bestOf: 1 | 3 | 5;
+  finished: boolean;        // every place is decided, no tie waiting
+  lateOpen: boolean;        // the host can still add a player (see "Late sign-up")
+  lastResultId: number | null;
+  stations: { number: number; match: BracketMatch | null; calledAt: string | null }[];
+  upNext: BracketMatch[];
+  matches: BracketMatch[];
+  standings: { place: number; player: Player; wins: number; losses: number }[];
+  ties: { place: number; players: Player[]; started: boolean }[];
+}
+interface BracketMatch {
+  id: number;
+  side: 'main' | 'winners' | 'losers' | 'final' | 'rematch' | 'third' | 'tie-break';
+  round: number;            // from 1 within a side; a tie-break's round counts tie-break rounds
+  number: number;           // from 1 within a round
+  status: 'waiting' | 'ready' | 'playing' | 'done' | 'bye';
+  slots: [{ player: Player | null; bye: boolean }, { player: Player | null; bye: boolean }];
+  winner: 0 | 1 | null;
+  resultId: number | null;  // what to send to /undo
+}
+```
+
+`status` is `waiting` while a player is unknown, `ready` once both are known and the match is
+in the queue, `playing` on a station, `done` with a result, and `bye` when a side is empty.
+A rematch for the title that is no longer needed is left out of `matches`. `ties` lists each
+tie for places 1 to 3 that is not settled: "Play tie-break" makes its matches, and `started`
+is true while they exist. Every field of every answer is named in a schema in
+`api-schemas.ts` with `additionalProperties: false`, and an answer carries a player only as
+`{ id, handle }` (`CLAUDE.md`, rule 1).
+
+**Error codes** (the client turns each into words in `packages/client/src/api/errors.ts`):
+`bracket-running`, `too-few-players`, `too-many-players`, `not-on-station`,
+`undo-later-first`, `nothing-to-undo`, `late-closed`, `already-in`, `in-bracket`, and
+`no-tie`.
+
+**Live.** The server sends `{ type: "bracket" }` when the bracket changes, and screens
+reload it. The Display also reloads on `players`, for renames.
+
+**Who is in a bracket.** Players are kept across events and attendance isn't tracked, so
+`event_players` lists who signed up to the current event. Sign-up, claim, and the host's
+"Add player" fill it, and the start dialog pre-checks the event's players. Merging away a
+player who is in an unfinished bracket answers 409 `in-bracket`.
+
 
 ## 7. Name tags
 
@@ -369,19 +581,31 @@ milestone.
 | Tests | Vitest 5.1.0; Playwright 1.65.0 | Playwright for screen tests and screenshots |
 | Server | Fastify 5.12.8 | With `@fastify/websocket` 11.3.7, `@fastify/static` 10.1.10, `@fastify/rate-limit` 11.2.2 |
 | Database | `node:sqlite` | See section 8 |
-| Brackets | `brackets-manager` 1.11.1 | MIT; last release 2026-09-20 |
+| Brackets | `brackets-manager` 1.11.1, `brackets-memory-db` 1.0.6, `brackets-model` 1.7.0 | Checked 2026-11-13. Manager: MIT, released 2026-09-20. Memory store: ISC, released 2026-05-16, the library's in-memory database that the replay rebuilds on. Model: ISC, released 2026-05-16, the library's own dependency for its types. In `packages/server` only (see Packages) |
 | Client build | Vite 8.3.8, `@vitejs/plugin-react` 6.3.0 | |
 | UI | React 19.3.1, MUI (Material UI) 9.5.0, `@mui/icons-material` 9.5.0, React Router 8.5.1 | MUI was Brad's choice (2026-11-12) |
 | Styling engine | `@emotion/react` 11.14.0, `@emotion/styled` 11.14.1 | Peer dependencies of MUI 9.5.0 |
 | Fonts | `@fontsource/roboto` 5.3.0 | Bundled for offline use |
 | QR codes | `lean-qr` 2.7.4 | MIT, no dependencies, SVG output through `lean-qr/extras/svg`; released 2026-09-07. Replaces `qrcode`, whose last release was 2024-08-05. Its code makes no network requests (checked 2026-11-12) |
 
+**Known advisory.** `brackets-manager` depends on `uuid ^9.0.0`, which has a medium
+advisory, GHSA-w5hq-g745-h8pq (<https://github.com/advisories/GHSA-w5hq-g745-h8pq>): the v3,
+v5, and v6 functions misbehave when given an output buffer. The library calls only `v4`.
+`pnpm audit --audit-level high` passes. With an npm override to uuid 14.0.3 the library runs
+and the audit is clean; the server task will try pnpm's `overrides` setting
+(<https://pnpm.io/settings#overrides>), which hasn't been tried yet.
+
 ### Packages
 
-- **`packages/core`**: handles, the vulgarity filter, PIN rules, heats, the time estimate,
-  and the wrapper around `brackets-manager`. No DOM, Node, or network imports. Randomness
-  (seeding, suggested PINs, heat groups) comes from a seeded source passed in by the caller,
-  so every format can be tested with fixed results.
-- **`packages/server`**: Fastify, the database, WebSockets, pairing, host sign-in, and
-  serving the built client.
+- **`packages/core`**: handles, the vulgarity filter, PIN rules, the bracket seeding shuffle,
+  the station and queue logic, the round robin ranking and tie rules, heats, the time
+  estimate, and the shared API types. No DOM, Node, or network imports. Randomness (seeding,
+  suggested PINs, heat groups) comes from a seeded source passed in by the caller, so every
+  format can be tested with fixed results.
+- **`packages/server`**: Fastify, the database, WebSockets, pairing, host sign-in, serving
+  the built client, and the wrapper around `brackets-manager`. The library can't live in
+  core: it is CommonJS, `manager.js` requires Node's `events` (its manager extends
+  `EventEmitter`) and `uuid`, and `manager.d.ts` starts with `/// <reference types="node" />`,
+  which core's lint and its ES2022-only type check refuse (rule 4). ESM named imports of it
+  work. Checked 2026-11-13.
 - **`packages/client`**: the Host, Sign-up, and Display screens.

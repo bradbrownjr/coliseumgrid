@@ -2,7 +2,7 @@
 // sends codes, never sentences; this is where a code becomes text a 12-year-old can follow
 // (docs/DOC-STYLE.md). A refusal says what to do next, not why in detail.
 
-import { HANDLE_MAX, HANDLE_MIN, PIN_LENGTH, type ApiErrorCode, type HandleRefusal } from '@coliseumgrid/core';
+import { BRACKET_PLAYERS_MAX, HANDLE_MAX, HANDLE_MIN, PIN_LENGTH, type ApiErrorCode, type HandleRefusal } from '@coliseumgrid/core';
 
 /** The API's codes, plus one for a request that never got a usable answer. */
 export type ClientErrorCode = ApiErrorCode | 'failed';
@@ -37,6 +37,16 @@ export const ERROR_WORDS: Record<ClientErrorCode, string> = {
   'wrong-password': "That password doesn't match. Try again.",
   'wrong-code': "That code doesn't work. Ask the host for a new one.",
   'not-paired': 'This screen needs a code from the host.',
+  'bracket-running': 'A bracket is already running. Finish it or delete it first.',
+  'too-few-players': 'Pick more players to start.',
+  'too-many-players': `Pick ${BRACKET_PLAYERS_MAX} players at most.`,
+  'not-on-station': "That match isn't on a station.",
+  'undo-later-first': 'Undo the later results first.',
+  'nothing-to-undo': 'There is nothing to undo.',
+  'late-closed': "It's too late to add a player.",
+  'already-in': 'That player is already in.',
+  'in-bracket': 'That player is in a bracket. Finish it first.',
+  'no-tie': 'Nobody is tied.',
   failed: 'Something went wrong. Try again.',
 };
 

@@ -150,7 +150,7 @@ by a newer server is refused at startup.
 
 | Path | What it holds |
 |---|---|
-| `packages/core` | `@coliseumgrid/core`: rules shared by the browser and the server (see `PLAN.md` section 9). Today it holds the seeded random source. |
+| `packages/core` | `@coliseumgrid/core`: rules shared by the browser and the server (see `PLAN.md` section 9): the seeded random source, handles and the vulgarity filter, PINs, join codes, bracket seeding, the station queue, tie ranking, and the API types. |
 | `packages/server` | `@coliseumgrid/server`: `src/app.ts` builds the Fastify app (`buildApp`), `src/config.ts` reads the settings, `src/main.ts` starts it, `src/database.ts` holds the schema, `src/players-routes.ts` the players API, `src/pin-hash.ts` PIN and password hashing (scrypt), `src/client-ip.ts` and `src/rate-limit.ts` the client address and the guessing limits, `src/access.ts`, `src/host-routes.ts`, `src/devices.ts`, `src/host-store.ts`, `src/events.ts`, and `src/live.ts` host sign-in, pairing, and live updates. |
 | `packages/client` | `@coliseumgrid/client`: Vite, React, and MUI. `src/theme/` holds the palette and the theme, `src/pages/` the Host (`/host`), Sign-up (`/signup`), and Display (`/display`) screens, `src/components/` shared pieces, `src/api/` the calls, `test/` the Vitest tests. `/` is the join screen and `/host` is the host's entry; an unknown path goes to `/`. |
 | `tools/` | Scripts run by hand or in CI, type-checked by `tools/tsconfig.json`. |

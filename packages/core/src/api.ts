@@ -22,7 +22,17 @@ export type ApiErrorCode =
   | 'forbidden'
   | 'wrong-password'
   | 'wrong-code'
-  | 'not-paired';
+  | 'not-paired'
+  | 'bracket-running'
+  | 'too-few-players'
+  | 'too-many-players'
+  | 'not-on-station'
+  | 'undo-later-first'
+  | 'nothing-to-undo'
+  | 'late-closed'
+  | 'already-in'
+  | 'in-bracket'
+  | 'no-tie';
 
 export type ApiError =
   | { error: 'refused'; reason: HandleRefusal }
@@ -136,4 +146,132 @@ export interface EventBody {
 export type LiveMessage =
   | { type: 'event'; event: EventInfo | null }
   | { type: 'players' }
+  | { type: 'bracket' }
   | { type: 'unpaired' };
+
+// Brackets API (docs/PLAN.md, "Brackets API"), from M4. A player is always `Player`, so no
+// answer carries more than an id and a handle (CLAUDE.md, rule 1).
+
+/** Stored and sent as these words; the screens say "One life", "Two lives", and so on. */
+export type BracketFormat = 'single' | 'double' | 'round_robin';
+
+/** A label for the host. One tap records a match, whatever this says. */
+export type BestOf = 1 | 3 | 5;
+
+/**
+ * Where a match sits. `main` is single elimination and round robin; `winners` and `losers`
+ * are the two halves of two lives; `final` and `rematch` are its grand final and the
+ * rematch for the title; `third` is single elimination's 3rd-place match; `tie-break` is a
+ * match played to settle a tie for places 1 to 3 (docs/PLAN.md, "Ties").
+ */
+export type MatchSide = 'main' | 'winners' | 'losers' | 'final' | 'rematch' | 'third' | 'tie-break';
+
+/**
+ * `waiting`: a player is not known yet. `ready`: both are known and the match is in the
+ * queue. `playing`: it is on a station. `done`: it has a result. `bye`: one side is empty.
+ */
+export type MatchStatus = 'waiting' | 'ready' | 'playing' | 'done' | 'bye';
+
+/** `player` is null while the slot is waiting or empty; `bye` is true for an empty slot. */
+export interface BracketSlot {
+  player: Player | null;
+  bye: boolean;
+}
+
+export interface BracketMatch {
+  id: number;
+  side: MatchSide;
+  /** Starts at 1 within a side. For `tie-break` it counts the tie-break rounds. */
+  round: number;
+  /** Starts at 1 within a round. */
+  number: number;
+  status: MatchStatus;
+  slots: [BracketSlot, BracketSlot];
+  /** Index of the winning slot, or null before a result. */
+  winner: 0 | 1 | null;
+  /** The result to undo; null until the match is done. */
+  resultId: number | null;
+}
+
+/** `calledAt` is an ISO 8601 time; the TV's timer counts up from it. */
+export interface BracketStation {
+  number: number;
+  match: BracketMatch | null;
+  calledAt: string | null;
+}
+
+/** Players who tie share a `place`. Places 1 to 3 are never shared once the bracket is finished. */
+export interface StandingsRow {
+  place: number;
+  player: Player;
+  wins: number;
+  losses: number;
+}
+
+/** A tie for `place` that has to be played off. `started` is true while its matches exist. */
+export interface TieNotice {
+  place: number;
+  players: Player[];
+  started: boolean;
+}
+
+export interface Bracket {
+  id: number;
+  format: BracketFormat;
+  bestOf: BestOf;
+  finished: boolean;
+  /** True while the host can still add a player. */
+  lateOpen: boolean;
+  lastResultId: number | null;
+  stations: BracketStation[];
+  upNext: BracketMatch[];
+  matches: BracketMatch[];
+  standings: StandingsRow[];
+  ties: TieNotice[];
+}
+
+/** GET /api/bracket */
+export interface BracketAnswer {
+  bracket: Bracket | null;
+}
+
+/** POST /api/bracket, POST /api/bracket/undo, POST /api/bracket/players, POST /api/bracket/tie-break */
+export interface BracketNowAnswer {
+  bracket: Bracket;
+}
+
+/** POST /api/bracket */
+export interface NewBracketBody {
+  format: BracketFormat;
+  bestOf: BestOf;
+  /** 1 to 8, fixed for the life of the bracket. */
+  stations: number;
+  playerIds: number[];
+}
+
+/** POST /api/bracket/results */
+export interface BracketResultBody {
+  matchId: number;
+  winnerId: number;
+}
+
+/** POST /api/bracket/results */
+export interface BracketResultAnswer {
+  bracket: Bracket;
+  resultId: number;
+}
+
+/** POST /api/bracket/undo */
+export interface BracketUndoBody {
+  resultId: number;
+}
+
+/** POST /api/bracket/players */
+export interface BracketPlayerBody {
+  playerId: number;
+}
+
+/** GET /api/event/players: the players signed up to the current event. */
+export interface EventPlayersAnswer {
+  playerIds: number[];
+}

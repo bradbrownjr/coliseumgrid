@@ -131,3 +131,7 @@ here may be forgotten next session.
 - The colors are red and black, with light and dark modes. Primary is the same crimson in
   both modes; dark mode doesn't swap it for a lighter red (Brad, 2026-11-12).
 - An entry panel, such as the PIN keypad, is centered on the screen (Brad, 2026-11-12).
+- Places 1 to 3 are never shared, because prizes can't be split. A tie there is settled by a
+  tie-break match or race among the tied players; other tied places are shared (Brad,
+  2026-11-13).
+- Late players never change a match already played or called (Brad, 2026-11-13).

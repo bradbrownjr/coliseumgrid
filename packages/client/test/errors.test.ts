@@ -18,6 +18,16 @@ const API_CODES: Record<ApiErrorCode, true> = {
   'wrong-password': true,
   'wrong-code': true,
   'not-paired': true,
+  'bracket-running': true,
+  'too-few-players': true,
+  'too-many-players': true,
+  'not-on-station': true,
+  'undo-later-first': true,
+  'nothing-to-undo': true,
+  'late-closed': true,
+  'already-in': true,
+  'in-bracket': true,
+  'no-tie': true,
 };
 const REFUSALS: Record<HandleRefusal, true> = {
   'too-short': true,
@@ -74,6 +84,14 @@ describe('error words', () => {
     expect(isApiErrorCode('toString')).toBe(false);
     expect(isApiErrorCode(7)).toBe(false);
     expect(isHandleRefusal('toString')).toBe(false);
+  });
+});
+
+describe('words for the bracket codes', () => {
+  it('says what to do next', () => {
+    expect(failureWords({ error: 'undo-later-first' })).toBe('Undo the later results first.');
+    expect(failureWords({ error: 'too-many-players' })).toBe('Pick 32 players at most.');
+    expect(failureWords({ error: 'late-closed' })).toBe("It's too late to add a player.");
   });
 });
 
