@@ -56,12 +56,19 @@ Tasks:
 - Single elimination, double elimination, and round robin through `brackets-manager`.
 - Best of 1, 3, or 5. Random seeding.
 - Stations and the queue. One-tap results with undo.
+- Late sign-up: a late player takes a first-round bye until round 1 is finished, and joins
+  a round robin until its first result (`PLAN.md`, "Late sign-up"). First check whether
+  `brackets-manager` can fill a bye after round 1 has started; its seeding guide allows an
+  update "as long as the seeding update does not impact existing results" but doesn't say
+  what counts.
 - The bracket on the Display screen.
 
 Acceptance checks:
 
 - Tests run every bracket size from 2 to 32 players in each format to a finish, with byes
   and the double-elimination final's rematch.
+- A late player fills a bye and plays that match; with no bye left, or once round 1 is
+  finished, the late sign-up is refused and on-time players' matches don't change.
 - Undoing any result restores the bracket exactly as it was.
 
 **Docs:** `PLAN.md` section 5.
@@ -73,11 +80,15 @@ Tasks:
 - Heats, the points table, races per heat, regrouping by points, and the final, in
   `packages/core`.
 - Recording a heat by tapping players in finishing order. Undo.
+- Late sign-up: a late player joins a round 1 heat that hasn't run and has room, until
+  round 1 is finished (`PLAN.md`, "Late sign-up").
 - Heat standings on the Display screen.
 
 Acceptance checks:
 
 - Tests run every player count from 2 to 32 to a final.
+- A late player plays the same number of heats as everyone else, and no heat already run
+  changes.
 - Ties are settled by the rule chosen in "Open decisions".
 
 **Docs:** `PLAN.md` section 5.
@@ -185,7 +196,3 @@ These need Brad's answer before the work that depends on them. Don't guess.
 
 - **Heat tie-breaks** (M5): best single finish, then a tie-break race? Or shared place?
 - **Default points table** (M5): 4, 3, 2, 1 is the plan's starting point.
-- **Late sign-up** (M4, M5), Brad's son's question (2026-11-13): can players join after the
-  event starts, and until when? Proposal: a bracket holds its first-round byes open for late
-  players until the first round is finished (then sign-up closes for it); heats take late
-  players into the next round with no points until the final.

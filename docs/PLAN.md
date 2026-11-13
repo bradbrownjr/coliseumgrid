@@ -279,6 +279,22 @@ Everyone plays everyone with 16 players is 120 matches.
    (heats).
 4. **Finish:** final standings on the TV. Results go to each handle's stats.
 
+### Late sign-up
+
+Brad, 2026-11-13, from his son's question. A player can join after the event starts, until
+round 1 is finished, as long as they have someone to play and nothing already played
+changes. Where a format can't take them without rebuilding, the late sign-up is refused.
+On-time players are never moved or made to replay.
+
+| Format | A late player | Closes when |
+|---|---|---|
+| Single and double elimination | Takes a first-round bye, and plays the player who would have moved on | No bye is left, or round 1 is finished |
+| Round robin | Is added to the schedule, so everyone plays one more match | The first result is recorded |
+| Heats | Goes into a round 1 heat that hasn't run and has room | No such heat is left, or round 1 is finished |
+
+Whether `brackets-manager` can fill a bye after round 1 has started is unverified; M4
+checks it first.
+
 ## 7. Name tags
 
 - Printed through the browser's print dialog, so any printer with an operating system
