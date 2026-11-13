@@ -11,8 +11,7 @@ in [`PLAN.md`](PLAN.md).
 
 | Item | What it delivers | Stage |
 |---|---|---|
-| [M2 Players and sign-up](#m2-players-and-sign-up) | Handles, the vulgarity filter, PINs, and the Sign-up screen. | Next |
-| [M3 Pairing and live screens](#m3-pairing-and-live-screens) | Join codes, QR codes, device roles, live updates, and the Display screen's frame. | Planned |
+| [M3 Pairing and live screens](#m3-pairing-and-live-screens) | Join codes, QR codes, device roles, live updates, and the Display screen's frame. | Next |
 | [M4 1 vs 1 brackets](#m4-1-vs-1-brackets) | Single and double elimination, round robin, stations, the queue, and undo. | Planned |
 | [M5 Races and free-for-all](#m5-races-and-free-for-all) | Heats with placement points, rounds, and a final. | Planned |
 | [M6 Player view](#m6-player-view) | Players follow their own matches and standings on their phones, with an alert when they're up next. | Planned |
@@ -29,28 +28,6 @@ Each milestone is finished only when its acceptance checks pass. Work them in or
 start the next until the current one is done.
 
 ---
-
-## M2 Players and sign-up
-
-Tasks:
-
-- Handle rules and the vulgarity filter in `packages/core`, ported from Pattern Break's
-  `name.ts` with its innocent-name tests (see `PLAN.md` section 4).
-- PIN suggestion, hashing, and checking.
-- When the server first imports `packages/core`, add `"@coliseumgrid/core": "workspace:*"` to
-  the server's `package.json`. The Docker image installs only the server's declared
-  dependencies, so an undeclared import works locally and fails in the image.
-- Database tables for players and events.
-- The Sign-up screen: handle, PIN, done. The host's player list: add, rename, merge, reset
-  PIN.
-
-Acceptance checks:
-
-- Filter tests pass for the vulgar and innocent lists, in Node and in the browser build.
-- The server refuses a vulgar handle even when the client check is skipped.
-- A taken handle asks for its PIN.
-
-**Docs:** `PLAN.md` section 4, `DEVELOPMENT.md`.
 
 ## M3 Pairing and live screens
 

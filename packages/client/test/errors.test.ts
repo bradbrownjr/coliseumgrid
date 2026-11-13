@@ -13,6 +13,11 @@ const API_CODES: Record<ApiErrorCode, true> = {
   'too-many-tries': true,
   'bad-request': true,
   'server-error': true,
+  'not-signed-in': true,
+  forbidden: true,
+  'wrong-password': true,
+  'wrong-code': true,
+  'not-paired': true,
 };
 const REFUSALS: Record<HandleRefusal, true> = {
   'too-short': true,

@@ -17,7 +17,7 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { failureWords } from '../api/errors.ts';
 import { addPlayer, listPlayers, renamePlayer, resetPin } from '../api/players.ts';
 import { ColorModePicker } from '../components/ColorModePicker.tsx';
@@ -31,7 +31,7 @@ type Dialog =
   | { kind: 'add' }
   | { kind: 'rename'; player: Player }
   | { kind: 'merge'; player: Player }
-  | { kind: 'pin'; title: string; pin: string };
+  | { kind: 'pin'; title: string; pin: string | null; words?: string };
 
 export function HostPage() {
   const [players, setPlayers] = useState<Player[] | null>(null);
@@ -39,6 +39,8 @@ export function HostPage() {
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [noticeOpen, setNoticeOpen] = useState(false);
+  // Which reset the open PIN dialog is waiting on, so a reset the host closed can't reopen it.
+  const resetting = useRef(0);
 
   const load = useCallback(async () => {
     const result = await listPlayers();
@@ -59,18 +61,26 @@ export function HostPage() {
     setNoticeOpen(true);
   };
 
-  const close = () => setDialog(null);
+  const close = () => {
+    resetting.current += 1;
+    setDialog(null);
+  };
   const changed = (message: string, next: Dialog | null = null) => {
     setDialog(next);
     say(message);
     void load();
   };
 
-  // A failed reset has no dialog to show its words in, so they go to the snackbar.
+  // The dialog opens at the tap, not when the answer arrives: a PIN dialog that waits for the
+  // network leaves the host looking at nothing, and a second tap would make a second PIN.
   const reset = async (player: Player) => {
+    const title = `New PIN for ${player.handle}`;
+    const mine = ++resetting.current;
+    setDialog({ kind: 'pin', title, pin: null });
     const result = await resetPin(player.id);
-    if (!result.ok) return say(failureWords(result));
-    changed(`New PIN for ${player.handle}`, { kind: 'pin', title: `New PIN for ${player.handle}`, pin: result.data.pin });
+    if (mine !== resetting.current) return;
+    if (!result.ok) return setDialog({ kind: 'pin', title, pin: null, words: failureWords(result) });
+    changed(title, { kind: 'pin', title, pin: result.data.pin });
   };
 
   return (
@@ -182,7 +192,7 @@ export function HostPage() {
           onClose={close}
         />
       )}
-      {dialog?.kind === 'pin' && <PinDialog title={dialog.title} pin={dialog.pin} onClose={close} />}
+      {dialog?.kind === 'pin' && <PinDialog title={dialog.title} pin={dialog.pin} words={dialog.words} onClose={close} />}
 
       <Snackbar
         open={noticeOpen}

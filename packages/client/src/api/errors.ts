@@ -1,4 +1,4 @@
-// The words for every answer the players API can give (docs/PLAN.md, section 4). The server
+// The words for every answer the API can give (docs/PLAN.md, sections 3 and 4). The server
 // sends codes, never sentences; this is where a code becomes text a 12-year-old can follow
 // (docs/DOC-STYLE.md). A refusal says what to do next, not why in detail.
 
@@ -32,6 +32,11 @@ export const ERROR_WORDS: Record<ClientErrorCode, string> = {
   'too-many-tries': 'Too many tries. Ask the host.',
   'bad-request': 'Something went wrong. Try again.',
   'server-error': 'Something went wrong. Try again.',
+  'not-signed-in': 'Sign in as the host first.',
+  forbidden: 'Only the host laptop can do that.',
+  'wrong-password': "That password doesn't match. Try again.",
+  'wrong-code': "That code doesn't work. Ask the host for a new one.",
+  'not-paired': 'This screen needs a code from the host.',
   failed: 'Something went wrong. Try again.',
 };
 
