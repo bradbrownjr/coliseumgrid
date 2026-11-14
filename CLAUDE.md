@@ -67,7 +67,10 @@ from one file says why in its message.
 2. **The server decides.** Every handle passes the `packages/core` filter on the server,
    whatever the client checked.
 3. **Offline first.** No runtime request leaves the local network: no CDNs, web fonts,
-   analytics, or update checks. Fonts, icons, and images are bundled.
+   analytics, or update checks. Fonts, icons, and images are bundled. The one exception is
+   Web Push, online over HTTPS only: the server sends an alert to the push service the
+   player's browser chose (`PLAN.md`, "Player view"). Nothing else depends on it (Brad,
+   2026-11-14).
 4. **`packages/core` is portable.** No DOM, Node, or network imports. Randomness comes from
    a seeded source passed in by the caller, so every format is testable with fixed results.
 5. **Every recorded result can be undone**, and undo restores the bracket or heat exactly.
