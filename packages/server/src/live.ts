@@ -44,6 +44,8 @@ export interface LiveConnectionInfo {
   phoneId?: number;
   /** Set for a cookie host session, so signing out closes this connection. */
   sessionHash?: string;
+  /** Set for the laptop itself (offline, from localhost), which is the host with no session. */
+  local?: boolean;
   /** Asked at each heartbeat. False closes the connection (the session expired, or the device is gone). */
   stillAllowed: () => boolean;
 }
@@ -52,9 +54,15 @@ export interface LiveHub {
   attach(socket: LiveSocket, info: LiveConnectionInfo): void;
   /** Sends the message to every connection. */
   broadcast(message: LiveMessage): void;
-  /** Tells the device's connections they are unpaired, then closes them. */
+  /**
+   * Tells the device's connections they are unpaired, then closes them. A connection that is
+   * also the host or a phone only loses the device and stays open.
+   */
   unpair(deviceId: number): void;
-  /** Tells the phone's connections they are signed out (`unpaired`), then closes them. */
+  /**
+   * Tells the phone's connections they are signed out (`unpaired`), then closes them. A
+   * connection that is also the host or a device only loses the phone and stays open.
+   */
   signOutPhone(phoneId: number): void;
   /** Closes the connections that signed in with this session. */
   endSession(sessionHash: string): void;
@@ -107,10 +115,23 @@ export function createLiveHub(heartbeatMs: number = HEARTBEAT_MS): LiveHub {
   // A pending heartbeat must not keep the process alive after the app closes.
   timer.unref();
 
-  /** Sends `unpaired` to the matching connections, then closes them. */
-  function sendUnpaired(matches: (connection: Connection) => boolean): void {
+  /**
+   * Takes one identity away from the matching connections with `drop`. A connection left with
+   * no identity gets `unpaired` and is closed. One that is still the host, or another device
+   * or phone, stays open: its sockets are the same browser, and it only lost one way in.
+   */
+  function endIdentity(matches: (connection: Connection) => boolean, drop: (connection: Connection) => void): void {
     for (const connection of connections) {
       if (!matches(connection)) continue;
+      drop(connection);
+      if (
+        connection.deviceId !== undefined ||
+        connection.phoneId !== undefined ||
+        connection.sessionHash !== undefined ||
+        connection.local === true
+      ) {
+        continue;
+      }
       connections.delete(connection);
       // Close after the message is written, or the client could see only the close.
       const { socket } = connection;
@@ -135,8 +156,20 @@ export function createLiveHub(heartbeatMs: number = HEARTBEAT_MS): LiveHub {
     broadcast(message) {
       for (const { socket } of connections) sendJson(socket, message);
     },
-    unpair: (deviceId) => sendUnpaired((connection) => connection.deviceId === deviceId),
-    signOutPhone: (phoneId) => sendUnpaired((connection) => connection.phoneId === phoneId),
+    unpair: (deviceId) =>
+      endIdentity(
+        (connection) => connection.deviceId === deviceId,
+        (connection) => {
+          delete connection.deviceId;
+        },
+      ),
+    signOutPhone: (phoneId) =>
+      endIdentity(
+        (connection) => connection.phoneId === phoneId,
+        (connection) => {
+          delete connection.phoneId;
+        },
+      ),
     endSession(sessionHash) {
       for (const connection of connections) {
         if (connection.sessionHash !== sessionHash) continue;

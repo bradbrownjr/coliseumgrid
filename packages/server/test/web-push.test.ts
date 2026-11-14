@@ -242,6 +242,7 @@ describe('sendPush', () => {
     [204, 'failed'],
     [301, 'failed'],
     [400, 'failed'],
+    [401, 'failed'],
     [403, 'failed'],
     [404, 'gone'],
     [410, 'gone'],

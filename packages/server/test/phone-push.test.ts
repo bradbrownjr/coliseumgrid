@@ -13,7 +13,8 @@ import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildApp, type AppOptions } from '../src/app.ts';
 import { openDatabase, type Database } from '../src/database.ts';
-import type { PushPayload, PushSender } from '../src/push-notify.ts';
+import { MAX_PARALLEL_SENDS, type PushPayload, type PushSender } from '../src/push-notify.ts';
+import { PUSH_SUBSCRIPTIONS_PER_PLAYER_MAX } from '../src/push-subscriptions.ts';
 import type { PushOutcome, PushSubscriptionRecord, VapidConfig } from '../src/web-push.ts';
 import { makeCallers, onStations, type Api } from './bracket-api-helpers.ts';
 import { heatsBody } from './heat-api-helpers.ts';
@@ -91,6 +92,7 @@ async function signIn(handle: string, ip = '203.0.113.50'): Promise<{ api: Api; 
 }
 
 const rows = (table: string) => db.prepare(`SELECT * FROM ${table}`).all();
+const count = (table: string): number => rows(table).length;
 
 describe('GET /api/phone/push', () => {
   it('gives the public key over HTTPS through the proxy, loading the keys from the data folder once', async () => {
@@ -477,6 +479,73 @@ describe('a push on a call', () => {
     await laptop('POST', '/api/bracket', { format: 'single', bestOf: 1, stations: 1, playerIds: ids.slice(0, 4) });
     await app.pushIdle();
     expect(sent).toEqual([]);
+  });
+
+  it('keeps at most 10 subscriptions per player: the 11th phone to subscribe drops the oldest', async () => {
+    for (let n = 1; n <= PUSH_SUBSCRIPTIONS_PER_PLAYER_MAX; n++) await subscribed(['Player1'], n);
+    expect(rows('push_subscriptions')).toHaveLength(PUSH_SUBSCRIPTIONS_PER_PLAYER_MAX);
+    await subscribed(['Player1'], 11);
+    const endpoints = rows('push_subscriptions').map((row) => (row as { endpoint: string }).endpoint).sort();
+    expect(endpoints).toEqual(Array.from({ length: 10 }, (_, i) => `${FCM}${i + 2}`).sort());
+    // The phone that was dropped is still signed in; it only lost its alerts.
+    expect(count('phones')).toBe(11);
+  });
+
+  it('counts per player: a phone following others has its own 10', async () => {
+    for (let n = 1; n <= PUSH_SUBSCRIPTIONS_PER_PLAYER_MAX; n++) await subscribed(['Player1'], n);
+    for (let n = 11; n <= 20; n++) await subscribed(['Player2'], n);
+    expect(rows('push_subscriptions')).toHaveLength(20);
+  });
+
+  it('applies the cap when a subscribed phone follows a player who already has 10', async () => {
+    for (let n = 1; n <= PUSH_SUBSCRIPTIONS_PER_PLAYER_MAX; n++) await subscribed(['Player1'], n);
+    const late = await subscribed(['Player2'], 11);
+    expect((await late.api('POST', '/api/phone/follow', { handle: 'Player1', pin: PIN })).statusCode).toBe(201);
+    const endpoints = rows('push_subscriptions').map((row) => (row as { endpoint: string }).endpoint);
+    // The newcomer counts as the newest, so the oldest of the 10 goes, not the newcomer.
+    expect(endpoints).not.toContain(`${FCM}1`);
+    expect(endpoints).toContain(`${FCM}11`);
+    expect(endpoints).toHaveLength(10);
+  });
+
+  it('applies the cap when a merge gives a player more subscribed phones than the limit', async () => {
+    for (let n = 1; n <= PUSH_SUBSCRIPTIONS_PER_PLAYER_MAX; n++) await subscribed(['Player1'], n);
+    await subscribed(['Player2'], 11);
+    expect((await host('POST', `/api/players/${ids[1]}/merge`, { intoId: ids[0] })).statusCode).toBe(200);
+    const endpoints = rows('push_subscriptions').map((row) => (row as { endpoint: string }).endpoint);
+    expect(endpoints).not.toContain(`${FCM}1`);
+    expect(endpoints).toContain(`${FCM}11`);
+    expect(endpoints).toHaveLength(10);
+  });
+
+  it('sends at most 8 at a time and still sends them all', async () => {
+    for (let n = 1; n <= PUSH_SUBSCRIPTIONS_PER_PLAYER_MAX; n++) await subscribed(four(), n);
+    let inFlight = 0;
+    let most = 0;
+    outcome = async (): Promise<PushOutcome> => {
+      inFlight++;
+      most = Math.max(most, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      inFlight--;
+      return 'sent';
+    };
+    await bracket4();
+    await settle();
+    // 10 phones each follow the 4 players, and the bracket calls and warns all 4.
+    expect(sent).toHaveLength(40);
+    expect(most).toBe(MAX_PARALLEL_SENDS);
+    expect(MAX_PARALLEL_SENDS).toBe(8);
+  });
+
+  it('keeps sending after a send that threw, when others are waiting behind it', async () => {
+    for (let n = 1; n <= PUSH_SUBSCRIPTIONS_PER_PLAYER_MAX; n++) await subscribed(four(), n);
+    outcome = (sub) => {
+      if (sub.endpoint === `${FCM}1`) throw new Error('boom');
+      return 'sent';
+    };
+    await bracket4();
+    await settle();
+    expect(sent).toHaveLength(40);
   });
 });
 

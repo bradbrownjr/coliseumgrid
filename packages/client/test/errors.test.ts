@@ -1,6 +1,6 @@
 import type { ApiErrorCode, HandleRefusal } from '@coliseumgrid/core';
 import { describe, expect, it } from 'vitest';
-import { ERROR_WORDS, FOLLOW_CODE_WORDS, GROUP_RESULT_WORDS, GUESS_LIMIT_WORDS, HANDLE_REFUSAL_WORDS, failureWords, guessWords, isApiErrorCode, isHandleRefusal } from '../src/api/errors.ts';
+import { ERROR_WORDS, FOLLOW_CODE_WORDS, FOLLOW_PIN_WORDS, GROUP_RESULT_WORDS, GUESS_LIMIT_WORDS, HANDLE_REFUSAL_WORDS, failureWords, guessWords, isApiErrorCode, isHandleRefusal } from '../src/api/errors.ts';
 
 // A Record over the union makes these lists fail to compile when core adds a code the
 // screens have no words for.
@@ -129,6 +129,21 @@ describe('words for the phone codes', () => {
   it('sends a phone to the Sign-up screen for a new follow code, not the host', () => {
     expect(failureWords({ error: 'wrong-code' }, FOLLOW_CODE_WORDS)).toBe("That code doesn't work. Get a new one from the Sign-up screen.");
     expect(failureWords({ error: 'wrong-code' })).toBe("That code doesn't work. Ask the host for a new one.");
+  });
+});
+
+describe('words for following by handle and PIN', () => {
+  it('names the handle and the PIN, because the server answers the same for a wrong PIN and an unknown handle', () => {
+    const words = "That handle and PIN don't match. Check both and try again.";
+    expect(failureWords({ error: 'wrong-pin' }, FOLLOW_PIN_WORDS)).toBe(words);
+    expect(guessWords({ error: 'wrong-pin' }, FOLLOW_PIN_WORDS)).toBe(words);
+    // The tablet's claim keeps its own words.
+    expect(failureWords({ error: 'wrong-pin' })).toBe("That PIN doesn't match. Try again.");
+  });
+
+  it('still says to wait at the limit, and keeps the writing rules', () => {
+    expect(guessWords({ error: 'too-many-tries' }, FOLLOW_PIN_WORDS)).toBe(GUESS_LIMIT_WORDS);
+    expect(Object.values(FOLLOW_PIN_WORDS).join(' ')).not.toMatch(/[\u2014]|\p{Extended_Pictographic}/u);
   });
 });
 

@@ -51,7 +51,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function attach(info: { deviceId?: number; phoneId?: number; sessionHash?: string; stillAllowed?: () => boolean }): StalledSocket {
+function attach(info: { deviceId?: number; phoneId?: number; sessionHash?: string; local?: boolean; stillAllowed?: () => boolean }): StalledSocket {
   const socket = new StalledSocket();
   hub.attach(socket, { stillAllowed: () => true, ...info });
   return socket;
@@ -110,5 +110,42 @@ describe('signing out a phone', () => {
     vi.advanceTimersByTime(2_100);
     expect(phone.terminated).toBe(true);
     expect(otherPhone.terminated).toBe(false);
+  });
+});
+
+describe('a connection with more than one identity', () => {
+  it('signing out its phone drops only the phone when it is also a device, a host session, or the laptop', () => {
+    const withDevice = attach({ phoneId: 1, deviceId: 5 });
+    const withSession = attach({ phoneId: 1, sessionHash: 'abc' });
+    const laptop = attach({ phoneId: 1, local: true });
+    const phoneOnly = attach({ phoneId: 1 });
+    hub.signOutPhone(1);
+    for (const socket of [withDevice, withSession, laptop]) expect(socket.sent).toEqual([]);
+    expect(phoneOnly.sent).toEqual(['{"type":"unpaired"}']);
+    vi.advanceTimersByTime(2_100);
+    for (const socket of [withDevice, withSession, laptop]) expect(socket.terminated).toBe(false);
+    expect(phoneOnly.terminated).toBe(true);
+  });
+
+  it('unpairing its device drops only the device when it is also a phone, a host session, or the laptop', () => {
+    const withPhone = attach({ deviceId: 1, phoneId: 5 });
+    const withSession = attach({ deviceId: 1, sessionHash: 'abc' });
+    const laptop = attach({ deviceId: 1, local: true });
+    const deviceOnly = attach({ deviceId: 1 });
+    hub.unpair(1);
+    for (const socket of [withPhone, withSession, laptop]) expect(socket.sent).toEqual([]);
+    expect(deviceOnly.sent).toEqual(['{"type":"unpaired"}']);
+    vi.advanceTimersByTime(2_100);
+    for (const socket of [withPhone, withSession, laptop]) expect(socket.terminated).toBe(false);
+    expect(deviceOnly.terminated).toBe(true);
+  });
+
+  it('ends the connection once its last identity goes, and still receives broadcasts before that', () => {
+    const both = attach({ deviceId: 1, phoneId: 2 });
+    hub.signOutPhone(2);
+    hub.broadcast({ type: 'players' });
+    expect(both.sent).toEqual(['{"type":"players"}']);
+    hub.unpair(1);
+    expect(both.sent).toEqual(['{"type":"players"}', '{"type":"unpaired"}']);
   });
 });

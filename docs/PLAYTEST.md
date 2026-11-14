@@ -135,8 +135,9 @@ page has the page alert only (`PLAN.md`, "Player view").
   screen stay 30 seconds with the code? Open the sign-up screen on the laptop at `localhost`:
   is there no QR code, and does the screen move on after 15 seconds?
 - On a second phone, open `/follow` and follow the same handle by typing the handle and the
-  PIN. Does it work? Does a wrong PIN say so, and after 5 wrong tries does it say "Too many
-  tries. Wait 10 minutes, then try again."?
+  PIN. Does it work? Does a wrong PIN say "That handle and PIN don't match. Check both and try
+  again."? Does a handle nobody has give the same words? After 5 wrong tries on one handle
+  does it say "Too many tries. Wait 10 minutes, then try again."?
 - Start a bracket and record results from the host. Does the phone's card change within a
   second each time, with no reload?
 - When the player is called to a station: does the full-screen alert show "You're up!" and
@@ -153,6 +154,8 @@ page has the page alert only (`PLAN.md`, "Player view").
   second, and go back to the sign-in if it followed only them? Does the old PIN stop working
   and the new one work?
 - Does the phone stay signed in after the browser is closed and reopened?
+- Sign in on a phone 20 times in a row with right PINs (use a few handles). Does every one
+  work, with no "Too many tries"?
 - Is there no lock screen alerts control on the page over HTTP?
 - Run groups with several players on a phone. Do the standings show followed rows bold with a
   person icon and the cut line "Top 4 go to the final"? Is everything readable on the
@@ -192,6 +195,12 @@ approval first (`PLAN.md`, "HTTPS on a venue network").
   a subscribed phone. Does it subscribe again with no tap, and do alerts keep arriving?
 - Does a phone that follows nobody get no alerts, and does no player's alert reach a phone
   that follows someone else?
+- Type 5 wrong PINs for one handle on a phone. Does the phone say "Too many tries"? Does the
+  Sign-up tablet still sign that player in with the right PIN? Type 5 wrong PINs on the
+  tablet: is the phone locked for that handle too?
+- Turn alerts on for 11 phones that follow one player (or a browser profile each). Does the
+  oldest stop getting alerts, and do the other 10 keep getting them? Does the host stay
+  responsive when a result goes in with all 11 subscribed?
 
 ### Label printer (after M8)
 

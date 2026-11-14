@@ -81,6 +81,14 @@ export const FOLLOW_CODE_WORDS: WordOverrides = {
 };
 
 /**
+ * Following by handle and PIN: the server answers 401 `wrong-pin` for a wrong PIN and for a
+ * handle nobody has, so the words name both (docs/PLAN.md, "Player view").
+ */
+export const FOLLOW_PIN_WORDS: WordOverrides = {
+  'wrong-pin': "That handle and PIN don't match. Check both and try again.",
+};
+
+/**
  * The text for a failed call. A refusal with a known reason gets the reason's words. `overrides`
  * are the words of one call, tried first.
  */
@@ -97,6 +105,6 @@ export function failureWords(failure: Pick<Failure, 'error' | 'reason'>, overrid
 export const GUESS_LIMIT_WORDS = 'Too many tries. Wait 10 minutes, then try again.';
 
 /** `failureWords` for the host sign-in and the join screen, where a limit means waiting. */
-export function guessWords(failure: Pick<Failure, 'error' | 'reason'>): string {
-  return failure.error === 'too-many-tries' ? GUESS_LIMIT_WORDS : failureWords(failure);
+export function guessWords(failure: Pick<Failure, 'error' | 'reason'>, overrides: WordOverrides = {}): string {
+  return failure.error === 'too-many-tries' ? GUESS_LIMIT_WORDS : failureWords(failure, overrides);
 }

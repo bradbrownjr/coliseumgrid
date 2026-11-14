@@ -100,10 +100,35 @@ describe('POST /api/phone/follow', () => {
     expect(count('phones')).toBe(0);
   });
 
-  it('answers 404 not-found for a handle nobody has', async () => {
-    const res = await follow('Nobody');
-    expect(res.statusCode).toBe(404);
-    expect(res.json()).toEqual({ error: 'not-found' });
+  it('answers an unknown handle exactly as a wrong PIN: 401 wrong-pin, and no cookie', async () => {
+    const unknown = await follow('Nobody');
+    const wrong = await follow('Player1', '0000');
+    expect(unknown.statusCode).toBe(401);
+    expect(unknown.json()).toEqual({ error: 'wrong-pin' });
+    expect(unknown.statusCode).toBe(wrong.statusCode);
+    expect(unknown.body).toBe(wrong.body);
+    expect(unknown.headers['set-cookie']).toBeUndefined();
+  });
+
+  it('keeps no count for an unknown handle, so the handle is not locked when somebody signs up as it', async () => {
+    for (let i = 0; i < CLAIM_MAX_WRONG_PER_HANDLE + 2; i++) expect((await follow('Nobody', PIN, otherIp(30 + i))).statusCode).toBe(401);
+    addPinPlayers(db, 1, 20);
+    const res = await follow('Player20', PIN, otherIp(60));
+    expect(res.statusCode).toBe(201);
+    // The locked answer would show the handle exists, so only a real handle can answer 429.
+    for (let i = 0; i < CLAIM_MAX_WRONG_PER_HANDLE; i++) await follow('Player3', '0000', otherIp(70 + i));
+    expect((await follow('Player3', PIN, otherIp(80))).statusCode).toBe(429);
+    expect((await follow('Nobody', PIN, otherIp(81))).statusCode).toBe(401);
+  });
+
+  it('answers 409 too-many-handles for a full phone whatever the handle, so a full phone learns nothing', async () => {
+    const phone = await signInPhone(app, 'Player1');
+    for (let i = 2; i <= PHONE_FOLLOWS_MAX; i++) await phone.api('POST', '/api/phone/follow', { handle: `Player${i}`, pin: PIN });
+    for (const handle of ['Player7', 'Nobody']) {
+      const res = await phone.api('POST', '/api/phone/follow', { handle, pin: PIN });
+      expect(res.statusCode, handle).toBe(409);
+      expect(res.json()).toEqual({ error: 'too-many-handles' });
+    }
   });
 
   it('refuses a handle the filter refuses, whatever the PIN, as the claim route does', async () => {
@@ -174,17 +199,34 @@ describe('the PIN limits', () => {
     expect((await callers.signup('POST', '/api/signup/claim', { handle: 'Player2', pin: PIN })).statusCode).toBe(200);
   });
 
-  it('counts every try from one address, wrong or right, and an unknown handle too', async () => {
+  it('counts the wrong tries from one address, an unknown handle included, and no right one', async () => {
     for (let i = 0; i < CLAIM_MAX_PER_IP; i++) {
-      const handle = i % 2 === 0 ? 'Player1' : 'Nobody';
-      expect((await follow(handle)).statusCode).not.toBe(429);
+      // Six real handles, 5 wrong tries each, so no handle locks before the address does.
+      const handle = i % 2 === 0 ? `Player${(i / 2) % 6 + 1}` : 'Nobody';
+      const res = await follow(handle, '0000');
+      expect(res.statusCode).toBe(401);
     }
-    const res = await follow('Player2');
+    const res = await follow('Player7');
     expect(res.statusCode).toBe(429);
     expect(res.json()).toEqual({ error: 'too-many-tries' });
-    expect((await follow('Player2', PIN, otherIp(9))).statusCode).toBe(201);
+    expect((await follow('Player7', PIN, otherIp(9))).statusCode).toBe(201);
     clock += CLAIM_WINDOW_MS + 1;
     expect((await follow('Player3')).statusCode).toBe(201);
+  });
+
+  it('lets 100 right follows from one address all through: a right PIN gives its try back', async () => {
+    for (let i = 0; i < 100; i++) expect((await follow(`Player${(i % 8) + 1}`)).statusCode, `follow ${i}`).toBe(201);
+    // Nothing was left counted, so the full 60 wrong tries are still there.
+    for (let i = 0; i < CLAIM_MAX_PER_IP; i++) expect((await follow('Nobody')).statusCode).toBe(401);
+    expect((await follow('Nobody')).statusCode).toBe(429);
+  });
+
+  it('gives the try back for a handle the phone already follows, and for a full phone', async () => {
+    const phone = await signInPhone(app, 'Player1');
+    for (let i = 0; i < CLAIM_MAX_PER_IP + 5; i++) expect((await phone.api('POST', '/api/phone/follow', { handle: 'Player1', pin: PIN })).statusCode).toBe(201);
+    for (let i = 2; i <= PHONE_FOLLOWS_MAX; i++) await phone.api('POST', '/api/phone/follow', { handle: `Player${i}`, pin: PIN });
+    for (let i = 0; i < CLAIM_MAX_PER_IP + 5; i++) expect((await phone.api('POST', '/api/phone/follow', { handle: 'Player7', pin: PIN })).statusCode).toBe(409);
+    expect((await follow('Nobody')).statusCode).toBe(401);
   });
 });
 
@@ -194,27 +236,45 @@ describe('the PIN limits online', () => {
     await start({ mode: 'online', hostPassword: HOST_PASSWORD });
   });
 
-  it('shares the wrong-PIN count of a handle between the tablet and the phone: 5 in all', async () => {
+  it('counts the wrong PINs of the tablet toward the phone lock: 5 in all for phones', async () => {
     const host = await signInHost(app);
     const { cookie } = await pairDevice(app, host, 'signup');
     const tablet = from(app, otherIp(3), cookie);
     for (let i = 0; i < 3; i++) expect((await tablet('POST', '/api/signup/claim', { handle: 'Player1', pin: '0000' })).statusCode).toBe(401);
     for (let i = 0; i < 2; i++) expect((await follow('Player1', '0000')).statusCode).toBe(401);
-    // 5 wrong in all: both routes now refuse, the right PIN included.
+    // 5 wrong in all: phones are locked, the right PIN included.
     expect((await follow('Player1')).statusCode).toBe(429);
-    expect((await tablet('POST', '/api/signup/claim', { handle: 'Player1', pin: PIN })).statusCode).toBe(429);
+    // The tablet has used 3 of its own 5, and the right PIN there clears both counts.
+    expect((await tablet('POST', '/api/signup/claim', { handle: 'Player1', pin: PIN })).statusCode).toBe(200);
+    expect((await follow('Player1')).statusCode).toBe(201);
     // The count is per handle.
     expect((await tablet('POST', '/api/signup/claim', { handle: 'Player2', pin: PIN })).statusCode).toBe(200);
-    clock += CLAIM_WINDOW_MS + 1;
-    expect((await follow('Player1')).statusCode).toBe(201);
   });
 
-  it('counts the other way round too: phone tries lock out the tablet', async () => {
+  it('does not let phone failures lock the tablet', async () => {
     const host = await signInHost(app);
     const { cookie } = await pairDevice(app, host, 'signup');
-    for (let i = 0; i < CLAIM_MAX_WRONG_PER_HANDLE; i++) await follow('Player1', '0000', otherIp(20 + i));
-    const res = await from(app, otherIp(3), cookie)('POST', '/api/signup/claim', { handle: 'Player1', pin: PIN });
-    expect(res.statusCode).toBe(429);
+    const tablet = from(app, otherIp(3), cookie);
+    for (let i = 0; i < CLAIM_MAX_WRONG_PER_HANDLE; i++) expect((await follow('Player1', '0000', otherIp(20 + i))).statusCode).toBe(401);
+    expect((await follow('Player1', PIN, otherIp(40))).statusCode).toBe(429);
+    // The phone lock is full, and the paired tablet still signs the player in.
+    expect((await tablet('POST', '/api/signup/claim', { handle: 'Player1', pin: PIN })).statusCode).toBe(200);
+    // A tablet's wrong PIN while phones are locked is its own try: it doesn't lock the tablet early.
+    for (let i = 0; i < CLAIM_MAX_WRONG_PER_HANDLE; i++) await follow('Player2', '0000', otherIp(50 + i));
+    for (let i = 0; i < CLAIM_MAX_WRONG_PER_HANDLE - 1; i++) expect((await tablet('POST', '/api/signup/claim', { handle: 'Player2', pin: '0000' })).statusCode).toBe(401);
+    expect((await tablet('POST', '/api/signup/claim', { handle: 'Player2', pin: PIN })).statusCode).toBe(200);
+  });
+
+  it('locks the tablet after its own 5 wrong PINs, and that locks phones too', async () => {
+    const host = await signInHost(app);
+    const { cookie } = await pairDevice(app, host, 'signup');
+    const tablet = from(app, otherIp(3), cookie);
+    for (let i = 0; i < CLAIM_MAX_WRONG_PER_HANDLE; i++) expect((await tablet('POST', '/api/signup/claim', { handle: 'Player1', pin: '0000' })).statusCode).toBe(401);
+    expect((await tablet('POST', '/api/signup/claim', { handle: 'Player1', pin: PIN })).statusCode).toBe(429);
+    expect((await follow('Player1')).statusCode).toBe(429);
+    clock += CLAIM_WINDOW_MS + 1;
+    expect((await follow('Player1')).statusCode).toBe(201);
+    expect((await tablet('POST', '/api/signup/claim', { handle: 'Player1', pin: PIN })).statusCode).toBe(200);
   });
 
   it('makes the cookie Secure when the request came over HTTPS through the trusted proxy', async () => {
@@ -322,16 +382,35 @@ describe('follow codes', () => {
     expect((await redeem(spare, otherIp(4))).statusCode).toBe(201);
   });
 
-  it('is limited to 10 wrong codes per address in a window, the right code included, and a right one clears the count', async () => {
+  it('is limited to 10 wrong codes per address in a window, and a right code neither counts nor clears the count', async () => {
     const code = await codeFor('Zap');
     for (let i = 0; i < JOIN_MAX_WRONG_PER_IP - 1; i++) expect((await redeem('AAAAAA')).statusCode).toBe(404);
     expect((await redeem(code)).statusCode).toBe(201);
-    for (let i = 0; i < JOIN_MAX_WRONG_PER_IP; i++) expect((await redeem('AAAAAA')).statusCode).toBe(404);
+    // 9 wrong codes still stand: one more is allowed, then the address is locked.
+    expect((await redeem('AAAAAA')).statusCode).toBe(404);
     const other = await codeFor('Bolt');
     const locked = await redeem(other);
     expect(locked.statusCode).toBe(429);
     expect(locked.json()).toEqual({ error: 'too-many-tries' });
     expect((await redeem(other, otherIp(7))).statusCode).toBe(201);
+  });
+
+  it('keeps the wrong pairing codes of an address when it redeems a right follow code', async () => {
+    const code = await codeFor('Zap');
+    for (let i = 0; i < JOIN_MAX_WRONG_PER_IP - 1; i++) {
+      expect((await from(app, PHONE_IP)('POST', '/api/devices/join', { code: 'AAAAAA' })).statusCode).toBe(404);
+    }
+    expect((await redeem(code)).statusCode).toBe(201);
+    expect((await from(app, PHONE_IP)('POST', '/api/devices/join', { code: 'AAAAAA' })).statusCode).toBe(404);
+    expect((await from(app, PHONE_IP)('POST', '/api/devices/join', { code: 'AAAAAA' })).statusCode).toBe(429);
+  });
+
+  it('keeps the wrong follow codes of an address when it pairs with a right pairing code', async () => {
+    for (let i = 0; i < JOIN_MAX_WRONG_PER_IP - 1; i++) expect((await redeem('AAAAAA')).statusCode).toBe(404);
+    const pairing = (await callers.host('POST', '/api/pairing/codes', { role: 'display' })).json().code;
+    expect((await from(app, PHONE_IP)('POST', '/api/devices/join', { code: pairing })).statusCode).toBe(201);
+    expect((await redeem('AAAAAA')).statusCode).toBe(404);
+    expect((await redeem('AAAAAA')).statusCode).toBe(429);
   });
 
   it('is limited across all callers: 100 wrong codes from many addresses stop every address', async () => {

@@ -5,7 +5,9 @@
 //
 // The key is made once and kept in DATA_DIR. A push service ties each subscription to the key
 // it was made with, so a new key would quietly break every phone's alerts. That is why a file
-// that can't be read stops the server with a message instead of being replaced.
+// that can't be read is never replaced: this file throws, and push-notify.ts turns push off
+// with a warning in the log. The server keeps running; the host fixes or restores the file
+// and restarts it.
 
 import { createPrivateKey, createPublicKey, generateKeyPairSync, type KeyObject } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';

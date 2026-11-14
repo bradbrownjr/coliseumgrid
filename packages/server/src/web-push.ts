@@ -32,7 +32,13 @@ export interface VapidConfig {
   subject: string;
 }
 
-/** `gone` (404 or 410): the subscription no longer works, so the caller deletes it. */
+/**
+ * `gone` (404 or 410): the subscription no longer works, so the caller deletes it. Those are
+ * the only codes that say so. 400 (a bad header) and 413 (a payload too large) are about our
+ * request, 401 and 403 (RFC 8292, sections 2 and 4.2) about our VAPID key, and 429 about our rate
+ * (https://web.dev/articles/push-notifications-web-push-protocol). Deleting on them would
+ * wipe every subscription over a bug or a clock, so they are `failed` and the subscription stays.
+ */
 export type PushOutcome = 'sent' | 'gone' | 'failed';
 
 export type Urgency = 'very-low' | 'low' | 'normal' | 'high';

@@ -215,16 +215,20 @@ describe('wrong pairing codes are rate limited per client IP', () => {
     expect(codes.filter((code) => code === 429).length).toBe(40 - JOIN_MAX_WRONG_PER_IP);
   });
 
-  it('starts over when the window ends, and a right code clears earlier mistakes', async () => {
+  it('starts over when the window ends', async () => {
     for (let i = 0; i < JOIN_MAX_WRONG_PER_IP; i++) await join('ZZZZZZ');
     expect((await join('ZZZZZZ')).statusCode).toBe(429);
     // The window and a code's life are both 10 minutes, so make the code after it ends.
     clock = START + GUESS_WINDOW_MS;
     expect((await join((await makeCode()).code)).statusCode).toBe(201);
+  });
 
+  it('does not count a right code, and does not forget the mistakes before it', async () => {
     for (let i = 0; i < JOIN_MAX_WRONG_PER_IP - 1; i++) await join('ZZZZZZ');
     expect((await join((await makeCode()).code)).statusCode).toBe(201);
-    for (let i = 0; i < JOIN_MAX_WRONG_PER_IP; i++) expect((await join('ZZZZZZ')).statusCode).toBe(404);
+    // 9 mistakes still stand: one more is allowed, then the address is locked.
+    expect((await join('ZZZZZZ')).statusCode).toBe(404);
+    expect((await join('ZZZZZZ')).statusCode).toBe(429);
   });
 
   it('counts unreadable codes as guesses', async () => {

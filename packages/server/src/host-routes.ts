@@ -178,8 +178,9 @@ export async function registerHostRoutes(app: FastifyInstance, options: HostRout
       const token = newToken();
       const device = code === null ? null : devices.pair(code, hashToken(token));
       if (!device) return fail(reply, 404, 'wrong-code');
-      joinTries.clear(ip);
-      // Only wrong codes count against everyone, so a right one gives its slot back.
+      // Only wrong codes count, so a right one gives back its slot on both counts. Clearing the
+      // address's count would also forget its wrong follow codes, which share it.
+      joinTries.refund(ip);
       joinTriesAll.refund(ALL_CALLERS);
       // A browser that was already paired and pairs again replaces its old device, so the
       // host's list doesn't keep a screen that no longer exists.
@@ -262,6 +263,7 @@ export async function registerHostRoutes(app: FastifyInstance, options: HostRout
       // Connecting counts as being seen, whatever the throttle says.
       if (identity.device) devices.touch(identity.device.id, false);
       hub.attach(socket, {
+        ...(identity.local && { local: true }),
         ...(identity.device && { deviceId: identity.device.id }),
         ...(identity.phone && { phoneId: identity.phone.id }),
         ...(identity.hostSessionHash !== undefined && { sessionHash: identity.hostSessionHash }),

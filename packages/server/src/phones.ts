@@ -14,6 +14,14 @@ import { inTransaction, type Database } from './database.ts';
  */
 export const PHONE_SEEN_THROTTLE_MS = 60 * 1000;
 
+/**
+ * A phone not seen for this long is deleted, with its follows and push subscription. A phone
+ * that is never signed out (the browser's data cleared, a phone given away) would otherwise
+ * stay in the table and in every alert's fan-out for good. A phone in use is seen at least
+ * once a minute while a page is open, so 90 days of nothing means it is gone.
+ */
+export const PHONE_IDLE_MAX_MS = 90 * 24 * 60 * 60 * 1000;
+
 export interface PhoneRow {
   id: number;
 }
@@ -42,6 +50,8 @@ export interface Phones {
   removePlayer(playerId: number): number[];
   /** A merge: every phone that followed `fromId` follows `toId` instead (or already did). */
   moveFollows(fromId: number, toId: number): void;
+  /** Deletes the phones not seen since `olderThanMs` ago (follows and subscriptions go with them). Returns their ids. */
+  purgeIdle(olderThanMs: number): number[];
   /** Sets last_seen to now. `throttled` skips the write when it was refreshed within PHONE_SEEN_THROTTLE_MS. */
   touch(id: number, throttled: boolean): void;
 }
@@ -64,6 +74,7 @@ export function createPhones(db: Database, now: Clock): Phones {
   const moveRows = db.prepare(
     'INSERT OR IGNORE INTO phone_follows (phone_id, player_id, created_at) SELECT phone_id, ?, created_at FROM phone_follows WHERE player_id = ?',
   );
+  const idlePhones = db.prepare('SELECT id FROM phones WHERE last_seen < ?');
   const touchAlways = db.prepare('UPDATE phones SET last_seen = ? WHERE id = ?');
   const touchOld = db.prepare('UPDATE phones SET last_seen = ? WHERE id = ? AND last_seen <= ?');
 
@@ -115,6 +126,14 @@ export function createPhones(db: Database, now: Clock): Phones {
     moveFollows(fromId, toId) {
       // The rows of the merged player go with their deletion (ON DELETE CASCADE).
       moveRows.run(toId, fromId);
+    },
+    purgeIdle(olderThanMs) {
+      const cutoff = iso(now() - olderThanMs);
+      return inTransaction(db, () => {
+        const ids = idlePhones.all(cutoff).map((row) => row['id'] as number);
+        for (const id of ids) removePhone.run(id);
+        return ids;
+      });
     },
     touch(id, throttled) {
       const at = now();

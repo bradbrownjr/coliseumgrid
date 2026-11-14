@@ -18,6 +18,14 @@ import type { PushSubscriptions } from './push-subscriptions.ts';
 import { loadOrCreateVapidKeys } from './vapid-keys.ts';
 import { isAllowedPushEndpoint, sendPush, type PushOutcome, type PushSubscriptionRecord, type VapidConfig } from './web-push.ts';
 
+/**
+ * Pushes in flight at once. A call can mean up to 10 subscriptions for each of several players,
+ * and each send waits up to 10 seconds on a push service, so without a limit one result could
+ * open dozens of connections together. 8 keeps a station's worth of alerts out within a
+ * second or two and the rest queue behind them.
+ */
+export const MAX_PARALLEL_SENDS = 8;
+
 export type PushSender = (sub: PushSubscriptionRecord, payload: string, vapid: VapidConfig) => Promise<PushOutcome>;
 
 export interface PushOptions {
@@ -114,13 +122,31 @@ export function createPush(
   let checking: Promise<void> | null = null;
   let dirty = false;
   const sends = new Set<Promise<void>>();
+  let running = 0;
+  const waiting: Array<() => void> = [];
+
+  /** Runs `task` now, or once one of MAX_PARALLEL_SENDS running is done. `task` never throws. */
+  function limited(task: () => Promise<void>): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const start = (): void => {
+        running++;
+        void task().finally(() => {
+          running--;
+          waiting.shift()?.();
+          resolve();
+        });
+      };
+      if (running < MAX_PARALLEL_SENDS) start();
+      else waiting.push(start);
+    });
+  }
 
   function dispatch(playerId: number, alert: PushPayload['alert'], handle: string, station: number | null): void {
     const config = vapid();
     if (!config) return;
     const payload = JSON.stringify({ alert, handle, station: alert === 'called' ? station : null } satisfies PushPayload);
     for (const stored of subscriptions.forPlayer(playerId)) {
-      const sending = (async () => {
+      const sending = limited(async () => {
         try {
           const outcome = await send({ endpoint: stored.endpoint, p256dh: stored.p256dh, auth: stored.auth }, payload, config);
           // The push service says the subscription is dead; keeping it would only repeat the failure.
@@ -128,7 +154,7 @@ export function createPush(
         } catch (error) {
           warn(`A push could not be sent: ${error instanceof Error ? error.message : String(error)}`);
         }
-      })();
+      });
       sends.add(sending);
       void sending.finally(() => sends.delete(sending));
     }

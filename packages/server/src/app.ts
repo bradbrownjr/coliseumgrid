@@ -21,6 +21,7 @@ import { registerHeatRoutes } from './heat-routes.ts';
 import { createHeatStore } from './heat-store.ts';
 import { createHostStore } from './host-store.ts';
 import { createLiveHub } from './live.ts';
+import { startPhonePurge } from './phone-purge.ts';
 import { createPhones } from './phones.ts';
 import { registerPhoneRoutes } from './phone-routes.ts';
 import { createPinGuard } from './pin-guard.ts';
@@ -136,6 +137,9 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
   const hostStore = createHostStore(db, now);
   const devices = createDevices(db, now);
   const phones = createPhones(db, now);
+  // Phones nobody used for 90 days go at startup and daily; one with a connection still open is cut off.
+  const stopPurge = startPhonePurge(phones, (ids) => ids.forEach((id) => hub.signOutPhone(id)), (message) => app.log.warn(message));
+  app.addHook('onClose', () => stopPurge());
   const access = await createAccess({
     mode,
     hostStore,
@@ -158,7 +162,7 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
   const competition = createCompetition(db, store, heatStore, players, events, options.onAnswerBuilt);
   const followCodes = createFollowCodes(db, now);
   const pushSubscriptions = createPushSubscriptions(db, now);
-  const pinGuard = createPinGuard(mode, now);
+  const pinGuard = createPinGuard(mode, now, (handleKey) => players.getByKey(handleKey)?.pinHash);
   // Wrong pairing codes and wrong follow codes count against the same limits.
   const joinLimits = createJoinLimits(now);
   const push = createPush({
@@ -197,6 +201,7 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
     pinGuard,
     followCodes,
     phones,
+    pushSubscriptions,
     onPhonesSignedOut: (phoneIds) => phoneIds.forEach((id) => hub.signOutPhone(id)),
     onCompetitionChanged: () => competition.drop(),
     mode,

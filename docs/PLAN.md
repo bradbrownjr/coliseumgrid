@@ -95,21 +95,38 @@ routes, so it never sees a roster (`CLAUDE.md`, rule 1). The routes are in "Phon
 
 - **Handle and PIN.** A phone-only route, not `/api/signup/claim`: that route is Sign-up-only,
   and it marks the player as at today's event. Both routes use one PIN check (`pinGuard` in
-  the server), so the same wrong-guess counts apply. Phones are limited in both modes, per
-  handle (5 wrong per 10 minutes) and per client IP (60 per 10 minutes), because phones, unlike
-  tablets, aren't paired by the host. Every follow try from an address counts toward the 60,
-  right or wrong, so one address can't walk through the handles. Online, the per-handle
-  count is shared with the claim route, so one handle gets 5 guesses in total, not 5 on each.
+  the server). Phones are limited in both modes, per handle (5 wrong per 10 minutes) and per
+  client IP (60 wrong per 10 minutes), because phones, unlike tablets, aren't paired by the
+  host. Only wrong tries count toward the 60, an unknown handle among them, so one address
+  can't walk through the handles. A right PIN, a handle the phone already follows, and a
+  full phone give their try back, so a room of players behind one address isn't stopped.
+- **Phones only lock phones** (Brad, 2026-11-14). The per-handle wrong count is kept twice.
+  The phone count locks the phone route: wrong PINs on the phone route count in it, and online
+  so do wrong PINs on the tablet's claim, so the tablet can't give a handle more than 5 phone
+  tries in all. The tablet count locks the claim route, online only, and only the tablet's
+  own wrong PINs count in it, so phone failures never lock the paired tablet. A right PIN on
+  either route clears both counts. A PIN that was right when typed but was reset while the
+  check ran is refused as `wrong-pin` and isn't counted.
+- **One answer for an unknown handle and a wrong PIN** (Brad, 2026-11-14): `POST
+  /api/phone/follow` answers 401 `wrong-pin` for both, so the route can't be used to list
+  handles. An unknown handle spends the same hash as a wrong PIN, so timing matches, and
+  counts toward the per-IP limit, but keeps no per-handle count: handles are the caller's
+  choice, and a count each would let one address fill the limiter with made-up keys. The page
+  says "That handle and PIN don't match. Check both and try again." A handle that exists
+  and is locked still answers 429, so a caller who sends 6 wrong PINs can tell a real handle
+  from an unknown one; that costs the 5 tries a handle allows and shows only that the handle
+  exists. The tablet's claim route keeps its own `not-found`.
   A phone that already follows the player skips the PIN. A phone that follows 6 players gets
-  409 before any PIN is checked. At the limit, the page says "Too many tries. Wait 10
-  minutes, then try again."
+  409 before any PIN is checked, for every handle, so the answer says nothing about who
+  exists. At the limit, the page says "Too many tries. Wait 10 minutes, then try again."
 - **The QR code on the Sign-up done screen.** The answers of `POST /api/signup` and
   `POST /api/signup/claim` carry a follow code, made only after the PIN was set or proven, so a
   Sign-up tablet can't make one for any player. It follows the pairing code rules: the same
   alphabet and length (`generateJoinCode`), works once, expires after 10 minutes, and wrong
   codes are rate limited with the join route's limits: the same per-IP and all-callers counts
   as wrong pairing codes (10 per IP and 100 in all, per 10 minutes), so guessing one kind of
-  code doesn't get around the limit on the other. A phone that already follows 6 players gets
+  code doesn't get around the limit on the other. A right code (a follow code or a pairing
+  code) gives back its own try and leaves the counts of wrong ones alone. A phone that already follows 6 players gets
   409 before the code is spent, so a full phone doesn't burn a good code. The QR code holds
   `${location.origin}/follow?code=K7M4QX`. The page uses the code at once and removes it from
   the address, like the join screen. The done screen stays up for 30 seconds when it shows the
@@ -176,7 +193,8 @@ encrypted (RFC 8291), and `applicationServerKey` is the server's VAPID key
 
 - **Keys.** The VAPID key pair is made once, on first need, and kept in the file
   `vapid-private-key.pem` in `DATA_DIR`, not in the database. The subject is the setting
-  `COLISEUMGRID_PUSH_SUBJECT`.
+  `COLISEUMGRID_PUSH_SUBJECT`. A key file that can't be read is never replaced: push turns
+  off with a warning in the log, and the server keeps running.
 - **Sender.** `node:crypto` and `fetch`, no dependency (Brad, 2026-11-14). The server POSTs to the
   subscription's endpoint (RFC 8030, <https://www.rfc-editor.org/rfc/rfc8030>) with `TTL: 300`
   and `Urgency: high`. `Authorization` is a VAPID header, an ES256 JWT with `aud` the
@@ -204,14 +222,26 @@ encrypted (RFC 8291), and `applicationServerKey` is the server's VAPID key
   runs after the write has answered. The check works out the status of every player in the
   bracket or groups and compares it with the last one it saw (kept in memory), using
   `newAlert`. A player's alert goes to every subscription of every phone that follows them,
-  in parallel, each with a 10-second timeout. A new bracket or set of groups starts from
+  at most 8 at a time (`MAX_PARALLEL_SENDS`; the rest wait in a queue), each with a
+  10-second timeout. A new bracket or set of groups starts from
   "not in it", so its first calls alert. The first check after startup only records the
   statuses, so a restart sends nothing. A 404 or 410 from the push service (`gone`) deletes
   the subscription (404: expired; 410: no longer valid;
   <https://web.dev/articles/push-notifications-web-push-protocol>); Apple's 410 is "The
   device token has expired" (Apple's page above). Any other failure keeps it and sends
-  nothing more. Signing out deletes it. A check that throws logs a warning and never fails a
+  nothing more. Those are the only codes that say the subscription is dead: 400 means a bad
+  header, 413 a payload too large, and 429 a rate limit (the same web.dev table), and 401
+  and 403 mean the VAPID key was refused (RFC 8292, sections 2 and 4.2). They describe
+  the server's request, so deleting on them would wipe every subscription over a bug or a
+  clock. Signing out deletes it. A check that throws logs a warning and never fails a
   write.
+- **Limits on stored subscriptions.** A player keeps at most 10 subscriptions
+  (`PUSH_SUBSCRIPTIONS_PER_PLAYER_MAX`), counted over the phones that follow them. When an
+  11th phone subscribes or follows, the oldest is dropped, so someone who knows a PIN can't
+  add phones until every alert fans out to all of them. A phone's age for a player is the
+  later of its subscribing and its following. The dropped phone stays signed in without
+  alerts. A phone not seen for 90 days is deleted with its follows and subscription, at
+  startup and once a day (`phone-purge.ts`).
 - **Payload.** JSON, `{ alert, handle, station }`: `alert` is `called` or `next`, and
   `station` is a number only with `called`.
 - **Offline or plain HTTP.** Push is on only online, with `COLISEUMGRID_PUSH_SUBJECT` set and
@@ -333,7 +363,8 @@ client IP in both modes (`CLAUDE.md`, rule 7), with the IP taken by rule 6. An I
 counts by its /64, so a caller can't get fresh tries by changing the end of its address.
 Wrong codes are also capped across all callers (100 per 10 minutes), so a guesser with many
 addresses can't search the code space; once the cap is used up, every join answers 429 until
-the window ends.
+the window ends. A right code gives back its own try on both counts and leaves the wrong ones
+counted.
 
 **Origin.** `SameSite=Strict` doesn't stop a page on another port of the same address, or on
 a sibling subdomain. So any request that isn't a `GET`, `HEAD`, or `OPTIONS`, and the
@@ -366,8 +397,8 @@ answer lists its fields, errors are `{ "error": code }`. The shared types are in
 
 | Request | Who | Answer |
 |---|---|---|
-| `POST /api/phone/follow` `{ handle, pin }` | anyone | 201 `{ following: [player] }` and the `cg_phone` cookie if the phone is new; 400 `refused` (the handle fails the filter) or `bad-request`; 401 `wrong-pin`; 404 `not-found`; 409 `too-many-handles`; 429 `too-many-tries` |
-| `POST /api/phone/follow-code` `{ code }` | anyone | the same answer without `wrong-pin` or `not-found`; 404 `wrong-code` for unknown, used, unreadable, or expired; 409 `too-many-handles` before the code is spent; 429 `too-many-tries` |
+| `POST /api/phone/follow` `{ handle, pin }` | anyone | 201 `{ following: [player] }` and the `cg_phone` cookie if the phone is new; 400 `refused` (the handle fails the filter) or `bad-request`; 401 `wrong-pin` (a wrong PIN, and a handle nobody has); 409 `too-many-handles`; 429 `too-many-tries` |
+| `POST /api/phone/follow-code` `{ code }` | anyone | the same answer without `wrong-pin`; 404 `wrong-code` for unknown, used, unreadable, or expired; 409 `too-many-handles` before the code is spent; 429 `too-many-tries` |
 | `GET /api/phone` | phone | `{ event, following, standings }`; 401 `not-following` |
 | `DELETE /api/phone/follow/:playerId` | phone | `{ following }`; the last one signs the phone out; 404 `not-found` if the phone doesn't follow that player |
 | `POST /api/phone/sign-out` | phone | 204, the cookie cleared, the live connection closed |
@@ -417,13 +448,16 @@ the one kept (a phone that followed both keeps one).
 **Error codes** added to the list (the client turns each into words in
 `packages/client/src/api/errors.ts`): `not-following` (the request needs a phone that follows
 someone), `too-many-handles` (6 are followed already), and `push-off` (push isn't available
-here). A wrong PIN, an unknown handle, and a limit use the codes the claim route has.
+here). A wrong PIN and a limit use the codes the claim route has. On the phone route an
+unknown handle is a wrong PIN.
 
 **Live.** A phone connects to `GET /api/live` with its cookie, and the server checks the
 `phones` row for as long as the connection is open, as it does for a device. It gets the
 broadcasts every screen gets: `event`, `players`, `bracket`, and `heats`. These carry nothing
 personal, and the page reloads `GET /api/phone` when one arrives. Signing out sends
-`{ type: "unpaired" }` and closes the connection, so the page stops reconnecting.
+`{ type: "unpaired" }` and closes the connection, so the page stops reconnecting. A
+connection that is also the host, the laptop, or another device or phone loses only the
+identity that ended and stays open; the same holds when the host unpairs a device.
 
 **The answer cache.** A 32-player round robin takes 258 ms to rebuild (see "Brackets API"), and
 30 phones that each reload on every result would block the server for about 8 seconds
@@ -436,6 +470,8 @@ cover each path.
 **Storage.** Migration 6 adds:
 
 - `phones`: the id, the token's SHA-256 hash (`UNIQUE`), `last_seen`, and `created_at`.
+  `last_seen` is refreshed whenever the phone's cookie is used, at most once a minute. A phone
+  not seen for 90 days is deleted, and its follows and subscription with it.
 - `phone_follows`: the phone, the player, and `created_at`. The primary key is both ids, and
   either one deleted deletes the row.
 - `follow_codes`: the code (primary key), the player (deleted with the player), `created_at`,
@@ -516,7 +552,8 @@ requests need a Sign-up device or a host session ("Devices and host API"). Witho
 route answers 401 `{ "error": "not-signed-in" }`.
 
 PIN attempts on `/api/signup/claim` are rate limited per handle and per client IP in online mode, with the
-client IP taken by rule 6. Offline, a wrong PIN only costs a retry.
+client IP taken by rule 6. A wrong PIN there also counts toward the handle's phone lock, but
+phone failures never lock the claim ("Player view"). Offline, a wrong PIN only costs a retry.
 
 ### Stats
 

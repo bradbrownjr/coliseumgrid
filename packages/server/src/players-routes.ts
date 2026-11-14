@@ -38,6 +38,7 @@ import { hashPin } from './pin-hash.ts';
 import type { PinGuard } from './pin-guard.ts';
 import type { Phones } from './phones.ts';
 import type { Players } from './players.ts';
+import type { PushSubscriptions } from './push-subscriptions.ts';
 import { CLAIM_MAX_PER_IP, CLAIM_WINDOW_MS } from './rate-limit.ts';
 import { secureRandom } from './secure-random.ts';
 
@@ -58,6 +59,7 @@ export interface PlayerRoutesOptions {
   /** Codes for the Done screen's QR, made once a PIN was set or proven. */
   followCodes: FollowCodes;
   phones: Phones;
+  pushSubscriptions: PushSubscriptions;
   /** Tells the live connections of phones that a PIN reset signed out. */
   onPhonesSignedOut: (phoneIds: number[]) => void;
   /** Called after a rename or a merge, so the kept competition answer (it has handles) is dropped. */
@@ -82,7 +84,7 @@ function refuse(reply: FastifyReply, reason: HandleRefusal): FastifyReply {
 }
 
 export async function registerPlayerRoutes(app: FastifyInstance, options: PlayerRoutesOptions): Promise<void> {
-  const { players, eventPlayers, inBracket, exclusive, access, onPlayersChanged, pinGuard, followCodes, phones, trustedProxy } =
+  const { players, eventPlayers, inBracket, exclusive, access, onPlayersChanged, pinGuard, followCodes, phones, pushSubscriptions, trustedProxy } =
     options;
   const online = options.mode === 'online';
 
@@ -330,6 +332,8 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
         eventPlayers.move(id, intoId);
         // Phones that followed the merged player follow the one kept.
         phones.moveFollows(id, intoId);
+        // The player kept may now have more subscribed phones than the cap allows.
+        pushSubscriptions.trimPlayer(intoId);
         players.delete(id);
         // The merged handle no longer means this player, so its count goes with it.
         forget(merged.handle);

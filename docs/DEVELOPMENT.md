@@ -118,10 +118,30 @@ A bad value stops it with a message.
 `vapid-keys.ts`, and `pin-guard.ts`.
 
 - **One PIN check.** `pin-guard.ts` is the only place a PIN is checked against its limits.
-  The tablet's claim (`checkClaim`) and the phone's follow (`checkFollow`) both go through it,
-  so the per-handle count is one count online. `allowFollowFrom` is the phone's per-IP count
-  and is called before `checkFollow`. A new route that checks a PIN calls the guard, not
-  `verifyPin` directly. Anything that changes a handle's PIN or name calls `forget`.
+  The tablet's claim (`checkClaim`) and the phone's follow (`checkFollow`) both go through it.
+  It keeps two per-handle counts: the phone count locks phones, and online a wrong claim
+  counts in it too; the tablet count locks the claim, and only wrong claims count in it, so
+  phones never lock the tablet (`PLAN.md`, "Player view"). `allowFollowFrom` reserves the
+  phone's per-IP try before `checkFollow`, and the route calls `refundFollowFrom` when the
+  follow worked, so only wrong tries count toward the 60. An unknown handle goes to
+  `rejectUnknownHandle`, which spends a hash and keeps no per-handle key. After the hash, the
+  guard reads the player's PIN hash again and answers `wrong-pin`, uncounted, when it changed:
+  a reset during the check must not let the old PIN through. The route's write follows the
+  guard's answer with no `await` between, so keep it that way. A new route that checks a PIN
+  calls the guard, not `verifyPin` directly. Anything that changes a handle's PIN or name
+  calls `forget`.
+- **Right codes refund, they don't clear.** The per-IP wrong-code counts are shared by
+  pairing codes and follow codes, so a right code calls `refund` for its own try. `clear`
+  would also forget the wrong codes of the other kind.
+- **Live connections hold identities.** A connection can be the host, the laptop, a device, and
+  a phone at once (one browser, several cookies). `hub.signOutPhone` and `hub.unpair` take away
+  that one identity and close the connection only when none is left, so pass every identity
+  the request has to `hub.attach`.
+- **Phones that go idle.** `phones.touch` refreshes `last_seen` from `access.identify`, at
+  most once a minute. `phone-purge.ts` deletes phones not seen for 90 days at startup and
+  daily; follows and subscriptions go by cascade. `push-subscriptions.ts` keeps at most 10
+  subscriptions per player (`trimPlayer`, called when a phone subscribes, follows, or a merge
+  moves follows), and `push-notify.ts` sends at most 8 pushes at once.
 - **The answer cache.** `competition.answer()` builds the bracket or groups answer once and
   keeps it, and every phone's `GET /api/phone` is worked out from it, so 30 phones don't
   each rebuild a round robin. It reads everything in its first tick, so one answer is one

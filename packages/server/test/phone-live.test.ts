@@ -9,6 +9,7 @@ import { buildApp } from '../src/app.ts';
 import { openDatabase, type Database } from '../src/database.ts';
 import { makeCallers, onStations, type Callers } from './bracket-api-helpers.ts';
 import { heatsBody } from './heat-api-helpers.ts';
+import { pairDevice } from './helpers.ts';
 import { PHONE_IP, PIN, addPinPlayers, eventually, listen, otherIp, signInPhone, type Live } from './phone-helpers.ts';
 
 let app: FastifyInstance;
@@ -148,6 +149,52 @@ describe('signing out', () => {
     expect(liveLeft.messages).toContainEqual({ type: 'unpaired' });
     await new Promise((r) => setTimeout(r, 30));
     expect(liveStays.closed).toBeUndefined();
+  });
+});
+
+describe('a browser that holds more than one identity', () => {
+  const LAPTOP = '127.0.0.1';
+  const receivesBroadcast = async (live: Live): Promise<void> => {
+    expect((await callers.host('PUT', '/api/event', { name: `Night ${live.messages.length}` })).statusCode).toBe(200);
+    await eventually(() => expect(live.messages.some((m) => m.type === 'event')).toBe(true));
+  };
+
+  it('stays connected when the phone signs out, if the browser is also the laptop', async () => {
+    const phone = await signInPhone(app, 'Player1');
+    const live = await connect(phone.cookie, LAPTOP);
+    expect((await phone.api('POST', '/api/phone/sign-out')).statusCode).toBe(204);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(live.closed).toBeUndefined();
+    expect(live.messages).not.toContainEqual({ type: 'unpaired' });
+    await receivesBroadcast(live);
+  });
+
+  it('stays connected when the phone signs out, if the browser is also a paired Display; unpairing the Display then ends it', async () => {
+    const phone = await signInPhone(app, 'Player1');
+    const { cookie, device } = await pairDevice(app, '', 'display', LAPTOP);
+    const live = await connect(`${cookie}; ${phone.cookie}`);
+    expect((await phone.api('POST', '/api/phone/sign-out')).statusCode).toBe(204);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(live.closed).toBeUndefined();
+    expect(live.messages).not.toContainEqual({ type: 'unpaired' });
+    await receivesBroadcast(live);
+    expect((await callers.host('DELETE', `/api/devices/${device.id}`)).statusCode).toBe(204);
+    await eventually(() => expect(live.closed).toBeDefined());
+    expect(live.messages).toContainEqual({ type: 'unpaired' });
+  });
+
+  it('stays connected when the Display is unpaired, if the browser is also a phone; signing out the phone then ends it', async () => {
+    const phone = await signInPhone(app, 'Player1');
+    const { cookie, device } = await pairDevice(app, '', 'display', LAPTOP);
+    const live = await connect(`${cookie}; ${phone.cookie}`);
+    expect((await callers.host('DELETE', `/api/devices/${device.id}`)).statusCode).toBe(204);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(live.closed).toBeUndefined();
+    expect(live.messages).not.toContainEqual({ type: 'unpaired' });
+    await receivesBroadcast(live);
+    expect((await phone.api('POST', '/api/phone/sign-out')).statusCode).toBe(204);
+    await eventually(() => expect(live.closed).toBeDefined());
+    expect(live.messages).toContainEqual({ type: 'unpaired' });
   });
 });
 

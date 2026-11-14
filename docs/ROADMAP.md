@@ -38,8 +38,9 @@ Tasks:
   `newAlert`, and the phone API types.
 - **Phone sign-in.** A phone gets its own table and the `cg_phone` cookie, not a device
   role. Handle and PIN sign-in on a new route, sharing one PIN check and its limits with the
-  claim route (`CLAUDE.md`, rule 7). Limited in both modes; online, the per-handle count is
-  shared with the claim route.
+  claim route (`CLAUDE.md`, rule 7). Limited in both modes. Phones only lock phones: wrong
+  PINs on the claim route also count toward a handle's phone lock, but phone failures never
+  lock the claim route (`PLAN.md`, "Player view").
 - **The QR code** on the Sign-up done screen (now 30 seconds), made only after the PIN was
   set or proven. It follows the pairing code rules: works once, expires after 10 minutes,
   rate limited.

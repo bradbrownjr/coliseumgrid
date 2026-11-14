@@ -3,7 +3,7 @@ import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useState, type SubmitEventHandler } from 'react';
-import { guessWords } from '../../api/errors.ts';
+import { FOLLOW_PIN_WORDS, guessWords } from '../../api/errors.ts';
 import { followPlayer } from '../../api/phone.ts';
 import { ErrorSlot, EntryFrame, bigButtonSx, linkButtonSx } from '../../components/EntryFrame.tsx';
 import { PinDigits } from '../../components/PinDigits.tsx';
@@ -22,12 +22,10 @@ interface FollowFlowProps {
   onCancel?: () => void;
 }
 
-const NOT_FOUND_WORDS = "We can't find that handle. Check it and try again.";
-
 /**
  * Handle, then PIN: the same two steps as the Sign-up claim (docs/DESIGN.md, "Sign-up"), each
- * a centered entry panel. The server checks both together, so a handle that isn't there is
- * only found out after the PIN, and the flow goes back to the handle step to say so.
+ * a centered entry panel. The server checks both together and answers the same for a wrong PIN
+ * and a handle that isn't there, so the words name both and the flow stays on the PIN step.
  */
 export function FollowFlow({ title, notice = null, onFollowed, onCancel }: FollowFlowProps) {
   const [handle, setHandle] = useState('');
@@ -54,11 +52,7 @@ export function FollowFlow({ title, notice = null, onFollowed, onCancel }: Follo
     setBusy(false);
     if (result.ok) return onFollowed();
     entry.reset('');
-    if (result.error === 'not-found') {
-      setWords(NOT_FOUND_WORDS);
-      return setStep('handle');
-    }
-    setWords(guessWords(result));
+    setWords(guessWords(result, FOLLOW_PIN_WORDS));
     setLockedOut(result.error === 'too-many-tries');
   };
 

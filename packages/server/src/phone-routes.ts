@@ -97,7 +97,12 @@ export async function registerPhoneRoutes(app: FastifyInstance, options: PhoneRo
    */
   function addFollow(request: FastifyRequest, reply: FastifyReply, playerId: number): number | 'full' {
     const phone = access.identify(request).phone;
-    if (phone && phones.get(phone.id)) return phones.follow(phone.id, playerId) === 'full' ? 'full' : phone.id;
+    if (phone && phones.get(phone.id)) {
+      if (phones.follow(phone.id, playerId) === 'full') return 'full';
+      // The phone may have alerts on, which now count for this player too.
+      pushSubscriptions.trimPlayer(playerId);
+      return phone.id;
+    }
     const token = newToken();
     const id = phones.create(hashToken(token), playerId);
     access.setPhoneCookie(request, reply, token);
@@ -115,7 +120,6 @@ export async function registerPhoneRoutes(app: FastifyInstance, options: PhoneRo
           201: followingAnswerSchema,
           400: refusedOrBadRequest,
           401: errorSchema(['wrong-pin']),
-          404: errorSchema(['not-found']),
           409: errorSchema(['too-many-handles']),
           429: tooManyTries,
         },
@@ -124,22 +128,31 @@ export async function registerPhoneRoutes(app: FastifyInstance, options: PhoneRo
     async (request, reply) => {
       const check = checkHandle(request.body.handle);
       if (!check.ok) return reply.code(400).send({ error: 'refused', reason: check.reason } satisfies ApiError);
-      // Every try from an address counts, so one address can't walk through the handles.
-      if (!pinGuard.allowFollowFrom(getClientKey(request, trustedProxy))) return fail(reply, 429, 'too-many-tries');
+      // Reserved up front. Only wrong tries stay counted, so one address can't walk through the
+      // handles; a follow that works gives its try back (refundFollowFrom).
+      const ip = getClientKey(request, trustedProxy);
+      if (!pinGuard.allowFollowFrom(ip)) return fail(reply, 429, 'too-many-tries');
       const player = players.getByKey(check.key);
-      if (!player) return fail(reply, 404, 'not-found');
 
       const phone = access.identify(request).phone;
-      if (phone) {
-        const following = phones.following(phone.id);
-        // A phone that already follows them has nothing to prove.
-        if (following.some((p) => p.id === player.id)) return reply.code(201).send({ following });
-        if (following.length >= PHONE_FOLLOWS_MAX) return fail(reply, 409, 'too-many-handles');
+      const following = phone ? phones.following(phone.id) : [];
+      // A phone that already follows them has nothing to prove.
+      if (player && following.some((p) => p.id === player.id)) {
+        pinGuard.refundFollowFrom(ip);
+        return reply.code(201).send({ following });
+      }
+      // Asked of every handle, known or not, so the answer says nothing about who exists.
+      if (following.length >= PHONE_FOLLOWS_MAX) {
+        pinGuard.refundFollowFrom(ip);
+        return fail(reply, 409, 'too-many-handles');
       }
 
+      // An unknown handle and a wrong PIN get one answer (docs/PLAN.md, "Player view").
+      if (!player) return fail(reply, 401, await pinGuard.rejectUnknownHandle(request.body.pin));
       const verdict = await pinGuard.checkFollow(check.key, player.pinHash, request.body.pin);
       if (verdict === 'too-many-tries') return fail(reply, 429, 'too-many-tries');
       if (verdict === 'wrong-pin') return fail(reply, 401, 'wrong-pin');
+      pinGuard.refundFollowFrom(ip);
       const id = addFollow(request, reply, player.id);
       if (id === 'full') return fail(reply, 409, 'too-many-handles');
       return reply.code(201).send({ following: phones.following(id) });
@@ -172,8 +185,9 @@ export async function registerPhoneRoutes(app: FastifyInstance, options: PhoneRo
       const code = parseJoinCode(request.body.code);
       const playerId = code === null ? null : followCodes.spend(code);
       if (playerId === null) return fail(reply, 404, 'wrong-code');
-      joinLimits.perIp.clear(ip);
-      // Only wrong codes count against everyone, so a right one gives its slot back.
+      // Only wrong codes count, so a right one gives back its slot on both counts. Clearing the
+      // address's count would also forget its wrong pairing codes, which share it.
+      joinLimits.perIp.refund(ip);
       joinLimits.all.refund(ALL_CALLERS);
       const id = addFollow(request, reply, playerId);
       if (id === 'full') return fail(reply, 409, 'too-many-handles');
