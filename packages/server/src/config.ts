@@ -23,6 +23,31 @@ export interface Config {
   trustedProxy?: string;
   /** The host password from COLISEUMGRID_HOST_PASSWORD. When set, it is the password and first-run setup is off. Required online. */
   hostPassword?: string;
+  /**
+   * The contact the push services see in the VAPID token (RFC 8292, section 2.1), a `mailto:` or
+   * `https:` URL, from COLISEUMGRID_PUSH_SUBJECT. Without it, push stays off.
+   */
+  pushSubject?: string;
+}
+
+/**
+ * True for a VAPID subject: `mailto:` with an address, or an `https:` URL
+ * (https://www.rfc-editor.org/rfc/rfc8292#section-2.1). The host can't be `localhost`: Apple's
+ * push service may answer 403 BadJwtToken for it
+ * (https://github.com/web-push-libs/web-push, "Using VAPID Key for applicationServerKey").
+ */
+export function isValidPushSubject(subject: string): boolean {
+  const local = (host: string): boolean => /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(host) || /\.localhost$/i.test(host);
+  if (subject.startsWith('mailto:')) {
+    const match = /^mailto:[^@\s]+@([^@\s]+)$/.exec(subject);
+    return match !== null && !local(match[1] as string);
+  }
+  try {
+    const url = new URL(subject);
+    return url.protocol === 'https:' && !local(url.hostname) && url.username === '' && url.password === '';
+  } catch {
+    return false;
+  }
 }
 
 function isMode(value: string): value is Mode {
@@ -62,6 +87,14 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): C
     throw new Error('COLISEUMGRID_HOST_PASSWORD is required when COLISEUMGRID_MODE is online');
   }
 
+  const pushSubject = env['COLISEUMGRID_PUSH_SUBJECT'] || undefined;
+  if (pushSubject !== undefined && !isValidPushSubject(pushSubject)) {
+    throw new Error(
+      'COLISEUMGRID_PUSH_SUBJECT must be a mailto: address or an https: URL, and not localhost ' +
+        '(for example mailto:you@example.com)',
+    );
+  }
+
   return {
     mode,
     host: env['HOST'] || '0.0.0.0',
@@ -69,5 +102,6 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): C
     dataDir,
     ...(trustedProxy && { trustedProxy }),
     ...(hostPassword && { hostPassword }),
+    ...(pushSubject && { pushSubject }),
   };
 }

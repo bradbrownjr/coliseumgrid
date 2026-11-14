@@ -15,13 +15,20 @@ import { openDatabase, type Database } from './database.ts';
 import { createDevices } from './devices.ts';
 import { createEventPlayers } from './event-players.ts';
 import { createEvents } from './events.ts';
+import { createFollowCodes } from './follow-codes.ts';
 import { registerHostRoutes } from './host-routes.ts';
 import { registerHeatRoutes } from './heat-routes.ts';
 import { createHeatStore } from './heat-store.ts';
 import { createHostStore } from './host-store.ts';
 import { createLiveHub } from './live.ts';
+import { createPhones } from './phones.ts';
+import { registerPhoneRoutes } from './phone-routes.ts';
+import { createPinGuard } from './pin-guard.ts';
 import { createPlayers } from './players.ts';
 import { registerPlayerRoutes } from './players-routes.ts';
+import { createPush, type PushOptions } from './push-notify.ts';
+import { createPushSubscriptions } from './push-subscriptions.ts';
+import { createJoinLimits } from './rate-limit.ts';
 import { createWriteChain } from './write-chain.ts';
 
 export interface AppOptions {
@@ -41,6 +48,21 @@ export interface AppOptions {
   now?: Clock;
   /** Ping interval for live connections, in milliseconds. Tests shorten it. Default HEARTBEAT_MS. */
   liveHeartbeatMs?: number;
+  /**
+   * Web Push (docs/PLAN.md, "Player view"). It is on only in online mode with a `subject`, and a
+   * request must also come over HTTPS. `dataDir` is where the VAPID key file lives; `loadKeys` and
+   * `send` stand in for the key file and the sender in tests.
+   */
+  push?: PushOptions;
+  /** Called each time the phones' answer is built rather than read from the kept one. For tests. */
+  onAnswerBuilt?: () => void;
+}
+
+declare module 'fastify' {
+  interface FastifyInstance {
+    /** Resolves when no push check or send is running or waiting. For tests. */
+    pushIdle(): Promise<void>;
+  }
 }
 
 /** `/api` and everything under it belongs to the API, never to the client. */
@@ -113,10 +135,12 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
 
   const hostStore = createHostStore(db, now);
   const devices = createDevices(db, now);
+  const phones = createPhones(db, now);
   const access = await createAccess({
     mode,
     hostStore,
     devices,
+    phones,
     ...(options.hostPassword && { hostPassword: options.hostPassword }),
     ...(options.trustedProxy && { trustedProxy: options.trustedProxy }),
   });
@@ -131,7 +155,20 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
   const eventPlayers = createEventPlayers(db, events, (event) => hub.broadcast({ type: 'event', event }));
   const store = createBracketStore(db);
   const heatStore = createHeatStore(db);
-  const competition = createCompetition(db, store, heatStore, players);
+  const competition = createCompetition(db, store, heatStore, players, events, options.onAnswerBuilt);
+  const followCodes = createFollowCodes(db, now);
+  const pushSubscriptions = createPushSubscriptions(db, now);
+  const pinGuard = createPinGuard(mode, now);
+  // Wrong pairing codes and wrong follow codes count against the same limits.
+  const joinLimits = createJoinLimits(now);
+  const push = createPush({
+    ...options.push,
+    mode,
+    competition,
+    subscriptions: pushSubscriptions,
+    warn: (message) => app.log.warn(message),
+  });
+  app.decorate('pushIdle', () => push.idle());
   // Every bracket and heats write, and a merge that could delete a player either is about to
   // take, goes through this one chain (docs/PLAN.md, "Brackets API", "Heats API").
   const chain = createWriteChain();
@@ -142,6 +179,8 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
     events,
     hub,
     now,
+    joinLimits,
+    onEventChanged: () => competition.drop(),
     ...(options.trustedProxy && { trustedProxy: options.trustedProxy }),
   });
 
@@ -155,7 +194,27 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
     exclusive: (task) => chain.run(task),
     access,
     onPlayersChanged: () => hub.broadcast({ type: 'players' }),
+    pinGuard,
+    followCodes,
+    phones,
+    onPhonesSignedOut: (phoneIds) => phoneIds.forEach((id) => hub.signOutPhone(id)),
+    onCompetitionChanged: () => competition.drop(),
     mode,
+    ...(options.trustedProxy && { trustedProxy: options.trustedProxy }),
+  });
+
+  await registerPhoneRoutes(app, {
+    access,
+    phones,
+    followCodes,
+    pushSubscriptions,
+    players,
+    events,
+    competition,
+    hub,
+    pinGuard,
+    joinLimits,
+    push,
     ...(options.trustedProxy && { trustedProxy: options.trustedProxy }),
   });
 
@@ -179,6 +238,9 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
     }
     return reply.code(404).send({ error: 'not-found' });
   });
+
+  // Starts from the competition as it is, so a restart alerts nobody for what was already called.
+  await push.start();
 
   return app;
 }

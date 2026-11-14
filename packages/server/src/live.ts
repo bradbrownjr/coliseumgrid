@@ -40,6 +40,8 @@ export interface LiveSocket {
 export interface LiveConnectionInfo {
   /** Set for a paired device, so unpairing it closes this connection. */
   deviceId?: number;
+  /** Set for a phone, so signing it out closes this connection. */
+  phoneId?: number;
   /** Set for a cookie host session, so signing out closes this connection. */
   sessionHash?: string;
   /** Asked at each heartbeat. False closes the connection (the session expired, or the device is gone). */
@@ -52,6 +54,8 @@ export interface LiveHub {
   broadcast(message: LiveMessage): void;
   /** Tells the device's connections they are unpaired, then closes them. */
   unpair(deviceId: number): void;
+  /** Tells the phone's connections they are signed out (`unpaired`), then closes them. */
+  signOutPhone(phoneId: number): void;
   /** Closes the connections that signed in with this session. */
   endSession(sessionHash: string): void;
   /** Stops the heartbeat. Open sockets are closed by the WebSocket plugin on app close. */
@@ -103,6 +107,20 @@ export function createLiveHub(heartbeatMs: number = HEARTBEAT_MS): LiveHub {
   // A pending heartbeat must not keep the process alive after the app closes.
   timer.unref();
 
+  /** Sends `unpaired` to the matching connections, then closes them. */
+  function sendUnpaired(matches: (connection: Connection) => boolean): void {
+    for (const connection of connections) {
+      if (!matches(connection)) continue;
+      connections.delete(connection);
+      // Close after the message is written, or the client could see only the close.
+      const { socket } = connection;
+      if (socket.readyState !== OPEN) continue;
+      sendJson(socket, { type: 'unpaired' }, () => socket.close(CLOSE_NORMAL));
+      // The send's callback never runs for a client that isn't reading, so the cut doesn't wait for it.
+      terminateSoon(socket);
+    }
+  }
+
   return {
     attach(socket, info) {
       const connection: Connection = { ...info, socket, alive: true };
@@ -117,18 +135,8 @@ export function createLiveHub(heartbeatMs: number = HEARTBEAT_MS): LiveHub {
     broadcast(message) {
       for (const { socket } of connections) sendJson(socket, message);
     },
-    unpair(deviceId) {
-      for (const connection of connections) {
-        if (connection.deviceId !== deviceId) continue;
-        connections.delete(connection);
-        // Close after the message is written, or the client could see only the close.
-        const { socket } = connection;
-        if (socket.readyState !== OPEN) continue;
-        sendJson(socket, { type: 'unpaired' }, () => socket.close(CLOSE_NORMAL));
-        // The send's callback never runs for a client that isn't reading, so the cut doesn't wait for it.
-        terminateSoon(socket);
-      }
-    },
+    unpair: (deviceId) => sendUnpaired((connection) => connection.deviceId === deviceId),
+    signOutPhone: (phoneId) => sendUnpaired((connection) => connection.phoneId === phoneId),
     endSession(sessionHash) {
       for (const connection of connections) {
         if (connection.sessionHash !== sessionHash) continue;

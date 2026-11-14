@@ -1,3 +1,4 @@
+import { JOIN_CODE_ALPHABET } from '@coliseumgrid/core';
 import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.ts';
@@ -6,6 +7,8 @@ import { verifyPin } from '../src/pin-hash.ts';
 
 // The app runs offline and app.inject comes from 127.0.0.1, so every request here counts as the
 // laptop, which is the host. Who may call which route is tested in access.test.ts.
+/** The code a sign-up or a claim answers with (docs/PLAN.md, "Phone API"). */
+const FOLLOW_CODE = { code: expect.stringMatching(new RegExp(`^[${JOIN_CODE_ALPHABET}]{6}$`)), expiresAt: expect.any(String) };
 let app: FastifyInstance;
 let db: Database;
 /** Every response body the test saw, to check what leaves the server. */
@@ -63,7 +66,7 @@ describe('POST /api/signup', () => {
   it('creates a player and answers 201 with the id and handle only', async () => {
     const res = await post('/api/signup', { handle: 'Zap', pin: '0420' });
     expect(res.statusCode).toBe(201);
-    expect(res.json()).toEqual({ player: { id: expect.any(Number), handle: 'Zap' } });
+    expect(res.json()).toEqual({ player: { id: expect.any(Number), handle: 'Zap' }, followCode: FOLLOW_CODE });
     expect(Object.keys(res.json().player).sort()).toEqual(['handle', 'id']);
   });
 
@@ -131,7 +134,7 @@ describe('a taken handle asks for its PIN', () => {
 
     const right = await post('/api/signup/claim', { handle: 'zap', pin: '4321' });
     expect(right.statusCode).toBe(200);
-    expect(right.json()).toEqual({ player });
+    expect(right.json()).toEqual({ player, followCode: FOLLOW_CODE });
   });
 });
 
@@ -241,7 +244,7 @@ describe('POST /api/players', () => {
 
     const claim = await post('/api/signup/claim', { handle: 'host added', pin });
     expect(claim.statusCode).toBe(200);
-    expect(claim.json()).toEqual({ player });
+    expect(claim.json()).toEqual({ player, followCode: FOLLOW_CODE });
   });
 
   it('refuses a vulgar handle', async () => {
@@ -394,7 +397,7 @@ describe('what leaves the server (CLAUDE.md, rule 1)', () => {
     const keys = async (res: LightMyRequestResponse) => Object.keys(res.json()).sort();
     expect(await keys(await post('/api/signup/check', { handle: 'New' }))).toEqual(['handle', 'status', 'suggestedPin']);
     expect(await keys(await post('/api/signup/check', { handle: 'Zap' }))).toEqual(['handle', 'status']);
-    expect(await keys(await post('/api/signup/claim', { handle: 'Zap', pin: '1234' }))).toEqual(['player']);
+    expect(await keys(await post('/api/signup/claim', { handle: 'Zap', pin: '1234' }))).toEqual(['followCode', 'player']);
     expect(await keys(await call('GET', '/api/players'))).toEqual(['players']);
     expect(await keys(await call('PATCH', `/api/players/${player.id}`, { handle: 'Zap2' }))).toEqual(['player']);
   });

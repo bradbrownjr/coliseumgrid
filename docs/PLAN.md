@@ -160,13 +160,15 @@ encrypted (RFC 8291), and `applicationServerKey` is the server's VAPID key
 (<https://www.w3.org/TR/push-api/>). A service worker needs a secure context too
 (<https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API>).
 
-- **Keys.** The VAPID key pair is made once, on first need, and stored in the database, which
-  is in `DATA_DIR`.
+- **Keys.** The VAPID key pair is made once, on first need, and kept in the file
+  `vapid-private-key.pem` in `DATA_DIR`, not in the database. The subject is the setting
+  `COLISEUMGRID_PUSH_SUBJECT`.
 - **Sender.** `node:crypto` and `fetch`, no dependency (Brad, 2026-11-14). The server POSTs to the
   subscription's endpoint (RFC 8030, <https://www.rfc-editor.org/rfc/rfc8030>) with `TTL: 300`
   and `Urgency: high`. `Authorization` is a VAPID header, an ES256 JWT with `aud` the
-  endpoint's origin, `exp` 12 hours out (the limit is 24), and `sub` the site's own `https://`
-  address saved with the subscription, because Apple may refuse a `localhost` subject
+  endpoint's origin, `exp` 12 hours out (the limit is 24), and `sub` the
+  `COLISEUMGRID_PUSH_SUBJECT` setting (a `mailto:` or `https:` URL, never `localhost`), because
+  Apple may refuse a `localhost` subject
   (RFC 8292, <https://www.rfc-editor.org/rfc/rfc8292>; the `web-push` README for Apple). The body is
   `aes128gcm` from RFC 8291 (<https://www.rfc-editor.org/rfc/rfc8291>): ECDH on P-256, a 16-byte
   authentication secret, HKDF, one record. Its Appendix A has test values, and the tests
@@ -386,8 +388,12 @@ cover each path.
 - `follow_codes`: the code (primary key), the player (deleted with the player), `created_at`,
   `expires_at`, and `used_at`. A code is spent with one `UPDATE ... RETURNING`.
 - `push_subscriptions`: the phone (primary key, deleted with the phone), the endpoint
-  (`UNIQUE`), `p256dh`, `auth`, the site's origin for the VAPID subject, and `created_at`.
-- `push_keys`: one row with the VAPID public and private key and `created_at`.
+  (`UNIQUE`), `p256dh`, `auth`, and `created_at`.
+
+The VAPID key pair is not in the database: it is the file `vapid-private-key.pem` (mode 0600)
+in `DATA_DIR`, made on first use (`vapid-keys.ts`), and the VAPID subject is the setting
+`COLISEUMGRID_PUSH_SUBJECT`, a `mailto:` or `https:` URL that isn't `localhost`. Without the
+subject push stays off and the server warns at startup.
 
 No handle is stored in these tables; an answer joins the current one. Foreign keys are on by
 default in `node:sqlite`, checked 2026-11-14.

@@ -2,7 +2,17 @@
 // body or an answer, so a field added to a handler later can't leave the server unless it is
 // added here too (CLAUDE.md, rule 1).
 
-import type { ApiError, ApiErrorCode, BracketFormat, HandleRefusal, HeatKind, HeatStatus, MatchSide, MatchStatus } from '@coliseumgrid/core';
+import type {
+  ApiError,
+  ApiErrorCode,
+  BracketFormat,
+  FollowStatus,
+  HandleRefusal,
+  HeatKind,
+  HeatStatus,
+  MatchSide,
+  MatchStatus,
+} from '@coliseumgrid/core';
 import type { FastifyReply } from 'fastify';
 
 // Written as a Record so a reason added to core fails the type check until it is listed here.
@@ -88,6 +98,13 @@ const matchSchema = objectSchema({
 /** A tie that has to be played off, in a bracket or in heats. */
 const tieSchema = objectSchema({ place: { type: 'integer' }, players: { type: 'array', items: playerSchema }, started: { type: 'boolean' } });
 
+const standingsRowSchema = objectSchema({
+  place: { type: 'integer' },
+  player: playerSchema,
+  wins: { type: 'integer' },
+  losses: { type: 'integer' },
+});
+
 export const bracketSchema = objectSchema({
   id: { type: 'integer' },
   format: { type: 'string', enum: BRACKET_FORMATS },
@@ -101,15 +118,7 @@ export const bracketSchema = objectSchema({
   },
   upNext: { type: 'array', items: matchSchema },
   matches: { type: 'array', items: matchSchema },
-  standings: {
-    type: 'array',
-    items: objectSchema({
-      place: { type: 'integer' },
-      player: playerSchema,
-      wins: { type: 'integer' },
-      losses: { type: 'integer' },
-    }),
-  },
+  standings: { type: 'array', items: standingsRowSchema },
   ties: { type: 'array', items: tieSchema },
 });
 
@@ -130,6 +139,13 @@ const heatSchema = objectSchema({
   resultId: { type: ['integer', 'null'] },
 });
 
+const heatStandingsRowSchema = objectSchema({
+  place: { type: 'integer' },
+  player: playerSchema,
+  points: { type: 'integer' },
+  heatsPlayed: { type: 'integer' },
+});
+
 export const heatsSchema = objectSchema({
   id: { type: 'integer' },
   races: { type: 'integer', enum: [1, 2, 3, 4] },
@@ -145,12 +161,77 @@ export const heatsSchema = objectSchema({
   },
   upNext: { type: 'array', items: heatSchema },
   heats: { type: 'array', items: heatSchema },
-  standings: {
-    type: 'array',
-    items: objectSchema({ place: { type: 'integer' }, player: playerSchema, points: { type: 'integer' }, heatsPlayed: { type: 'integer' } }),
-  },
+  standings: { type: 'array', items: heatStandingsRowSchema },
   finalSize: { type: 'integer' },
   ties: { type: 'array', items: tieSchema },
 });
 
 export const nullableHeatsSchema = nullable(heatsSchema);
+
+// Phones (docs/PLAN.md, "Phone API"). Every object is closed, so a field added to a handler
+// can't leave the server unless it is listed here (CLAUDE.md, rule 1).
+
+const FOLLOW_STATUSES = Object.keys({
+  now: true,
+  next: true,
+  'two-away': true,
+  later: true,
+  waiting: true,
+  out: true,
+  done: true,
+  'not-in': true,
+} satisfies Record<FollowStatus, true>);
+
+/** The code on the Done screen's QR: the 6 characters and when they stop working. */
+export const followCodeSchema = objectSchema({ code: { type: 'string' }, expiresAt: { type: 'string' } });
+
+const followedPlayerSchema = objectSchema({
+  player: playerSchema,
+  status: { type: 'string', enum: FOLLOW_STATUSES },
+  away: { type: ['integer', 'null'] },
+  station: { type: ['integer', 'null'] },
+  matchId: { type: ['integer', 'null'] },
+  others: { type: 'array', items: playerSchema },
+  place: { type: ['integer', 'null'] },
+});
+
+const phoneStandingsSchema = nullable({
+  oneOf: [
+    objectSchema({
+      kind: { type: 'string', enum: ['bracket'] },
+      format: { type: 'string', enum: BRACKET_FORMATS },
+      finished: { type: 'boolean' },
+      rows: { type: 'array', items: standingsRowSchema },
+    }),
+    objectSchema({
+      kind: { type: 'string', enum: ['heats'] },
+      finished: { type: 'boolean' },
+      rows: { type: 'array', items: heatStandingsRowSchema },
+      finalSize: { type: 'integer' },
+    }),
+  ],
+});
+
+export const phoneAnswerSchema = objectSchema({
+  event: { anyOf: [{ type: 'null' }, objectSchema({ name: { type: 'string' } })] },
+  following: { type: 'array', items: followedPlayerSchema },
+  standings: phoneStandingsSchema,
+});
+
+export const followingAnswerSchema = objectSchema({ following: { type: 'array', items: playerSchema } });
+
+// The body schemas only keep a huge body from reaching a hash; the rules are checked in code.
+export const followBodySchema = objectSchema({ handle: { type: 'string' }, pin: { type: 'string' } });
+export const followCodeBodySchema = objectSchema({ code: { type: 'string', maxLength: 64 } });
+
+export const pushKeyAnswerSchema = objectSchema({ publicKey: { type: ['string', 'null'] } });
+
+// Lengths only keep a huge body small: a real endpoint is a few hundred characters and a key
+// about 90. The checks that matter (the allowed host, the key sizes) are in the route.
+export const pushSubscriptionBodySchema = objectSchema({
+  endpoint: { type: 'string', maxLength: 2048 },
+  keys: objectSchema({ p256dh: { type: 'string', maxLength: 256 }, auth: { type: 'string', maxLength: 256 } }),
+});
+
+/** The phone routes' own params: the id of the player to stop following. */
+export const playerIdParams = objectSchema({ playerId: { type: 'string', pattern: '^[1-9][0-9]{0,14}$' } });

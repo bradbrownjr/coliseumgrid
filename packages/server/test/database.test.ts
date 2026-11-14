@@ -373,6 +373,88 @@ describe('inTransaction', () => {
   });
 });
 
+describe('migration 6 (phones)', () => {
+  /** A database as M5 left it: schema version 5, with players, a bracket, heats, and a device. */
+  function m5Database(): DatabaseSync {
+    const db = new DatabaseSync(':memory:');
+    for (const step of MIGRATIONS.slice(0, 5)) db.exec(step);
+    db.exec('PRAGMA user_version = 5');
+    db.exec(`
+      INSERT INTO players (handle, handle_key, pin_hash, created_at) VALUES ('Zap', 'zap', 'h1', 't1'), ('Bolt', 'bolt', 'h2', 't2');
+      INSERT INTO events (name, created_at) VALUES ('Friday', 't3');
+      INSERT INTO host_settings (id, password_hash, updated_at) VALUES (1, 'ph', 't4');
+      INSERT INTO devices (role, label, token_hash, last_seen, created_at) VALUES ('signup', 'Sign-up 1', 'd1', 't9', 't10');
+      INSERT INTO event_players (event_id, player_id) VALUES (1, 1), (1, 2);
+      INSERT INTO brackets (event_id, format, best_of, stations, seeding, created_at) VALUES (1, 'single', 1, 2, '[1,2]', 't11');
+      INSERT INTO bracket_results (bracket_id, match_id, winner_id, loser_id, at) VALUES (1, 0, 1, 2, 't12');
+      INSERT INTO heat_runs (event_id, stations, races, rounds, points, seeding, created_at) VALUES (1, 1, 1, 1, '[4,3,2,1]', '[1,2]', 't13');
+      INSERT INTO heat_results (run_id, heat_id, finish_order, at) VALUES (1, 101, '[1,2]', 't14');
+    `);
+    return db;
+  }
+
+  const dump = (db: DatabaseSync, table: string) => db.prepare(`SELECT * FROM ${table} ORDER BY 1, 2`).all();
+  const OLD_TABLES = [
+    'players', 'events', 'host_settings', 'devices', 'event_players', 'brackets', 'bracket_results', 'heat_runs', 'heat_results',
+  ];
+
+  it('adds the phone tables to a database with M2 to M5 data, and keeps every old row', () => {
+    const db = m5Database();
+    const before = OLD_TABLES.map((t) => dump(db, t));
+    migrate(db);
+    expect(version(db)).toBe(MIGRATIONS.length);
+    expect(OLD_TABLES.map((t) => dump(db, t))).toEqual(before);
+    expect(columns(db, 'phones')).toEqual(['id', 'token_hash', 'last_seen', 'created_at']);
+    expect(columns(db, 'phone_follows')).toEqual(['phone_id', 'player_id', 'created_at']);
+    expect(columns(db, 'follow_codes')).toEqual(['code', 'player_id', 'created_at', 'expires_at', 'used_at']);
+    expect(columns(db, 'push_subscriptions')).toEqual(['phone_id', 'endpoint', 'p256dh', 'auth', 'created_at']);
+    for (const table of ['phones', 'phone_follows', 'follow_codes', 'push_subscriptions']) expect(dump(db, table), table).toEqual([]);
+    expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+    expect(db.prepare('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' });
+  });
+
+  it('also upgrades a database that is still at M2', () => {
+    const db = new DatabaseSync(':memory:');
+    db.exec(MIGRATIONS[0] as string);
+    db.exec('PRAGMA user_version = 1');
+    db.exec("INSERT INTO players (handle, handle_key, pin_hash, created_at) VALUES ('Zap', 'zap', 'h1', 't1')");
+    migrate(db);
+    expect(version(db)).toBe(MIGRATIONS.length);
+    expect(columns(db, 'phones')).toContain('token_hash');
+    expect(db.prepare('SELECT handle FROM players').all()).toEqual([{ handle: 'Zap' }]);
+  });
+
+  it('removes a phone with its follows and push subscription, and a player with the follows and codes on it', () => {
+    const db = m5Database();
+    migrate(db);
+    db.exec(`
+      INSERT INTO phones (token_hash, last_seen, created_at) VALUES ('t1', 't', 't');
+      INSERT INTO phone_follows (phone_id, player_id, created_at) VALUES (1, 1, 't'), (1, 2, 't');
+      INSERT INTO follow_codes (code, player_id, created_at, expires_at) VALUES ('AAAAAA', 1, 't', 't');
+      INSERT INTO push_subscriptions (phone_id, endpoint, p256dh, auth, created_at) VALUES (1, 'e', 'p', 'a', 't');
+    `);
+    db.exec('DELETE FROM players WHERE id = 1');
+    expect(db.prepare('SELECT player_id FROM phone_follows').all()).toEqual([{ player_id: 2 }]);
+    expect(dump(db, 'follow_codes')).toEqual([]);
+    db.exec('DELETE FROM phones');
+    expect(dump(db, 'phone_follows')).toEqual([]);
+    expect(dump(db, 'push_subscriptions')).toEqual([]);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM players').get()).toEqual({ n: 1 });
+  });
+
+  it('stores one token hash per phone, one subscription per phone, and one phone per endpoint', () => {
+    const db = openDatabase(':memory:');
+    db.exec(`
+      INSERT INTO phones (token_hash, last_seen, created_at) VALUES ('t1', 't', 't'), ('t2', 't', 't');
+      INSERT INTO push_subscriptions (phone_id, endpoint, p256dh, auth, created_at) VALUES (1, 'e1', 'p', 'a', 't');
+    `);
+    expect(() => db.exec("INSERT INTO phones (token_hash, last_seen, created_at) VALUES ('t1', 't', 't')")).toThrow(/UNIQUE/);
+    expect(() => db.exec("INSERT INTO push_subscriptions (phone_id, endpoint, p256dh, auth, created_at) VALUES (1, 'e2', 'p', 'a', 't')")).toThrow(/UNIQUE|PRIMARY/);
+    expect(() => db.exec("INSERT INTO push_subscriptions (phone_id, endpoint, p256dh, auth, created_at) VALUES (2, 'e1', 'p', 'a', 't')")).toThrow(/UNIQUE/);
+    expect(() => db.exec("INSERT INTO phone_follows (phone_id, player_id, created_at) VALUES (1, 99, 't')")).toThrow(/FOREIGN/);
+  });
+});
+
 describe('openDatabase on a file', () => {
   it('creates the folder, uses WAL, and keeps data across a reopen', async () => {
     dir = await mkdtemp(join(tmpdir(), 'coliseumgrid-db-'));

@@ -167,6 +167,43 @@ export const MIGRATIONS: readonly string[] = [
     PRIMARY KEY (run_id, position)
   );
   `,
+  // M6: phones (docs/PLAN.md, "Player view" and "Phone API"). A phone is not a device: it signs
+  // itself in, so it has its own table and cookie. Every table is new and only points at
+  // `players`, so a database from M2 to M5 migrates untouched. A phone's token is stored only as
+  // a SHA-256 hash. `phone_follows` and `follow_codes` go with the player (a merge moves the
+  // follows first, players-routes.ts); `push_subscriptions` goes with the phone. No handle is
+  // stored: an answer joins the current one. The VAPID keys are a file in DATA_DIR, not a table
+  // (vapid-keys.ts), and the VAPID subject is a setting, so neither is stored here.
+  `
+  CREATE TABLE phones (
+    id         INTEGER PRIMARY KEY,
+    token_hash TEXT NOT NULL UNIQUE,
+    last_seen  TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE phone_follows (
+    phone_id   INTEGER NOT NULL REFERENCES phones(id) ON DELETE CASCADE,
+    player_id  INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (phone_id, player_id)
+  );
+  CREATE INDEX phone_follows_player ON phone_follows (player_id);
+  CREATE TABLE follow_codes (
+    code       TEXT PRIMARY KEY,
+    player_id  INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    used_at    TEXT
+  );
+  CREATE INDEX follow_codes_player ON follow_codes (player_id);
+  CREATE TABLE push_subscriptions (
+    phone_id   INTEGER PRIMARY KEY REFERENCES phones(id) ON DELETE CASCADE,
+    endpoint   TEXT NOT NULL UNIQUE,
+    p256dh     TEXT NOT NULL,
+    auth       TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  `,
 ];
 
 export function migrate(db: Database): void {

@@ -51,7 +51,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function attach(info: { deviceId?: number; sessionHash?: string; stillAllowed?: () => boolean }): StalledSocket {
+function attach(info: { deviceId?: number; phoneId?: number; sessionHash?: string; stillAllowed?: () => boolean }): StalledSocket {
   const socket = new StalledSocket();
   hub.attach(socket, { stillAllowed: () => true, ...info });
   return socket;
@@ -95,5 +95,20 @@ describe('a connection that stops reading', () => {
     expect(socket.terminated).toBe(false);
     vi.advanceTimersByTime(2_100);
     expect(socket.terminated).toBe(true);
+  });
+});
+
+describe('signing out a phone', () => {
+  it('sends unpaired to that phone only, cuts one that stops reading, and leaves a device with the same number alone', () => {
+    const phone = attach({ phoneId: 1 });
+    const otherPhone = attach({ phoneId: 2 });
+    const device = attach({ deviceId: 1 });
+    hub.signOutPhone(1);
+    expect(phone.sent).toEqual(['{"type":"unpaired"}']);
+    expect(otherPhone.sent).toEqual([]);
+    expect(device.sent).toEqual([]);
+    vi.advanceTimersByTime(2_100);
+    expect(phone.terminated).toBe(true);
+    expect(otherPhone.terminated).toBe(false);
   });
 });

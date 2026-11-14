@@ -7,6 +7,7 @@
 //   DATA_DIR            the folder for the database; default ./data (the image sets /data)
 //   TRUSTED_PROXY       the reverse proxy's IP; only its X-Forwarded-For is read
 //   COLISEUMGRID_HOST_PASSWORD  the host password (8 to 128 characters); required online
+//   COLISEUMGRID_PUSH_SUBJECT   a mailto: or https: contact for the push services; push is off without it
 
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,6 +35,7 @@ const app = await buildApp({
   mode: config.mode,
   ...(config.trustedProxy && { trustedProxy: config.trustedProxy }),
   ...(config.hostPassword && { hostPassword: config.hostPassword }),
+  push: { dataDir: config.dataDir, ...(config.pushSubject && { subject: config.pushSubject }) },
 });
 await app.listen({ host: config.host, port: config.port });
 console.log(`coliseumgrid server (${config.mode} mode) listening on ${config.host}:${config.port}`);

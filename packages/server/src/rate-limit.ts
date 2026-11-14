@@ -1,6 +1,8 @@
 // The limits on guessing. PINs at POST /api/signup/claim are limited online only (docs/PLAN.md,
 // section 4): offline, a wrong PIN only costs a retry. Host passwords and pairing codes are
-// limited in both modes (CLAUDE.md, rule 7).
+// limited in both modes (CLAUDE.md, rule 7). A phone's PIN guesses at POST /api/phone/follow
+// are limited in both modes too, and online they share the per-handle count with the claim
+// (docs/PLAN.md, "Player view").
 
 /** The window both limits use. Long enough to blunt guessing, short enough that a kid who locked a handle is back soon. */
 export const CLAIM_WINDOW_MS = 10 * 60 * 1000;
@@ -49,8 +51,28 @@ export const JOIN_MAX_WRONG_PER_IP = 10;
  * behind one address is held to 10 by the per-IP limit. Once it is used up, every join
  * answers 429 until the window ends, so someone with many addresses can keep new devices from
  * pairing; the host can still pair after the window or restart the server.
+ *
+ * Follow codes (follow-codes.ts) share both limits, and there can be many live at once: one per
+ * player who signed up or claimed in the last 10 minutes, so about 100 in a busy rush. Then 100
+ * wrong guesses find one with a chance of about 1 in 39,000 per window, and a day of nonstop
+ * guessing about 1 in 270. A found code follows one player, which shows where that player stands
+ * and nothing else, so this is accepted; the code is spent when used.
  */
 export const JOIN_MAX_WRONG_GLOBAL = 100;
+
+/** The key of the one count every caller shares. */
+export const ALL_CALLERS = 'all';
+
+/**
+ * The limits on wrong codes, shared by pairing codes (POST /api/devices/join) and follow codes
+ * (POST /api/phone/follow-code), so guessing one kind can't be a way around the other's limit.
+ */
+export interface JoinLimits {
+  /** Per client IP (JOIN_MAX_WRONG_PER_IP). */
+  perIp: FailureLimiter;
+  /** Across everyone, under ALL_CALLERS (JOIN_MAX_WRONG_GLOBAL). */
+  all: FailureLimiter;
+}
 
 /**
  * Keys one limiter holds before it refuses new ones. A key lives one window, so this is the
@@ -122,4 +144,11 @@ export class FailureLimiter {
       this.#entries.delete(key);
     }
   }
+}
+
+export function createJoinLimits(now: () => number): JoinLimits {
+  return {
+    perIp: new FailureLimiter(JOIN_MAX_WRONG_PER_IP, GUESS_WINDOW_MS, now),
+    all: new FailureLimiter(JOIN_MAX_WRONG_GLOBAL, GUESS_WINDOW_MS, now),
+  };
 }

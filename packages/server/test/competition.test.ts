@@ -9,6 +9,7 @@ import { buildApp } from '../src/app.ts';
 import { createBracketStore } from '../src/bracket-store.ts';
 import { createCompetition } from '../src/competition.ts';
 import { openDatabase, type Database } from '../src/database.ts';
+import { createEvents } from '../src/events.ts';
 import { createHeatStore } from '../src/heat-store.ts';
 import { createPlayers } from '../src/players.ts';
 import { addPlayers, makeCallers, onStations, type Api } from './bracket-api-helpers.ts';
@@ -145,7 +146,7 @@ describe('the competition as a whole', () => {
   it('replaces the other kind in one step: a failed save leaves it where it was', () => {
     const brackets = createBracketStore(db);
     const heats = createHeatStore(db);
-    const competition = createCompetition(db, brackets, heats, createPlayers(db));
+    const competition = createCompetition(db, brackets, heats, createPlayers(db), createEvents(db, Date.now));
     const eventId = Number(db.prepare("INSERT INTO events (name, created_at) VALUES ('Friday', 't')").run().lastInsertRowid);
     brackets.save(eventId, {
       settings: { id: 1, format: 'single', bestOf: 1, stations: 1, createdAt: 't' },

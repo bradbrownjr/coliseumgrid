@@ -77,4 +77,33 @@ describe('loadConfig', () => {
   it.each(['abc', '-1', '1.5', '65536', '', '3000 '])('fails on the port "%s"', (port) => {
     expect(() => loadConfig({ PORT: port })).toThrow(/PORT/);
   });
+
+  describe('COLISEUMGRID_PUSH_SUBJECT', () => {
+    it('is not set by default, and an empty value counts as not set', () => {
+      expect(loadConfig({})).not.toHaveProperty('pushSubject');
+      expect(loadConfig({ COLISEUMGRID_PUSH_SUBJECT: '' })).not.toHaveProperty('pushSubject');
+    });
+
+    it.each(['mailto:host@example.com', 'https://games.example.com', 'https://games.example.com/contact'])('accepts "%s"', (subject) => {
+      expect(loadConfig({ COLISEUMGRID_PUSH_SUBJECT: subject }).pushSubject).toBe(subject);
+    });
+
+    it.each([
+      'host@example.com',
+      'mailto:',
+      'mailto:host',
+      'mailto:host@localhost',
+      'http://games.example.com',
+      'https://localhost',
+      'https://localhost:3000/x',
+      'https://127.0.0.1',
+      'https://[::1]',
+      'https://app.localhost',
+      'https://user:pw@games.example.com',
+      'games.example.com',
+      'ftp://games.example.com',
+    ])('fails on "%s"', (subject) => {
+      expect(() => loadConfig({ COLISEUMGRID_PUSH_SUBJECT: subject })).toThrow(/COLISEUMGRID_PUSH_SUBJECT/);
+    });
+  });
 });

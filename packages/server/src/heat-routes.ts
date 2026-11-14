@@ -101,6 +101,8 @@ export async function registerHeatRoutes(app: FastifyInstance, options: HeatRout
       const answer = work(found.state, competition.handles());
       if (!answer.ok) return refuse(reply, answer.error, statuses);
       store.save(found.eventId, answer.state);
+      // Before the screens are told, so a phone that reloads at once gets the new answer.
+      competition.drop();
       saved?.();
       hub.broadcast({ type: 'heats' });
       return { heats: answer.heats };
@@ -248,7 +250,10 @@ export async function registerHeatRoutes(app: FastifyInstance, options: HeatRout
     async (_request, reply) => {
       await chain.run(() => {
         const eventId = events.currentId();
-        if (eventId !== null && store.remove(eventId)) hub.broadcast({ type: 'heats' });
+        if (eventId !== null && store.remove(eventId)) {
+          competition.drop();
+          hub.broadcast({ type: 'heats' });
+        }
       });
       return reply.code(204).send();
     },

@@ -15,23 +15,30 @@ import {
   type PinAnswer,
   type PlayerAnswer,
   type PlayersAnswer,
+  type SignupAnswer,
   type SignupCheckAnswer,
 } from '@coliseumgrid/core';
 import rateLimit from '@fastify/rate-limit';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { Access } from './access.ts';
-import { errorSchema, fail, idParams, notSignedIn, objectSchema, playerSchema } from './api-schemas.ts';
+import {
+  errorSchema,
+  fail,
+  followCodeSchema,
+  idParams,
+  notSignedIn,
+  objectSchema,
+  playerSchema,
+} from './api-schemas.ts';
 import { getClientKey } from './client-ip.ts';
 import type { Mode } from './config.ts';
 import type { EventPlayers } from './event-players.ts';
-import { hashPin, verifyPin } from './pin-hash.ts';
+import type { FollowCodes } from './follow-codes.ts';
+import { hashPin } from './pin-hash.ts';
+import type { PinGuard } from './pin-guard.ts';
+import type { Phones } from './phones.ts';
 import type { Players } from './players.ts';
-import {
-  CLAIM_MAX_PER_IP,
-  CLAIM_MAX_WRONG_PER_HANDLE,
-  CLAIM_WINDOW_MS,
-  FailureLimiter,
-} from './rate-limit.ts';
+import { CLAIM_MAX_PER_IP, CLAIM_WINDOW_MS } from './rate-limit.ts';
 import { secureRandom } from './secure-random.ts';
 
 export interface PlayerRoutesOptions {
@@ -46,6 +53,15 @@ export interface PlayerRoutesOptions {
   access: Access;
   /** Called after the player list changes, so the host page reloads it (a "players" live message). */
   onPlayersChanged: () => void;
+  /** The one PIN check, shared with the phone's follow. */
+  pinGuard: PinGuard;
+  /** Codes for the Done screen's QR, made once a PIN was set or proven. */
+  followCodes: FollowCodes;
+  phones: Phones;
+  /** Tells the live connections of phones that a PIN reset signed out. */
+  onPhonesSignedOut: (phoneIds: number[]) => void;
+  /** Called after a rename or a merge, so the kept competition answer (it has handles) is dropped. */
+  onCompetitionChanged: () => void;
   mode: Mode;
   /** See getClientKey. */
   trustedProxy?: string;
@@ -66,20 +82,15 @@ function refuse(reply: FastifyReply, reason: HandleRefusal): FastifyReply {
 }
 
 export async function registerPlayerRoutes(app: FastifyInstance, options: PlayerRoutesOptions): Promise<void> {
-  const { players, eventPlayers, inBracket, exclusive, access, onPlayersChanged, trustedProxy } = options;
+  const { players, eventPlayers, inBracket, exclusive, access, onPlayersChanged, pinGuard, followCodes, phones, trustedProxy } =
+    options;
   const online = options.mode === 'online';
 
-  // Claim attempts per handle, online only. Counted here rather than by @fastify/rate-limit
-  // because a right PIN should cost nothing: an attempt is reserved before the PIN is checked
-  // and cleared when it is right. Reserving first matters because the check awaits a hash;
-  // counting after it would let every request that arrives meanwhile through.
-  const wrongPins = online ? new FailureLimiter(CLAIM_MAX_WRONG_PER_HANDLE, CLAIM_WINDOW_MS) : undefined;
-
-  /** Clears the count for a stored handle (its key is derived the same way as on sign-up). */
+  /** Clears the wrong-PIN count for a stored handle (its key is derived the same way as on sign-up). */
   const forget = (handle: string | undefined): void => {
     if (handle === undefined) return;
     const check = checkHandle(handle);
-    if (check.ok) wrongPins?.clear(check.key);
+    if (check.ok) pinGuard.forget(check.key);
   };
 
   if (online) await app.register(rateLimit, { global: false });
@@ -126,14 +137,14 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
     },
   );
 
-  app.post<{ Body: HandlePinBody; Reply: PlayerAnswer | ApiError }>(
+  app.post<{ Body: HandlePinBody; Reply: SignupAnswer | ApiError }>(
     '/api/signup',
     {
       onRequest: access.requireSignup,
       schema: {
         body: handlePinBody,
         response: {
-          201: objectSchema({ player: playerSchema }),
+          201: objectSchema({ player: playerSchema, followCode: followCodeSchema }),
           400: errorSchema(['refused', 'bad-pin', 'bad-request'], true),
           401: notSignedIn,
           409: taken,
@@ -151,18 +162,19 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
       if (!player) return fail(reply, 409, 'taken');
       eventPlayers.add(player.id);
       onPlayersChanged();
-      return reply.code(201).send({ player });
+      // The PIN was just set, so a code for this player is safe to hand out.
+      return reply.code(201).send({ player, followCode: followCodes.create(player.id, secureRandom) });
     },
   );
 
-  app.post<{ Body: HandlePinBody; Reply: PlayerAnswer | ApiError }>(
+  app.post<{ Body: HandlePinBody; Reply: SignupAnswer | ApiError }>(
     '/api/signup/claim',
     {
       onRequest: access.requireSignup,
       schema: {
         body: handlePinBody,
         response: {
-          200: objectSchema({ player: playerSchema }),
+          200: objectSchema({ player: playerSchema, followCode: followCodeSchema }),
           400: refusedOrBadRequest,
           401: errorSchema(['wrong-pin', 'not-signed-in']),
           404: notFound,
@@ -188,17 +200,17 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
       if (!check.ok) return refuse(reply, check.reason);
       const player = players.getByKey(check.key);
       if (!player) return fail(reply, 404, 'not-found');
-      // No await between here and the reservation, so concurrent claims each take their own slot.
-      if (wrongPins && !wrongPins.tryAttempt(check.key)) return fail(reply, 429, 'too-many-tries');
-      // A string that can't be a PIN is wrong without paying for a hash.
-      const right = isValidPin(request.body.pin) && (await verifyPin(request.body.pin, player.pinHash));
-      if (!right) return fail(reply, 401, 'wrong-pin');
-      // Earlier mistypes don't carry over to the player's next sign-in.
-      wrongPins?.clear(check.key);
+      const verdict = await pinGuard.checkClaim(check.key, player.pinHash, request.body.pin);
+      if (verdict === 'too-many-tries') return fail(reply, 429, 'too-many-tries');
+      if (verdict === 'wrong-pin') return fail(reply, 401, 'wrong-pin');
       // A returning player counts as here today. The host's list of players reloads only when
       // that changed something.
       if (eventPlayers.add(player.id)) onPlayersChanged();
-      return { player: { id: player.id, handle: player.handle } };
+      // The PIN was just proven, so a code for this player is safe to hand out.
+      return {
+        player: { id: player.id, handle: player.handle },
+        followCode: followCodes.create(player.id, secureRandom),
+      };
     },
   );
 
@@ -278,7 +290,8 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
       // to take it starts fresh, and the new key so the renamed player isn't locked by a
       // stranger's earlier tries.
       forget(before?.handle);
-      wrongPins?.clear(check.key);
+      pinGuard.forget(check.key);
+      options.onCompetitionChanged();
       onPlayersChanged();
       return { player: result };
     },
@@ -315,9 +328,12 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
         if (inBracket(id)) return fail(reply, 409, 'in-bracket');
         // Attendance follows the player kept; nothing else references a player yet.
         eventPlayers.move(id, intoId);
+        // Phones that followed the merged player follow the one kept.
+        phones.moveFollows(id, intoId);
         players.delete(id);
         // The merged handle no longer means this player, so its count goes with it.
         forget(merged.handle);
+        options.onCompetitionChanged();
         onPlayersChanged();
         return { player: kept };
       });
@@ -347,6 +363,11 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
       if (!players.setPinHash(id, pinHash)) return fail(reply, 404, 'not-found');
       // A locked player is told to ask the host; the new PIN has to work right away.
       forget(player.handle);
+      // The old PIN is what let a phone follow this player, so every phone that followed them
+      // does so no more, and a phone left following nobody is signed out. Codes made with the
+      // old PIN go too.
+      followCodes.removeForPlayer(id);
+      options.onPhonesSignedOut(phones.removePlayer(id));
       // No onPlayersChanged: the list shows handles only, and a PIN reset doesn't change it.
       return { pin };
     },

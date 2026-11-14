@@ -95,6 +95,8 @@ export async function registerBracketRoutes(app: FastifyInstance, options: Brack
   /** Stores a changed bracket, tells the screens, and gives the engine's answer. */
   const commit = (eventId: number, answer: Extract<EngineAnswer, { ok: true }>) => {
     store.save(eventId, answer.state);
+    // Before the screens are told, so a phone that reloads at once gets the new answer.
+    competition.drop();
     hub.broadcast({ type: 'bracket' });
     return answer.bracket;
   };
@@ -264,7 +266,10 @@ export async function registerBracketRoutes(app: FastifyInstance, options: Brack
     async (_request, reply) => {
       await chain.run(() => {
         const eventId = events.currentId();
-        if (eventId !== null && store.remove(eventId)) hub.broadcast({ type: 'bracket' });
+        if (eventId !== null && store.remove(eventId)) {
+          competition.drop();
+          hub.broadcast({ type: 'bracket' });
+        }
       });
       return reply.code(204).send();
     },

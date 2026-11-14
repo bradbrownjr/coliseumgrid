@@ -23,13 +23,7 @@ import { HOST_PASSWORD_MAX, HOST_PASSWORD_MIN } from './config.ts';
 import type { Devices } from './devices.ts';
 import { cleanEventName, EVENT_NAME_MAX, type Events } from './events.ts';
 import type { LiveHub } from './live.ts';
-import {
-  FailureLimiter,
-  GUESS_WINDOW_MS,
-  JOIN_MAX_WRONG_GLOBAL,
-  JOIN_MAX_WRONG_PER_IP,
-  SIGN_IN_MAX_WRONG_PER_IP,
-} from './rate-limit.ts';
+import { ALL_CALLERS, FailureLimiter, GUESS_WINDOW_MS, SIGN_IN_MAX_WRONG_PER_IP, type JoinLimits } from './rate-limit.ts';
 import { secureRandom } from './secure-random.ts';
 import { hashToken, newToken } from './tokens.ts';
 
@@ -39,6 +33,10 @@ export interface HostRoutesOptions {
   events: Events;
   hub: LiveHub;
   now: Clock;
+  /** Called after the event changes, so the kept phone answer is dropped. */
+  onEventChanged: () => void;
+  /** The wrong-code limits, shared with the follow codes. */
+  joinLimits: JoinLimits;
   /** See getClientKey. */
   trustedProxy?: string;
 }
@@ -65,16 +63,15 @@ const badRequest = errorSchema(['bad-request']);
 const tooManyTries = errorSchema(['too-many-tries']);
 
 export async function registerHostRoutes(app: FastifyInstance, options: HostRoutesOptions): Promise<void> {
-  const { access, devices, events, hub, now, trustedProxy } = options;
+  const { access, devices, events, hub, now, joinLimits, onEventChanged, trustedProxy } = options;
 
   // Wrong passwords and wrong codes per client IP, in both modes (CLAUDE.md, rule 7). An
   // attempt is reserved before the slow check and cleared when it is right, so requests
   // that arrive while a hash is running can't all slip past the limit.
   const signInTries = new FailureLimiter(SIGN_IN_MAX_WRONG_PER_IP, GUESS_WINDOW_MS, now);
-  const joinTries = new FailureLimiter(JOIN_MAX_WRONG_PER_IP, GUESS_WINDOW_MS, now);
+  const joinTries = joinLimits.perIp;
   // One count for every caller, for a guesser who has many addresses.
-  const joinTriesAll = new FailureLimiter(JOIN_MAX_WRONG_GLOBAL, GUESS_WINDOW_MS, now);
-  const ALL_CALLERS = 'all';
+  const joinTriesAll = joinLimits.all;
 
   // Host sign-in ------------------------------------------------------------------------
 
@@ -231,7 +228,7 @@ export async function registerHostRoutes(app: FastifyInstance, options: HostRout
   app.get<{ Reply: EventAnswer | ApiError }>(
     '/api/event',
     {
-      onRequest: access.requireHostOrDevice,
+      onRequest: access.requireViewer,
       schema: { response: { 200: objectSchema({ event: eventSchema }), 401: notSignedIn } },
     },
     async () => ({ event: events.current() }),
@@ -247,6 +244,7 @@ export async function registerHostRoutes(app: FastifyInstance, options: HostRout
       const name = cleanEventName(request.body.name);
       if (name === null) return fail(reply, 400, 'bad-request');
       const event = events.setName(name);
+      onEventChanged();
       hub.broadcast({ type: 'event', event });
       return { event };
     },
@@ -258,13 +256,14 @@ export async function registerHostRoutes(app: FastifyInstance, options: HostRout
     '/api/live',
     // A browser sends Origin on every WebSocket handshake, and cookies ride along from any page
     // of the same site, so the handshake is checked like a state-changing request (app.ts).
-    { websocket: true, onRequest: [rejectForeignOrigin, access.requireHostOrDevice] },
+    { websocket: true, onRequest: [rejectForeignOrigin, access.requireViewer] },
     (socket, request) => {
       const identity = access.identify(request);
       // Connecting counts as being seen, whatever the throttle says.
       if (identity.device) devices.touch(identity.device.id, false);
       hub.attach(socket, {
         ...(identity.device && { deviceId: identity.device.id }),
+        ...(identity.phone && { phoneId: identity.phone.id }),
         ...(identity.hostSessionHash !== undefined && { sessionHash: identity.hostSessionHash }),
         stillAllowed: () => access.stillAllowed(identity),
       });
