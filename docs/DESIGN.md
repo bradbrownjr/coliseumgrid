@@ -117,7 +117,7 @@ place. A "Next match" button on the host screen and on the queue panel are one c
 ### Fixed answers use a picker, never free text
 
 A field with a fixed set of answers (format, best-of, heat size, label size) is a select,
-radio group, or toggle buttons. Free text is only for event names and handles.
+radio group, or toggle buttons. Free text is only for event names, game names, and handles.
 
 ### Phone width
 
@@ -150,22 +150,25 @@ confirmation dialog is only for actions that can't be undone, like deleting a br
 
 ### Host (laptop)
 
-- The setup wizard has three steps: name and game, a format card, start. Defaults are
-  filled in; the rest is under "More options".
+- The setup wizard has three steps: name and game, how to play, start. Defaults are filled
+  in; the rest is under "More options". Its rules are under "Setup wizard" below.
 - During play, the queue is the main view: each station's current match, "Up next", and
   one-tap result buttons.
 - A station card has one large button per player, reading "<handle> won". A tap records that
   player as the winner of the whole match, whatever the best-of label says.
 - A tap shows "<handle> won" in the snackbar with **Undo**. Every recorded result also has its
   own **Undo** in the Results list, newest first.
-- The **Competition** section runs one bracket or one set of groups. **Start a competition**
-  opens the start dialog. Once a competition has finished, the button reads **New competition**.
+- The host screen has a setup mode and a play mode (see "Setup wizard"). The **Competition**
+  section runs one bracket or one set of groups. Once a competition has finished, **New
+  competition** opens the wizard at step 2.
 - **Delete bracket** or **Delete groups** asks first, since it can't be undone. Results don't ask.
 - While a tie is open, **Play tie-break** starts its matches. While late sign-up is open,
   **Add to bracket** (or **Add to group**, when the event runs groups) is in a player's menu.
-- The start dialog's first choice is **Bracket** or **Races and free-for-all**. Groups add
-  **Games in each group** (1 to 4; a game is a race or a match), **Rounds before the final** (1 to 3, or none with 2 to 4
-  players), and the points for 1st to 4th. **Use 4, 3, 2, 1** appears once the points change.
+- Groups add **Games in each group** (1 to 4; a game is a race or a match), **Rounds before
+  the final** (1 to 3, or none with 2 to 4 players), and the points for 1st to 4th. **Use 4,
+  3, 2, 1** appears once the points change. They sit under "More options" in the wizard.
+- When a station's wait for a missing player is over, its card says "Still waiting?" and
+  has a **Forfeit** button, on a match and on a group (see "Setup wizard", "Forfeit").
 - A group's station card shows its title, its players, a timer, and one **Record result**
   button. The record panel is centered and asks "Who came 1st?", then 2nd, and so on. The
   last player is filled in. **Start over** clears the taps. **Save** turns on once the order
@@ -177,9 +180,61 @@ confirmation dialog is only for actions that can't be undone, like deleting a br
   across that line gets a banner, worded by what is at stake: "Zap, Jett, Dash, and Jinx are
   tied. 2 of them go to the final. Tie-break group coming up." It comes with **Play tie-break**.
 
+### Setup wizard
+
+Planned for M7 (Brad, 2026-11-14). The design is in `PLAN.md`, "The setup wizard", and the
+numbers on its screens come from "Time estimate".
+
+- **Three steps** in an MUI `Stepper` with the labels "Name and game", "How to play", and
+  "Start". The labels sit under the step numbers and wrap, so they fit at 320 pixels. **Next**
+  is the main button, **Back** is plain, and **Start** is large.
+- **Setup mode and play mode.** In setup mode the wizard replaces the Event and Competition
+  sections; Screens and Players stay below it. In play mode the Event section keeps the
+  rename box and adds **New event**. **New competition** opens the wizard at step 2 with
+  **Cancel**.
+- **Step 1.** The "Event name" field has a dice icon button at its end, labeled "Pick a name
+  for me". "What game are you playing?" is a text field below it, with the helper "You can
+  leave this empty." Under them, three cards in the style of the format cards: Fighting
+  game, Racing game, and Another game. Each card's line says its defaults, built from the
+  same constants the plan uses. In new-event mode the step says "Players sign up again for
+  this event."
+- **Step 2.** Three cards: "1 vs 1 bracket", "Everyone plays everyone", and "Races and
+  free-for-all", with the lines the start dialog had. Under them one line, "With 16 players,
+  this takes about 2 hours", where the number of players is a select from 2 to 32. Under that,
+  an MUI `Accordion` titled "More options" for the selected card, holding the labels in
+  `PLAN.md`'s table: **Lives** (One life, Two lives), **Best of**, **Stations**, **Games in
+  each group**, **Rounds before the final**, the points, **Minutes for one game** (**Minutes
+  for one race** with the Racing game template), **Changeover minutes**, **Time you have**,
+  and **Wait for a missing player**. A picker's choices are listed in the plan; each is a
+  select or toggle buttons, never free text.
+- **The too-long warning** is an MUI `Alert` with a warning icon and words, never color
+  alone: "That is longer than the 3 hours you have." Under it, up to two fixes as buttons
+  that apply the change at once: "Add a station", "Pick One life", "Play best of 1", "Pick 1
+  vs 1 bracket", "Play fewer games in each group", "Play 1 round before the final". It never
+  disables **Start** or **Next**.
+- **Step 3.** The heading reads "12 players signed up" and changes as players sign up. Under
+  it, the summary line, the estimate with its finish time ("Done around 8:15 PM"), and the
+  warning if there is one. "More options" holds **Change players**, which opens the player
+  picker with **Pick all**, **Clear**, and "Not signed up to this event". The problem words
+  show above **Start**.
+- **Words.** "1 vs 1 bracket" and the other card names follow "Tournament words on screen".
+  Screen text for the wizard is written for a 12-year-old: a question or a label, never a
+  paragraph.
+- **Forfeit.** **Forfeit** on a match opens a centered panel, "Who is missing?", with one
+  large button for each player. A tap records the other player as the winner. The snackbar
+  says "Zap forfeited. Kai wins." with **Undo**; there is no confirmation. The panel also
+  says "If both are missing, pick one. The other moves on." On a group, **Forfeit** opens the
+  same panel with a toggle for each player, then the usual "Who came 1st?" for those who are
+  there. The bracket view and the results list mark a forfeited match with the word
+  "Forfeit", and a missing player in a group's result reads "Zap: Missing, 0 points".
+- **The TV call line.** While a station's wait is over, its card on the TV adds a line in
+  large type: "Zap and Kai, come to station 2!" It clears when the result is recorded.
+
 ### Sign-up (tablet)
 
 - One task per screen: handle, then PIN, then done.
+- The event name is at the top, with the game's name under it when the host typed one, so a
+  player knows what they are signing up for.
 - Entry panels (the handle field, the PIN keypad) are centered on the screen (Brad,
   2026-11-12).
 - The on-screen keypad for the PIN is large. The suggested PIN is already in the field with
@@ -191,6 +246,8 @@ confirmation dialog is only for actions that can't be undone, like deleting a br
 - Read from across a room, with no input. Large type, high contrast, nothing that needs a
   hover or a click.
 - Always dark, whatever color mode the host picks.
+- The event name is the title, with the game's name under it in smaller type when the host
+  typed one. The phone page header shows both the same way.
 - Nothing scrolls on a TV. From a tablet up, the page is one screen tall and hides overflow.
   A phone stacks the parts and scrolls.
 - During play, the stations and "Up next" sit on the left, and the bracket or the standings

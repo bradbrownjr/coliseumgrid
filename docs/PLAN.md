@@ -20,8 +20,8 @@ The first event is on July 10, 2027.
 ## 2. Principles
 
 1. **A 12-year-old can host it.** The setup has three steps, with the defaults filled in.
-   Everything else is under "More options". Every screen is written for a kid to read (see
-   `DOC-STYLE.md`).
+   Everything else is under "More options". The only typing it needs is the event name. Every
+   screen is written for a kid to read (see `DOC-STYLE.md`).
 2. **Offline first.** Every feature works with no internet connection. Fonts, icons, and
    images are bundled; nothing is loaded from a CDN at runtime. Web Push is the one feature
    that needs the internet; it is online-only, and the page alert works without it.
@@ -326,7 +326,8 @@ Host screens need a host session.
 - **Sign-up devices** (Brad, 2026-11-13): from M3, only a paired Sign-up device can create
   players or claim a handle. M6's player phones get their own sign-in.
 - **The event name** (Brad, 2026-11-13): in M3 the host types the current event's name for
-  the Display frame. The M7 setup wizard takes this over.
+  the Display frame. Planned for M7 (Brad, 2026-11-14): the setup wizard takes this over and
+  adds the game's name (see "The setup wizard" in section 6).
 
 ### Devices and host API
 
@@ -351,11 +352,15 @@ host unpairs it.
 | `GET /api/devices` | host | `{ devices: [device] }` |
 | `DELETE /api/devices/:id` | host | 204; the device's token stops working and its live connection closes |
 | `GET /api/event` | host or device | `{ event }`, or `{ event: null }` before one is named |
-| `PUT /api/event` `{ name }` | host | `{ event }` |
+| `PUT /api/event` `{ name, game? }` | host | `{ event }` (`game` is M7; see "The setup wizard") |
+| `POST /api/events` `{ name, game? }` | host | M7: 201 `{ event }`, a new event that becomes the current one; 409 `bracket-running`; 400 `bad-request` |
+| `GET /api/event/plan` | host | M7: `{ plan }`, or `{ plan: null }` when the event has none or its plan can't be read |
+| `PUT /api/event/plan` `{ plan }` | host | M7: `{ plan }`; 400 `bad-request` unless `isEventPlan` accepts it |
 | `GET /api/live` (WebSocket) | host or device | messages from the server, below |
 
 A device leaves the server as `{ id, role, label, lastSeen }`, where `label` is a short name
-the server gives it ("Display 1", "Sign-up 2"). An event is `{ name }` for now.
+the server gives it ("Display 1", "Sign-up 2"). An event is `{ name }` until M7, then
+`{ name, game }`, where `game` is a string or null.
 
 The host picks the role when making a code, so a TV only has to type the code. The host
 password itself is never sent back. Wrong codes and wrong passwords are rate limited per
@@ -562,7 +567,8 @@ finish. Season standings come later (see `ROADMAP.md`, "Later").
 
 ## 5. Formats
 
-The setup wizard offers three cards. Each has its options under "More options".
+The setup wizard offers three cards. Each has its options under "More options" (see "The
+setup wizard" in section 6).
 
 | Card | Formats | Engine |
 |---|---|---|
@@ -650,7 +656,8 @@ A fighting game has no races. For the same reason the setting reads "Games in ea
   checked by `isPointsTable`: 1st has to score at least 1, so winning a heat always counts.
 - **Recording** is once per heat (Brad, 2026-11-13): the host taps the players in finishing
   order from the game's results screen after the cup. **Races per heat ("Games in each group" on screen) is a label**, like
-  best of in a bracket. Entering every race would be 16 taps a heat.
+  best of in a bracket. Entering every race would be 16 taps a heat. A player who didn't come is marked missing
+  instead of placed (see "Waiting for a missing player").
 - **Fairness.** Everyone plays the same number of qualifying heats, `rounds`, before the
   final, late players included (see "Late sign-up"). Tie-break heats score nothing.
 - **The final.** The top 4 by points play one more heat, the final, and its finishing order
@@ -738,20 +745,246 @@ so teams can be added without a rewrite. The screens are built for single player
 
 ### Time estimate
 
-Setup shows an estimated finish time: matches, times minutes per match, divided by
-stations. It warns when a format won't fit the afternoon. For example, 16 players in double
-elimination is 30 or 31 matches; at 7 minutes each on one console that's about 3.5 hours.
-Everyone plays everyone with 16 players is 120 matches.
+Planned for M7 (Brad, 2026-11-14). The wizard shows how long the event will take and warns
+when it won't fit the time the host has. It is a planning figure, not a promise. No
+published average game length exists, so the defaults below are figures picked from the
+sources that follow, and the host can change each one under "More options".
+
+**Defaults** (all in the event's plan, see "The setup wizard"):
+
+| Setting | Default | Choices |
+|---|---|---|
+| Minutes for one game (Fighting game, Another game) | 5 | 2, 3, 4, 5, 7, 10, 15 |
+| Minutes for one race (Racing game) | 4 | 2, 3, 4, 5, 7, 10, 15 |
+| Changeover minutes | 4 | 0, 2, 4, 6, 8 |
+| Time you have | 3 hours | 1 to 6 hours |
+
+**Where the figures come from.** Checked 2026-11-14.
+
+- **A match timer is a cap, not a typical length.** A library's competition rules use a
+  7-minute timer with 3 stocks, best of 3
+  (<https://dallaslibrary.librarymarket.com/sites/default/files/2025-01/Smash%20Bros%20Competition%20Details.pdf>),
+  the PlayVS scholastic rulebook for 2026-27 uses the same
+  (<https://help.playvs.com/en/articles/4919168-playvs-scholastic-super-smash-bros-ultimate-rulebook>),
+  and another library limits a game to 5 minutes
+  (<https://www.wnpld.org/sites/default/files/2024-12/Smash%20Bros%20Rules.pdf>). The 5-minute
+  default is that last limit.
+- **Time per set.** West Games' "Tournament Bracket Calculator" (2026-08-19) plans 8 to 14
+  minutes for a best of 3 and 3 to 5 minutes of setup buffer per set
+  (<https://west-games.com/tournament-bracket-calculator/>). It is a commercial calculator,
+  not a guide for organizers. start.gg's best-practices example uses 10 minutes per match
+  (<https://help.start.gg/en/articles/13766333-online-bracket-configuration-best-practices>).
+  The 4-minute changeover is the middle of that buffer.
+- **Races.** A 4-race cup, with most courses 3 laps, takes "usually within the two-minute
+  range" a race (<https://www.mariowiki.com/Grand_Prix>). A 96-race session ran about 4.5
+  minutes a race with the menus in between, worked out from the timestamps in the article
+  (<https://www.nintendolife.com/features/death-by-a-thousand-karts-can-we-race-all-96-mario-kart-8-deluxe-tracks-in-a-single-session>,
+  2024-12-25). The 4-minute default sits between those two figures.
+
+**Matches.** `n` is the number of players.
+
+| Format | Matches |
+|---|---|
+| One life | n - 1, plus 1 from 4 players (the 3rd-place match) |
+| Two lives | 2n - 2 to 2n - 1 (the rematch for the title is played only sometimes) |
+| Everyone plays everyone | n(n - 1) / 2, up to 3 more for a tie-break; a three-way tie is 3 matches, and a bigger tie would add more, which the estimate doesn't count |
+| Groups | 4 players or fewer: 1 group, the final. More: `rounds` x ceil(n / 4), plus 1 for the final, plus 0 or 1 tie-break group |
+
+**Waves.** Matches at the same time are one **wave**. A plain count of matches times minutes
+divided by stations undercounts when there are several stations, because a round can't start
+before the round it needs has finished: 4 players in a one-life bracket on 8 stations is 4
+matches, which that count prices at half a match's time, but only 2 matches can be played
+at once (round 1), then the final and the 3rd-place match, so it takes 2 waves. So the
+estimate counts waves, with `s` stations, `M` matches, and `L`, the fewest waves the bracket's
+rounds allow:
+
+| Format | Waves |
+|---|---|
+| One life | max(ceil(M / s_eff), L), with `s_eff` = min(s, floor(n / 2)) and L = ceil(log2 n) |
+| Two lives | the same, with L = 2R or 2R + 1 (the rematch), where R = ceil(log2 n) |
+| Everyone plays everyone | the same, with L = n - 1 when n is even and n when n is odd (the number of rounds) |
+| Groups | `rounds` x ceil(ceil(n / 4) / s), plus 0 or 1 for the tie-break group, plus 1 for the final |
+
+**Minutes.** One match in a bracket takes minutes per game x games played + changeover
+minutes. Games played is 1 for best of 1, 2.5 for best of 3, and 4.125 for best of 5, the
+expected number for evenly matched players (derived: in a best of 3, 2 games with chance 1/2
+and 3 with chance 1/2; in a best of 5, 3, 4, and 5 games with chances 1/4, 3/8, and 3/8). One
+group takes minutes per race x games in each group + changeover minutes. The total is waves x
+minutes for one match or group, as a low end and a high end.
+
+**What the screen shows.** The high end, rounded to the nearest 5 minutes under an hour and
+the nearest 15 from an hour. In step 3 it also shows the finish time, from the laptop's clock
+(`Intl.DateTimeFormat`, no network). The estimate is too long when its high end, before
+rounding, is more than the hours the host has x 60. The warning never blocks **Start**.
+It suggests up to two fixes, each worked out by running the estimate again with the change,
+and shows the two that save the most time: add a station, pick One life, play best of 1, pick
+1 vs 1 bracket, play fewer games in each group, play 1 round before the final. A fix is only
+offered when it applies to the plan, such as One life for Two lives.
+
+**The code.** `packages/core/src/estimate.ts`, pure and tested for 2 to 32 players in every
+format. A server test checks the waves against the real engine: it plays a bracket out in
+batches (`playOutInBatches` in `packages/server/test/bracket-helpers.ts`, which records a
+result for every match on a station, then rebuilds once) and counts the batches. The
+estimated waves, low and high, must be within max(1, 10%) of the batches counted.
+
+**Examples.** 16 players in Two lives, best of 1, 1 station, 5 + 4 = 9 minutes a match: 30 to
+31 matches in 30 to 31 waves, which is 270 to 279 minutes. The screen shows about 4 hours 45
+minutes. Everyone plays everyone with 16 players is 120 matches, 123 with a tie-break, which
+on one station at 9 minutes is about 18 hours 30 minutes.
 
 ## 6. Running an event
 
-1. **Create:** name, game, format card, start. The event can carry a graphic for the name
-   tags and the TV.
+1. **Set up:** the wizard's steps 1 and 2: name and game, then how to play (see "The setup
+   wizard"). The event can carry a graphic for the name tags and the TV.
 2. **Sign-up:** tablets take players; the host can add players by hand.
-3. **Play:** the queue sends matches to stations. The TV shows "Up next" and the timer. The
-   host records each result with one tap (1 vs 1) or by tapping players in finishing order
-   (heats).
+3. **Start and play:** step 3 starts the competition. The queue sends matches to stations.
+   The TV shows "Up next" and the timer. The host records each result with one tap (1 vs 1)
+   or by tapping players in finishing order (heats).
 4. **Finish:** final standings on the TV. Results go to each handle's stats.
+
+### The setup wizard
+
+Planned for M7 (Brad, 2026-11-14). The wizard replaces `StartCompetitionDialog.tsx` and the
+event name box on the host screen (`/host`). A 12-year-old has to be able to run it with
+three choices and no typing beyond the event name (principle 1).
+
+**Setup mode and play mode.** The host screen is in *setup mode* while the current event has
+no bracket and no groups: the wizard replaces the Event and Competition sections, and
+Screens and Players stay below it. Once a competition exists it is in *play mode*, as today,
+with two changes. The Event section keeps the rename box and gains **New event** (see "A new
+event"). **New competition**, after a finish, opens the wizard at step 2 with **Cancel**,
+because the event and its game are already set; a new competition replaces the finished one,
+as it does now.
+
+**Steps 1 and 2 come before sign-up and step 3 after it**, so the choices are kept on the
+server as the event's plan (see "Storage and routes"), not in the page. A reload, or a
+second laptop window, finds them.
+
+**Nothing is lost.** Every part of the dialog is reused: `BracketOptions` is split, with its
+format choices moving to the cards and the lives choice into "More options", and its best of
+staying there; `GroupOptions`; the stations select; and `PlayerPicker`, with **Pick all**,
+**Clear**, and "Not signed up to this event". Checked against the code on 2026-11-14.
+
+**Step 1, "Name and game".**
+
+- **Event name**, the only required typing, with the limits it has today (1 to 60
+  characters, no control characters; `cleanEventName` in `packages/server/src/events.ts`).
+  A dice button next to it fills in a catchy name, and each tap gives another.
+- **The names** come from `packages/core` (`event-names.ts`): two-word names such as "Thunder
+  Showdown" and "Turbo Grand Prix", and compound words, built from long word lists. The
+  caller passes a seeded `RandomSource` (`CLAUDE.md`, rule 4); the host page seeds one from
+  `crypto.getRandomValues` on each tap. The words match the template: fighting words for
+  Fighting game, racing words for Racing game, general words for Another game. The lists hold
+  no game titles, brand names, or trademarks. A test runs every name the lists can make
+  through `isVulgar` (as written, and with the spaces taken out, in case a bad word spans the
+  join) and checks that each name is at most 60 characters.
+- **Template cards:** Fighting game, Racing game, Another game. A template only sets
+  defaults. The default card is the previous event's plan, else Fighting game.
+
+| Template | Card | Minutes for one game or race |
+|---|---|---|
+| Fighting game | 1 vs 1 bracket | 5 a game |
+| Racing game | Races and free-for-all | 4 a race |
+| Another game | 1 vs 1 bracket | 5 a game |
+
+  Picking a different template than the saved one puts the template's defaults over every
+  step 2 choice, so step 2 never shows a half-old plan. The sources for the minutes are in
+  "Time estimate".
+- **"What game are you playing?"**, an optional game name, cleaned like the event name
+  (whitespace collapsed, trimmed, 60 characters, no control characters) and checked by the
+  server. An empty one is stored as nothing. It is shown next to the event name on the TV,
+  the Sign-up tablet, and the phone page, so players know what they are signing up for. It
+  is stored as event data (`CLAUDE.md`: no game title lives in code), and leaving it empty is
+  fine, so the check "no typing beyond its name" holds. Like the event name, it is host
+  typed and not run through the handle filter.
+- **Next** saves the name and game (`PUT /api/event`, extended with `game`) and the plan
+  with the template's defaults (`PUT /api/event/plan`).
+
+**Step 2, "How to play".**
+
+- **Three cards**, as in section 5: 1 vs 1 bracket, Everyone plays everyone, and Races and
+  free-for-all. Their lines are the ones the dialog has: "Players face off one on one.
+  Winners move on.", "Every player plays all the others. The most wins takes 1st.", and
+  "Groups of up to 4 score points by place. The top 4 play a final." (`KIND_WORDS` in
+  `StartCompetitionDialog.tsx` and `FORMAT_CHOICES` in `bracketWords.ts`).
+- **The estimate line**, "With 16 players, this takes about 2 hours", where the players
+  count is a picker from 2 to 32. It starts at the number signed up when that is 2 or more,
+  else 16. It is only for the estimate and is not stored. A count below the format's minimum
+  (Two lives needs 3) shows the existing problem words instead of a time.
+- **More options**, an MUI `Accordion` for the selected card:
+
+| Option | Choices | Card |
+|---|---|---|
+| Lives | One life, Two lives | 1 vs 1 bracket |
+| Best of | 1, 3, 5 | 1 vs 1 bracket, Everyone plays everyone |
+| Stations | 1 to 8, fixed once started | all |
+| Games in each group, Rounds before the final, points for 1st to 4th (`GroupOptions`) | 1 to 4, 1 to 3, the points table | Races and free-for-all |
+| Minutes for one game (Minutes for one race with the Racing game template) | 2, 3, 4, 5, 7, 10, 15 | all |
+| Changeover minutes | 0, 2, 4, 6, 8 (default 4) | all |
+| Time you have | 1 to 6 hours (default 3) | all |
+| Wait for a missing player | 3, 5, 10, 15 minutes (default 5) | all |
+
+  Options the engines don't support stay out: the 3rd-place match is always on, the rematch
+  for the title is always on, and the final's size is fixed at 4. The defaults for the other
+  settings are the dialog's: One life, best of 1, 1 station, 1 game in each group, 2 rounds,
+  4, 3, 2, 1.
+- **Next** saves the plan.
+
+**Step 3, "Start".**
+
+- A live "12 players signed up" count, which follows the `players` live message.
+- A summary line of the choices, the estimate with the finish time, and the too-long warning
+  (see "Time estimate").
+- **More options**, then **Change players**: the `PlayerPicker`. It starts with everyone
+  signed up checked, as the dialog does.
+- The existing problem words when the count can't start the format (`startProblem`,
+  `groupsProblem`, and `pointsProblem`).
+- **Back**, and a big **Start**, which sends the existing `POST /api/bracket` or
+  `POST /api/heats`.
+
+**A new event.** **New event** in play mode starts step 1 in new-event mode, which says
+"Players sign up again for this event." `POST /api/events` `{ name, game? }` makes a new
+`events` row that becomes the current event, because the current event is the newest row
+(`packages/server/src/events.ts`). The new event copies the previous event's plan as its
+defaults; the game is not copied. It is host only and runs on the same write chain as every
+bracket and heats write, so the check and the insert can't interleave with a start. It
+answers 409 `bracket-running` while a bracket or groups are running, and a finished
+competition doesn't block it. Afterwards the server drops the phone answer cache, the same
+as `PUT /api/event` (`onEventChanged`), and broadcasts `event`, `players`, `bracket`, and
+`heats`. Players sign up again: a returning kid types their handle and PIN, and the claim
+adds them to the new event (see "Who is in a bracket"). Past events stay in the database
+for M10's stats, which makes the old brackets real data from M7 on.
+
+**Storage and routes.** Migration 7 adds `events.game` (`TEXT`, null for none), `events.plan`
+(`TEXT`, JSON), and the two result columns named under "Brackets API" and "Heats API". The server checks the plan at the edge with `isEventPlan` from
+`packages/core` and answers 400 `bad-request` for anything else (`CLAUDE.md`, rule 2). A
+stored plan that can't be read becomes null, so a hand-edited database can't break the page.
+`GET /api/event` lists its fields one by one: `{ name, game }` (rule 1). `PUT /api/event`
+takes `{ name, game? }`: leaving `game` out keeps the stored one, so the rename box in play
+mode doesn't clear it, and an empty string clears it. `GET` and `PUT /api/event/plan` are host
+only and take `{ plan }`. A phone and the Sign-up tablet read the game from `GET /api/event`
+and the `event` live message; `GET /api/phone` carries it in its `event`. The plan is flat
+and its schema is closed (`additionalProperties: false`):
+
+```ts
+interface EventPlan {
+  template: 'fighting' | 'racing' | 'other';
+  format: 'single' | 'double' | 'round_robin' | 'heats';
+  bestOf: 1 | 3 | 5;
+  races: 1 | 2 | 3 | 4;        // games in each group
+  rounds: 1 | 2 | 3;           // before the final
+  points: number[];            // 1st to 4th, passes isPointsTable
+  stations: number;            // 1 to 8
+  minutesPerGame: number;      // 2, 3, 4, 5, 7, 10, or 15
+  changeoverMinutes: number;   // 0, 2, 4, 6, or 8
+  hours: number;               // 1 to 6
+  noShowMinutes: number;       // 3, 5, 10, or 15
+}
+```
+
+The plan is the host's settings. The competition keeps its own settings, sent by `POST
+/api/bracket` or `POST /api/heats` at the start, so changing the plan never changes a
+running bracket.
 
 ### Late sign-up
 
@@ -812,7 +1045,9 @@ history into the stations, so the same log gives the same stations after a resta
   had a first-round bye waits. The cost is that with two stations one may sit idle near the
   end of round 1.
 - **`calledAt`** is the time of the result that freed the station, or the bracket's creation
-  time for the first matches. The TV counts up from it. There is no alarm.
+  time for the first matches. The TV counts up from it. Nothing sounds or changes by
+  itself; from M7 the host is prompted when the plan's wait is over (see "Waiting for a
+  missing player").
 - **Up next** is the waiting matches in queue order. A match whose player is still on a
   station stays on the list and is skipped when a station is filled.
 - **Undoing the newest result** takes it out of the log. The bracket is exactly what it was
@@ -830,6 +1065,49 @@ history into the stations, so the same log gives the same stations after a resta
   would lose a player, or a tie-break made after it. A waiting match that loses a player
   leaves Up next until it has two players again.
 
+### Waiting for a missing player
+
+Planned for M7 (Brad, 2026-11-14), from his son's question. The host chose a prompt over an
+automatic rule. Published rulesets wait 5 to 15 minutes after a call, most often 5, and
+leave the decision to the organizer:
+
+- start.gg's disqualification timer starts when the players are called, is optional, and its
+  guidance is half the set time of a best of 3, or up to 10 minutes
+  (<https://help.start.gg/en/articles/13766200-online-round-settings> and the best-practices
+  article cited under "Time estimate").
+- The Unified European Ruleset's report window is 5 to 10 minutes
+  (<https://www.ssbwiki.com/Unified_European_Ruleset>).
+
+No rule written for kids was found, so the default is 5 minutes and the host changes it
+under "More options" (`noShowMinutes`: 3, 5, 10, or 15; checked 2026-11-14).
+
+**The prompt.** A station's `calledAt` (see "Stations and the queue"; for the first matches
+it is the bracket's creation time) plus `noShowMinutes` is when the wait is over. Then the
+host's station card shows "Still waiting?" and a **Forfeit** button, and the host taps who is
+missing. Nothing happens by itself. The TV shows a call line for that station while the wait
+is over, naming every player of the match or group, since the TV can't know who is missing:
+"Zap and Kai, come to station 2!" The bracket and heats answers carry `noShowMinutes`, read
+from the event's plan, so the screens agree on when the wait is over; it is 5 when the event
+has no plan.
+
+**In a bracket**, a forfeit is recorded as an ordinary result for the player who showed up,
+with `forfeit: true` on the result record. The flag is copied through the result log and its
+replay, so undo, standings, and ties work as they do for any result. The bracket view and the
+results list mark the match "Forfeit". If both players are missing, the host forfeits one,
+and the other is recorded as the winner and moves on to their next match; the same wait
+applies there if they still haven't come.
+
+**In groups**, the host records the group as today and marks the players who are missing. A
+missing player scores 0 points (Brad, 2026-11-14), the others take places in the order they
+finished and score for those places, and the group counts as played for everyone, so
+everyone still plays the same number of groups. At least one player has to be there. A
+missing player in the final or a tie-break group takes the places after those who played, in
+qualifying order (seeding order when level), so places 1 to 3 stay unique.
+
+**Undo** works as for any result: the forfeit or the missing marks are part of the result in
+the log, and undoing it restores the bracket or heat exactly (`CLAUDE.md`, rule 5). The late
+sign-up rules are unaffected.
+
 ### Brackets API
 
 Planned in M4 (2026-11-13). The rules of "Devices and host API" apply: bodies are JSON,
@@ -842,8 +1120,9 @@ bracket, the match, the winner, the loser, and the time), `bracket_late_joins` a
 `bracket_tie_breaks` (in order, each with the step it was made at), and `event_players` (the
 event and the player). An event has one bracket, and a new one replaces it. Migration 4
 adds `undone_step` and `undone_at` to `bracket_results`: a result taken back by an older undo
-keeps its row, with the step and time of the undo. No handle is stored; an answer joins the
-current one. The server rebuilds the library's state on its
+keeps its row, with the step and time of the undo. Migration 7 (M7) adds `forfeit` (0 or 1,
+default 0): the result is for the player who came, recorded because the other didn't (see
+"Waiting for a missing player"). No handle is stored; an answer joins the current one. The server rebuilds the library's state on its
 in-memory store (`brackets-memory-db`) by creating the stage and replaying the log. It checks that each logged match is ready and holds the same two players.
 A tie-break match is stored by the server with the step at which it was made, and its
 result goes in the same log. Replay of 32 players took 13 ms in two lives (63 results) and
@@ -865,12 +1144,15 @@ bracket finished with one player in each of places 1 to 3. The library's own
 |---|---|---|
 | `GET /api/bracket` | host or device | `{ bracket }`, or `{ bracket: null }` before one is made |
 | `POST /api/bracket` `{ format, bestOf, stations, playerIds }` | host | 201 `{ bracket }`; 409 `bracket-running`; 400 `too-few-players`, `too-many-players`, or `bad-request` |
-| `POST /api/bracket/results` `{ matchId, winnerId }` | host | `{ bracket, resultId }`; 409 `not-on-station`; 400 `bad-request` if the winner isn't in the match; 404 `not-found` for a match that isn't there |
+| `POST /api/bracket/results` `{ matchId, winnerId, forfeit? }` | host | `{ bracket, resultId }`; 409 `not-on-station`; 400 `bad-request` if the winner isn't in the match; 404 `not-found` for a match that isn't there |
 | `POST /api/bracket/undo` `{ resultId }` | host | `{ bracket }`; 409 `undo-later-first`, or `nothing-to-undo` for a result not in the log or already undone |
 | `POST /api/bracket/players` `{ playerId }` | host | `{ bracket }`; 409 `late-closed` or `already-in`; 404 `not-found` for a player who isn't there |
 | `POST /api/bracket/tie-break` | host | `{ bracket }` with the tie-break matches made; 409 `no-tie` if the bracket answer lists no tie that still needs matches |
 | `DELETE /api/bracket` | host | 204; the host screen asks first, since it can't be undone |
 | `GET /api/event/players` | host | `{ playerIds }`: the players signed up to the current event |
+
+`forfeit` (M7) is optional and false when left out. When true, `winnerId` is the player who
+came, and the result is logged and undone like any other.
 
 The four `POST` routes under `/api/bracket/` answer 404 `no-bracket` when the event has no
 bracket. `format` is `single`, `double`, or `round_robin`; `bestOf` is 1, 3, or 5; `stations`
@@ -887,6 +1169,7 @@ interface Bracket {
   finished: boolean;        // every place is decided, no tie waiting
   lateOpen: boolean;        // the host can still add a player (see "Late sign-up")
   lastResultId: number | null;  // the newest result not undone
+  noShowMinutes: number;    // M7: when a station's wait is over (see "Waiting for a missing player")
   stations: { number: number; match: BracketMatch | null; calledAt: string | null }[];
   upNext: BracketMatch[];
   matches: BracketMatch[];
@@ -901,6 +1184,7 @@ interface BracketMatch {
   status: 'waiting' | 'ready' | 'playing' | 'done' | 'bye';
   slots: [{ player: Player | null; bye: boolean }, { player: Player | null; bye: boolean }];
   winner: 0 | 1 | null;
+  forfeit: boolean;         // M7: the winner won because the other didn't come
   resultId: number | null;  // what to send to /undo
 }
 ```
@@ -923,7 +1207,7 @@ reload it. The Display and the host screen also reload it on `players`, for rena
 
 **Who is in a bracket.** Players are kept across events and attendance isn't tracked, so
 `event_players` lists who signed up to the current event. Sign-up, claim, and the host's
-"Add player" fill it, and the start dialog pre-checks the event's players. A player who
+"Add player" fill it, and the start dialog (from M7, step 3 of the wizard) pre-checks the event's players. A player who
 signs up before the host has named an event goes into one the server makes then, named
 "ColiseumGrid" (what the Display shows with no event), and the host can rename it. Starting a
 bracket adds every player in it to the event, so a player picked from "Not signed up to this
@@ -931,6 +1215,9 @@ event" is in the event from then on, and so does adding a late player. Merging a
 who is in a bracket of the current event, running or finished, answers 409 `in-bracket`, so
 the bracket's answer can always be made; deleting the bracket frees them. A
 merge keeps the merged player's place in the event for the player kept.
+That guard checks the current event only. From M7 a new event leaves the old event's bracket
+in the database, so merging away a player who is in a past bracket needs care (`ROADMAP.md`,
+M10).
 
 ### Heats API
 
@@ -947,7 +1234,8 @@ mean rebuilding `brackets` (its format `CHECK`) and `bracket_results` (`winner_i
 - `heat_runs`: the event (`UNIQUE`), stations, races, rounds, the points table and the
   seeding as JSON, and the creation time.
 - `heat_results`: the run, the heat, the finishing order as a JSON list of player ids, the
-  time, and `undone_step` and `undone_at` for an older undo.
+  time, and `undone_step` and `undone_at` for an older undo. Migration 7 (M7) adds
+  `missing`, a JSON list of player ids, null for none (see "Waiting for a missing player").
 - `heat_late_joins`: the run, its position, the player, the heat, and the step.
 - `heat_tie_breaks`: the run, its position, the players as JSON, and the step.
 
@@ -961,7 +1249,7 @@ start at 1000 and the final is 2000.
 |---|---|---|
 | `GET /api/heats` | host or device | `{ heats }`, or `{ heats: null }` before any are made |
 | `POST /api/heats` `{ stations, races, rounds, points, playerIds }` | host | 201 `{ heats }`; 409 `bracket-running`; 400 `too-few-players`, `too-many-players`, or `bad-request` |
-| `POST /api/heats/results` `{ heatId, order }` | host | `{ heats, resultId }`; 409 `not-on-station`; 400 `bad-request` if `order` isn't the heat's players, each once; 404 `not-found` for a heat that isn't there |
+| `POST /api/heats/results` `{ heatId, order, missing? }` | host | `{ heats, resultId }`; 409 `not-on-station`; 400 `bad-request` if `order` and `missing` together aren't the heat's players, each once, or if nobody is in `order`; 404 `not-found` for a heat that isn't there |
 | `POST /api/heats/undo` `{ resultId }` | host | `{ heats }`; 409 `undo-later-first`, or `nothing-to-undo` for a result not in the log or already undone |
 | `POST /api/heats/players` `{ playerId }` | host | `{ heats }`; 409 `late-closed` or `already-in`; 404 `not-found` for a player who isn't there |
 | `POST /api/heats/tie-break` | host | `{ heats }` with the tie-break heats made; 409 `no-tie` if no tie at the cut still needs heats |
@@ -969,7 +1257,11 @@ start at 1000 and the final is 2000.
 
 The four `POST` routes under `/api/heats/` answer 404 `no-heats` when the event has no heats.
 `stations` is 1 to 8, `races` 1 to 4, `rounds` 1 to 3, and `points` 4 whole numbers that pass
-`isPointsTable`. `playerIds` are 2 to 32 players; with 2 to 4, `rounds` is stored as 0.
+`isPointsTable`. `playerIds` are 2 to 32 players; with 2 to 4, `rounds` is stored as 0. `missing` (M7) is
+optional and empty when left out. When it is used, `order` lists only the players who played,
+1st first, and `missing` the rest; `isFinishOrder` in `packages/core/src/heats.ts` gains a
+sibling that checks the two lists together. `scoreHeats` gives a missing player 0 points and
+counts the heat as played for them.
 
 On the host screen, a refused result (404 `not-found`, 409 `not-on-station`) reads "That group
 isn't being played anymore." (`GROUP_RESULT_WORDS` in `api/errors.ts`; the same codes on the
@@ -987,6 +1279,7 @@ interface Heats {
   finished: boolean;        // the final has a result
   lateOpen: boolean;
   lastResultId: number | null;
+  noShowMinutes: number;    // M7: when a station's wait is over
   round: number | null;     // the qualifying round being played; null for tie-breaks and the final
   stations: { number: number; heat: Heat | null; calledAt: string | null }[];
   upNext: Heat[];
@@ -1002,7 +1295,8 @@ interface Heat {
   number: number;           // from 1 within its round or pass
   status: 'ready' | 'playing' | 'done';
   players: Player[];        // 2 to 4
-  order: Player[] | null;   // the finishing order once recorded
+  order: Player[] | null;   // the finishing order of those who played, once recorded
+  missing: Player[];        // M7: players who didn't come; empty when none or before a result
   resultId: number | null;  // what to send to /undo
 }
 ```
