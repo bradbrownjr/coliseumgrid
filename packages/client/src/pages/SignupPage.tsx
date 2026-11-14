@@ -1,3 +1,4 @@
+import type { FollowCode } from '@coliseumgrid/core';
 import { useCallback, useState } from 'react';
 import { AccessGate, useGoToJoin } from '../components/AccessGate.tsx';
 import { useLive } from '../components/useLive.ts';
@@ -6,13 +7,14 @@ import { DoneStep } from './signup/DoneStep.tsx';
 import { HandleStep } from './signup/HandleStep.tsx';
 import { PinStep } from './signup/PinStep.tsx';
 import { TakenStep } from './signup/TakenStep.tsx';
+import { followUrl } from '../pairing.ts';
 
 type Step =
   | { name: 'handle' }
   | { name: 'taken'; handle: string }
   | { name: 'pin'; handle: string; suggestedPin: string }
   | { name: 'claim'; handle: string }
-  | { name: 'done'; handle: string; pin?: string };
+  | { name: 'done'; handle: string; pin?: string; followCode: FollowCode };
 
 /** Only a Sign-up device or a signed-in host gets in; anyone else goes to the join screen. */
 export function SignupPage() {
@@ -31,7 +33,11 @@ function SignupSteps() {
   const [step, setStep] = useState<Step>({ name: 'handle' });
   const restart = useCallback(() => setStep({ name: 'handle' }), []);
   const taken = useCallback((handle: string) => setStep({ name: 'taken', handle }), []);
-  const done = useCallback((handle: string, pin?: string) => setStep({ name: 'done', handle, ...(pin !== undefined && { pin }) }), []);
+  const done = useCallback(
+    (handle: string, followCode: FollowCode, pin?: string) =>
+      setStep({ name: 'done', handle, followCode, ...(pin !== undefined && { pin }) }),
+    [],
+  );
 
   switch (step.name) {
     case 'handle':
@@ -62,6 +68,13 @@ function SignupSteps() {
     case 'claim':
       return <ClaimStep handle={step.handle} onDone={done} onPickAnother={restart} />;
     case 'done':
-      return <DoneStep handle={step.handle} {...(step.pin !== undefined && { pin: step.pin })} onNext={restart} />;
+      return (
+        <DoneStep
+          handle={step.handle}
+          {...(step.pin !== undefined && { pin: step.pin })}
+          followUrl={followUrl(window.location, step.followCode.code)}
+          onNext={restart}
+        />
+      );
   }
 }

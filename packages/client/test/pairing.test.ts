@@ -1,6 +1,6 @@
 import { parseJoinCode } from '@coliseumgrid/core';
 import { describe, expect, it } from 'vitest';
-import { formatCountdown, isLoopbackHost, joinUrl, lastSeenWords, qrPath, shownAddress, tidyCodeInput } from '../src/pairing.ts';
+import { followUrl, formatCountdown, isLoopbackHost, joinUrl, lastSeenWords, qrPath, shownAddress, tidyCodeInput } from '../src/pairing.ts';
 
 describe('code entry', () => {
   it('shows capitals with the dash after the third character', () => {
@@ -103,5 +103,17 @@ describe('QR code', () => {
     expect((size - 17) % 4).toBe(0);
     expect(size).toBeGreaterThanOrEqual(21);
     expect(path).toMatch(/^M\d+ \d+/);
+  });
+});
+
+describe('the follow address', () => {
+  it('opens the player page with the code', () => {
+    expect(followUrl({ origin: 'http://10.6.26.20:8080', hostname: '10.6.26.20' }, 'K7M4QX')).toBe('http://10.6.26.20:8080/follow?code=K7M4QX');
+    expect(followUrl({ origin: 'https://grid.example.org', hostname: 'grid.example.org' }, 'K7M4QX')).toBe('https://grid.example.org/follow?code=K7M4QX');
+  });
+
+  it('is null on the machine itself, where a phone cannot follow it', () => {
+    expect(followUrl({ origin: 'http://localhost:3000', hostname: 'localhost' }, 'K7M4QX')).toBeNull();
+    expect(followUrl({ origin: 'http://[::1]:3000', hostname: '[::1]' }, 'K7M4QX')).toBeNull();
   });
 });

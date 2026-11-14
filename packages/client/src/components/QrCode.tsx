@@ -1,6 +1,6 @@
 import Box from '@mui/material/Box';
 import { useMemo } from 'react';
-import { qrPath } from '../../pairing.ts';
+import { qrPath } from '../pairing.ts';
 
 /** The quiet zone around a QR code, in modules: 4 is the standard's minimum. */
 const QUIET_MODULES = 4;
@@ -12,7 +12,7 @@ const QUIET_MODULES = 4;
  * advises against reversing the colors). The theme's common black and white stand in for the
  * two colors, so the code doesn't pick up the crimson or the dark mode background.
  */
-export function JoinQr({ text, label }: { text: string; label: string }) {
+export function QrCode({ text, label }: { text: string; label: string }) {
   const { size, path } = useMemo(() => qrPath(text), [text]);
   const edge = size + 2 * QUIET_MODULES;
   return (

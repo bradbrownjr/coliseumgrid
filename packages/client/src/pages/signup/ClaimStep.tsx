@@ -1,3 +1,4 @@
+import type { FollowCode } from '@coliseumgrid/core';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import { useState } from 'react';
@@ -12,7 +13,7 @@ import { ErrorSlot, EntryFrame, bigButtonSx, linkButtonSx } from '../../componen
 interface ClaimStepProps {
   handle: string;
   // No PIN: a returning player just typed it, and a shared tablet shouldn't show it again.
-  onDone: (handle: string) => void;
+  onDone: (handle: string, followCode: FollowCode) => void;
   onPickAnother: () => void;
 }
 
@@ -31,7 +32,7 @@ export function ClaimStep({ handle, onDone, onPickAnother }: ClaimStepProps) {
     const result = await claimHandle(handle, entry.pin);
     if (!stillHere()) return;
     setBusy(false);
-    if (result.ok) return onDone(result.data.player.handle);
+    if (result.ok) return onDone(result.data.player.handle, result.data.followCode);
     setWords(failureWords(result));
     setLockedOut(result.error === 'too-many-tries');
     entry.reset('');

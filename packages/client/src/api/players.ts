@@ -10,6 +10,7 @@ import type {
   Player,
   PlayerAnswer,
   PlayersAnswer,
+  SignupAnswer,
   SignupCheckAnswer,
 } from '@coliseumgrid/core';
 import { call } from './request.ts';
@@ -17,11 +18,12 @@ import { call } from './request.ts';
 export const checkSignup = (handle: string) =>
   call<SignupCheckAnswer>('POST', '/api/signup/check', { handle } satisfies HandleBody);
 
+/** The answer carries the follow code for the done screen's QR code. */
 export const signUp = (handle: string, pin: string) =>
-  call<PlayerAnswer>('POST', '/api/signup', { handle, pin } satisfies HandlePinBody);
+  call<SignupAnswer>('POST', '/api/signup', { handle, pin } satisfies HandlePinBody);
 
 export const claimHandle = (handle: string, pin: string) =>
-  call<PlayerAnswer>('POST', '/api/signup/claim', { handle, pin } satisfies HandlePinBody);
+  call<SignupAnswer>('POST', '/api/signup/claim', { handle, pin } satisfies HandlePinBody);
 
 export const listPlayers = () => call<PlayersAnswer>('GET', '/api/players');
 

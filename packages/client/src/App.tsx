@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router';
 import { DisplayPage } from './pages/DisplayPage.tsx';
 import { HostPage } from './pages/HostPage.tsx';
 import { JoinPage } from './pages/JoinPage.tsx';
+import { PhonePage } from './pages/PhonePage.tsx';
 import { SignupPage } from './pages/SignupPage.tsx';
 
 export function App() {
@@ -10,6 +11,7 @@ export function App() {
       <Route path="/" element={<JoinPage />} />
       <Route path="/host" element={<HostPage />} />
       <Route path="/signup" element={<SignupPage />} />
+      <Route path="/follow" element={<PhonePage />} />
       <Route path="/display" element={<DisplayPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

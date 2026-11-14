@@ -12,7 +12,7 @@ import { useNow } from '../../components/useNow.ts';
 import { failureWords } from '../../api/errors.ts';
 import { makePairingCode } from '../../api/host.ts';
 import { formatCountdown, isLoopbackHost, joinUrl, shownAddress } from '../../pairing.ts';
-import { JoinQr } from './JoinQr.tsx';
+import { QrCode } from '../../components/QrCode.tsx';
 
 const ROLE_WORDS: Record<DeviceRole, string> = { display: 'a TV', signup: 'a sign-up tablet' };
 
@@ -59,7 +59,7 @@ export function PairingPanel() {
 
       {code && (
         <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: { xs: 2, sm: 3 }, display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: { xs: 2, sm: 4 }, alignItems: { xs: 'center', sm: 'flex-start' } }}>
-          {url && !expired && <JoinQr text={url} label={`QR code that opens ${shownAddress(address)} with the code ${formatJoinCode(code.code)}`} />}
+          {url && !expired && <QrCode text={url} label={`QR code that opens ${shownAddress(address)} with the code ${formatJoinCode(code.code)}`} />}
           <Stack sx={{ gap: 1, minWidth: 0, width: '100%' }}>
             <Typography variant="h6" component="h3">
               Code for {ROLE_WORDS[code.role]}

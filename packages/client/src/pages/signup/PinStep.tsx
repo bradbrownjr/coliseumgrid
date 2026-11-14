@@ -1,3 +1,4 @@
+import type { FollowCode } from '@coliseumgrid/core';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import { useState } from 'react';
@@ -12,7 +13,7 @@ import { ErrorSlot, EntryFrame, bigButtonSx, linkButtonSx } from '../../componen
 interface PinStepProps {
   handle: string;
   suggestedPin: string;
-  onDone: (handle: string, pin: string) => void;
+  onDone: (handle: string, followCode: FollowCode, pin: string) => void;
   onTaken: (handle: string) => void;
   onPickAnother: () => void;
 }
@@ -31,7 +32,7 @@ export function PinStep({ handle, suggestedPin, onDone, onTaken, onPickAnother }
     const result = await signUp(handle, entry.pin);
     if (!stillHere()) return;
     setBusy(false);
-    if (result.ok) return onDone(result.data.player.handle, entry.pin);
+    if (result.ok) return onDone(result.data.player.handle, result.data.followCode, entry.pin);
     // Someone signed up with this handle while this player was choosing a PIN.
     if (result.error === 'taken') return onTaken(handle);
     setWords(failureWords(result));
