@@ -119,6 +119,11 @@ Tasks:
 - The join address on the laptop. The launcher opens the host screen at `localhost`, which
   a TV can't use, so for now the pairing panel asks the host to type the laptop's address.
   The server tells the host screen its network address instead.
+- Host sign-out in a shared browser. When the host signs out, the server closes every live
+  connection of that session, so a player page or a paired screen open in the same browser
+  loses its connection too. Like a phone sign-out since M6, it takes away only the host
+  identity and leaves the connection open for the others (`endSession` in
+  `packages/server/src/live.ts`).
 - Online mode settings, the reverse proxy and client IP rule, and `docs/SELF-HOSTING.md`.
 
 Acceptance checks:
