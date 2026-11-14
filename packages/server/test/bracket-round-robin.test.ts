@@ -38,21 +38,24 @@ const places = (bracket: Bracket): Array<[number, number]> => bracket.standings.
 const tieBreakMatches = (bracket: Bracket): BracketMatch[] => bracket.matches.filter((m) => m.side === TIE_BREAK);
 
 describe('round robin sizes', () => {
-  it('plays every size from 2 to 32 to a finish with n(n - 1) / 2 results, settling places 1 to 3', async () => {
-    let tieBreaksPlayed = 0;
-    for (let n = 2; n <= 32; n++) {
-      const random = createSeededRandom(n);
-      const run = await playOutInBatches(await start('round_robin', n, n, n >= 12 ? 8 : 1 + (n % 8)), random, randomPick(random));
-      expect(run.bracket.finished, `n=${n}`).toBe(true);
-      const own = run.state.results.filter((r) => r.matchId < 1000);
-      expect(own, `n=${n}`).toHaveLength((n * (n - 1)) / 2);
-      tieBreaksPlayed += run.state.results.length - own.length;
-      expect(run.bracket.ties).toEqual([]);
-      expectPodium(run.bracket, n);
-      // An odd count has one bye a round; nobody plays a bye.
-      expect(run.bracket.matches.filter((m) => m.status === 'bye')).toHaveLength(n % 2 === 1 ? n : 0);
-    }
-    // Random play ties at the top often enough that the run above plays tie-breaks.
+  // One test per size: played as one test, the 31 sizes took over 30 s when other test files
+  // loaded the machine. Tests in a file run in order, so the last one can read the total.
+  let tieBreaksPlayed = 0;
+  const sizes = Array.from({ length: 31 }, (_, i) => i + 2);
+  it.each(sizes)('plays %i players to a finish with n(n - 1) / 2 results, settling places 1 to 3', async (n) => {
+    const random = createSeededRandom(n);
+    const run = await playOutInBatches(await start('round_robin', n, n, n >= 12 ? 8 : 1 + (n % 8)), random, randomPick(random));
+    expect(run.bracket.finished, `n=${n}`).toBe(true);
+    const own = run.state.results.filter((r) => r.matchId < 1000);
+    expect(own, `n=${n}`).toHaveLength((n * (n - 1)) / 2);
+    tieBreaksPlayed += run.state.results.length - own.length;
+    expect(run.bracket.ties).toEqual([]);
+    expectPodium(run.bracket, n);
+    // An odd count has one bye a round; nobody plays a bye.
+    expect(run.bracket.matches.filter((m) => m.status === 'bye')).toHaveLength(n % 2 === 1 ? n : 0);
+  });
+
+  it('plays tie-breaks somewhere in the sizes above, since random play ties at the top often', () => {
     expect(tieBreaksPlayed).toBeGreaterThan(0);
   });
 
