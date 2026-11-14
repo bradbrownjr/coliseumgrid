@@ -17,4 +17,5 @@
   <Config Name="Mode" Target="COLISEUMGRID_MODE" Default="online" Mode="" Description="online behind a reverse proxy on the internet; offline on a home or venue network." Type="Variable" Display="always" Required="true" Mask="false">online</Config>
   <Config Name="Host password" Target="COLISEUMGRID_HOST_PASSWORD" Default="" Mode="" Description="The password for the host screens, 8 to 128 characters. Required in online mode: the container stops without it." Type="Variable" Display="always" Required="true" Mask="true"></Config>
   <Config Name="Trust proxy" Target="TRUSTED_PROXY" Default="" Mode="" Description="The reverse proxy's address, so rate limits count each player's IP. Leave empty without a proxy." Type="Variable" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="Push contact" Target="COLISEUMGRID_PUSH_SUBJECT" Default="" Mode="" Description="A mailto: or https: address that push services can contact, needed for lock screen alerts on phones. Online over HTTPS only; leave empty to turn alerts off." Type="Variable" Display="always" Required="false" Mask="false"></Config>
 </Container>
