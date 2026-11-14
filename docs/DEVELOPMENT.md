@@ -189,13 +189,46 @@ The rules are in `PLAN.md`, sections 5 and 6. These are the facts a change has t
   reaches 1000, so library ids must stay below it.
 - **Result ids are never reused** (`nextResultId`), so an old id can't name a new result.
 
+### Heats
+
+The rules are in `PLAN.md`, section 5 and "Heats API". These are the facts a change has to keep.
+
+- **The heat engine mirrors the bracket engine.** `heat-engine.ts` takes a `HeatState` and
+  returns the new state with its answer, or a refusal. Every answer is a replay: `rebuild`
+  cuts round 1 from the seeding and works out later rounds, tie-break heats, and the final
+  from the results standing at each step. None of that is stored. The engine reads no clock
+  and touches no database; the route passes in the time and the new result's id.
+- **The engine is synchronous.** A call finishes before the next one starts, so the write
+  chain matters only against the bracket engine, whose writes await `brackets-manager`. Heat
+  routes run on the chain too (`heat-routes.ts`).
+- **Heat ids.** A round heat is `round * 100 + number` (`ROUND_ID_STEP`). A round has at most
+  8 heats (32 players in groups of 4), so round ids stay under 400. Tie-break heats start at
+  1000 (`TIE_BREAK_HEAT_BASE`) and take their id from their place in the tie-break list. The
+  final is 2000 (`FINAL_HEAT_ID`). The list only grows at the end or is cut back from the end,
+  so an id never names two heats.
+- **Only qualifying heats score.** `scoreHeats` counts qualifying heats alone, so tie-break
+  heats and the final add no points and don't count toward `heatsPlayed`.
+- **One competition per event** is in `competition.ts`. `running` checks the bracket and the
+  heats. `startBracket` and `startHeats` each replace a finished competition of the other
+  kind in one transaction. `hasPlayer` backs the merge guard (409 `in-bracket`, checked in
+  `app.ts`). Both kinds' routes call it, so change the rule there, not in a route.
+- **`inTransaction` nests through savepoints.** Inside another transaction it runs as
+  `SAVEPOINT nested_N`. So `heat-store.save` and `bracket-store.save` can run inside
+  `startHeats` or `startBracket`, and the swap is all or nothing.
+- **Shared words.** `heatsWords.ts` (the cut line, the tie sentence, and the "no results yet"
+  check) and `handles.ts` (the handle list) are read by the host (`pages/host/groupWords.ts`,
+  `GroupsBody.tsx`) and the Display (`HeatsScreen.tsx`). Change them once, there.
+- **The store rewrites a run whole.** `heat-store.save` rewrites all of a run's rows in one
+  transaction, so the database equals the state exactly. A run's settings never change once
+  made. Its tables come from migration 5; never edit that entry.
+
 ## Layout
 
 | Path | What it holds |
 |---|---|
 | `packages/core` | `@coliseumgrid/core`: rules shared by the browser and the server (see `PLAN.md` section 9): the seeded random source, handles and the vulgarity filter, PINs, join codes, bracket seeding, the station queue, tie ranking, heats (`heats.ts`), and the API types. |
-| `packages/server` | `@coliseumgrid/server`: `src/app.ts` builds the Fastify app (`buildApp`), `src/config.ts` reads the settings, `src/main.ts` starts it, `src/database.ts` holds the schema, `src/players-routes.ts` the players API, `src/pin-hash.ts` PIN and password hashing (scrypt), `src/client-ip.ts` and `src/rate-limit.ts` the client address and the guessing limits, `src/access.ts`, `src/host-routes.ts`, `src/devices.ts`, `src/host-store.ts`, `src/events.ts`, and `src/live.ts` host sign-in, pairing, and live updates. The bracket files are `src/bracket-engine.ts` (a bracket's state and each change to it), `src/bracket-library.ts` (the only file that calls brackets-manager), `src/bracket-store.ts` (its tables), `src/bracket-routes.ts` (the bracket API), `src/write-chain.ts` (one write at a time), and `src/event-players.ts` (who is in the event). |
-| `packages/client` | `@coliseumgrid/client`: Vite, React, and MUI. `src/theme/` holds the palette and the theme, `src/pages/` the Host (`/host`), Sign-up (`/signup`), and Display (`/display`) screens, `src/components/` shared pieces (`useNow.ts` is the timer hook), `src/api/` the calls (`bracket.ts` for brackets), `src/pages/host/` and `src/pages/display/` the bracket pieces of the Host and the TV, `test/` the Vitest tests. `/` is the join screen and `/host` is the host's entry; an unknown path goes to `/`. |
+| `packages/server` | `@coliseumgrid/server`: `src/app.ts` builds the Fastify app (`buildApp`), `src/config.ts` reads the settings, `src/main.ts` starts it, `src/database.ts` holds the schema, `src/players-routes.ts` the players API, `src/pin-hash.ts` PIN and password hashing (scrypt), `src/client-ip.ts` and `src/rate-limit.ts` the client address and the guessing limits, `src/access.ts`, `src/host-routes.ts`, `src/devices.ts`, `src/host-store.ts`, `src/events.ts`, and `src/live.ts` host sign-in, pairing, and live updates. The bracket files are `src/bracket-engine.ts` (a bracket's state and each change to it), `src/bracket-library.ts` (the only file that calls brackets-manager), `src/bracket-store.ts` (its tables), `src/bracket-routes.ts` (the bracket API), `src/write-chain.ts` (one write at a time), and `src/event-players.ts` (who is in the event). The group files are `src/heat-engine.ts` (a group's state and each change to it), `src/heat-store.ts` (its tables), `src/heat-routes.ts` (the groups API), and `src/competition.ts` (one competition per event, for brackets and groups). |
+| `packages/client` | `@coliseumgrid/client`: Vite, React, and MUI. `src/theme/` holds the palette and the theme, `src/pages/` the Host (`/host`), Sign-up (`/signup`), and Display (`/display`) screens, `src/components/` shared pieces (`useNow.ts` is the timer hook), `src/api/` the calls (`bracket.ts` for brackets, `heats.ts` for groups), `src/pages/host/` and `src/pages/display/` the bracket and group pieces of the Host and the TV, `src/heatsWords.ts` and `src/handles.ts` the words and handle lists both screens read, `test/` the Vitest tests. `/` is the join screen and `/host` is the host's entry; an unknown path goes to `/`. |
 | `tools/` | Scripts run by hand or in CI, type-checked by `tools/tsconfig.json`. |
 | `docs/` | The docs listed in `DOC-STYLE.md`, "Where things go". |
 
@@ -313,7 +346,7 @@ no corepack. Keep that version in step with `packageManager` in `package.json`.
 
 ## Tests
 
-- The server suite takes about 60 s (measured 2026-11-13 on the dev box). Each PIN and the host
+- The server suite takes about 65 s (measured 2026-11-14 on the dev box, 750 tests passing). Each PIN and the host
   password is hashed at the production scrypt cost (`pin-hash.ts`), and
   `packages/server/vitest.config.ts` allows 30 s per test. A test that signs in several times
   needs that room.

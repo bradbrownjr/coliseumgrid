@@ -144,7 +144,7 @@ A winner, a loss, or a player's status is shown with text or an icon as well as 
 ### Undo, not "Are you sure?"
 
 Recording a result never asks for confirmation. It shows a snackbar with **Undo**. A
-confirmation dialog is only for actions that can't be undone, like deleting a bracket.
+confirmation dialog is only for actions that can't be undone, like deleting a bracket or groups.
 
 ## The three screens
 
@@ -158,9 +158,23 @@ confirmation dialog is only for actions that can't be undone, like deleting a br
   player as the winner of the whole match, whatever the best-of label says.
 - A tap shows "<handle> won" in the snackbar with **Undo**. Every recorded result also has its
   own **Undo** in the Results list, newest first.
-- **Delete bracket** asks first, since it can't be undone. Results don't ask.
+- The **Competition** section runs one bracket or one set of groups. **Start a competition**
+  opens the start dialog. Once a competition has finished, the button reads **New competition**.
+- **Delete bracket** or **Delete groups** asks first, since it can't be undone. Results don't ask.
 - While a tie is open, **Play tie-break** starts its matches. While late sign-up is open,
-  **Add to bracket** is in a player's menu.
+  **Add to bracket** (or **Add to group**, when the event runs groups) is in a player's menu.
+- The start dialog's first choice is **Bracket** or **Races and free-for-all**. Groups add
+  **Races in each group** (1 to 4), **Rounds before the final** (1 to 3, or none with 2 to 4
+  players), and the points for 1st to 4th. **Use 4, 3, 2, 1** appears once the points change.
+- A group's station card shows its title, its players, a timer, and one **Record result**
+  button. The record panel is centered and asks "Who came 1st?", then 2nd, and so on. The
+  last player is filled in. **Start over** clears the taps. **Save** turns on once the order
+  is complete.
+- Saving shows "Saved: Round 1, group 3" in the snackbar, with **Undo**. The Results list has
+  its own **Undo** for every result, newest first.
+- The standings show points and groups played, with the line "Top 4 go to the final". A tie
+  across that line gets a banner, worded by what is at stake: "Zap, Jett, Dash, and Jinx are
+  tied. 2 of them go to the final. Tie-break race coming up." It comes with **Play tie-break**.
 
 ### Sign-up (tablet)
 
@@ -195,6 +209,30 @@ confirmation dialog is only for actions that can't be undone, like deleting a br
   under the final.
 - A tie shows as a banner: "Tie for 1st: Zap and Kai. Tie-break coming up."
 - A finished bracket shows the final standings, with the podium large.
+- **Groups.** The stations and "Up next" stay on the left. A station card shows the group's
+  title ("Group 2", "Final", or "Tie-break race") and its handles. The right side holds the
+  tie banner, then the standings, or the final.
+- Stations for groups are one column up to four on the TV, and two from five. On a laptop,
+  one column for one or two stations, and two from three.
+- Before the first result, the right side reads "Players", with the handles in a grid, and
+  "Places start after the first group."
+- **Standings** show place, handle, points, and groups played. "Round 1 of 2" sits on the
+  right while qualifying goes on. A player in an open tie reads "Tie". The cut line reads
+  "Top 4 go to the final". When a tie straddles the cut, the line goes above the whole tied
+  group, so only the rows above it are surely through.
+- The tie banner has one line per tie, worded like the host's (see the host section above).
+- **The final** shows "Final" with the four finalists large, each with the points they came in
+  with. With 2 to 4 players the points are left off.
+- **The finished event** shows "Final standings". Places 1 to 3 sit in boxes, with 1st the
+  largest, in the gold win color, with a trophy and the title "Winner". 2nd and 3rd are a step
+  smaller. Everyone else is in a list.
+- Group type sizes are measured fits (see the comments in `pages/display/model.ts`). Stations
+  on the TV (1920 by 1080): one station h4, two h5, three or four h6 in one column, five to
+  eight h6 in two columns. On a laptop (1366 by 768): one station h6, two subtitle1, three to
+  eight body2 in two columns.
+- Standings on the TV: up to 6 rows h3, 7 to 10 rows h4, 11 and up h5. On a laptop: up to 8
+  rows h5, 9 to 12 rows h6, 13 and up subtitle1. Past 16 rows the standings split into two
+  tables side by side, and the type comes from the rows of the first table.
 - The minimum type size for the TV has no published source yet. It is set by testing on the
   real TV (see `PLAYTEST.md`) and recorded here.
 

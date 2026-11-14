@@ -3,8 +3,8 @@
 Tests that need a person or real hardware. Brad runs them as time allows; what one finds
 becomes a roadmap item. A test is removed once it's reported.
 
-Each test names the milestone that makes it possible. The tests marked "after M3" or "after
-M4" can be run on the Unraid server (`http://10.6.26.2:8390`).
+Each test names the milestone that makes it possible. The tests marked "after M3", "after
+M4", or "after M5" can be run on the Unraid server (`http://10.6.26.2:8390`).
 
 ## Planned
 
@@ -91,6 +91,37 @@ and a TV.
 - Start a One life bracket with 32 players. Stand where the players sit. From there, can you
   read every handle, the station numbers, and "Up next"? Note the distance and the smallest
   type that worked, and record it in `DESIGN.md`, "Display (TV)".
+
+### Groups (after M5)
+
+Why: the server's tests use made-up players and no screen. These use real phones, tablets,
+and a TV, on the Unraid server.
+
+- Sign up 10 players on two phones or tablets. Start races and free-for-all on 2 stations,
+  with 2 rounds, 1 race in each group, and the default points. Does the dialog say "3 groups
+  in round 1: 4, 3, and 3 players"? Do the first two groups go on the stations?
+- Record each group's cup order from the host's phone. Tap the players in finishing order.
+  After one tap, does the panel ask "Who came 2nd?" and fill in the last player? Does Save
+  stay off until the order is complete?
+- Record a group, then tap Undo in the snackbar. Does the group go back to Up next with the
+  same players? Does the station it freed keep its next group?
+- Record three results. Then undo the first one from the Results list. Does that group reopen
+  at the front of Up next, while the groups on stations keep their stations and timers?
+- Make a tie at the cut. Try the default points first. If no tie comes up, start a new groups
+  event with 1, 1, 1, 1 points, which makes ties likely. Does the banner say the tied players
+  are tied, how many go to the final, and that a tie-break race is coming? Is the cut line
+  above the tied players, not under them?
+- Tap **Play tie-break**. Are the tie-break races on the stations, labelled "Tie-break race"?
+  Record one. Does the banner clear, and does the final show its four players?
+- Finish the final. Does the TV show "Final standings", with 1st, 2nd, and 3rd each in its own
+  box? Is 1st in gold with the word "Winner"? Does no place in the top three share?
+- Before round 1 is finished, add a player with **Add to group**. Do they go into a round 1
+  group that is still waiting, and not the one on a station? Do the groups on stations keep
+  their players? Do they play as many groups as everyone else by the end?
+- Sign up 32 players and start groups on 8 stations. Record one group. Stand where the players
+  sit. Can you read every handle, the points, the groups played, and the cut line? Does the
+  table split into two side by side? Note the distance and the smallest type that worked, and
+  record it in `DESIGN.md`, "Display (TV)".
 
 ### Alerts on players' phones (after M6)
 
