@@ -217,5 +217,5 @@ Why: label sizes and printer margins vary by printer and driver.
 
 ### Dress rehearsal (after M10)
 
-- A full mock event with family or friends, run by Brad's son: sign-up, a Smash bracket, a
-  Mario Kart heat round, name tags. Note everything he had to ask about.
+- A full mock event with family or friends, run by Brad's son: sign-up, a fighting game bracket, a
+  racing game heat round, name tags. Note everything he had to ask about.

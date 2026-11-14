@@ -138,3 +138,8 @@ here may be forgotten next session.
   tie-break match or race among the tied players; other tied places are shared (Brad,
   2026-11-13).
 - Late players never change a match already played or called (Brad, 2026-11-13).
+- No game title or game company name in the repo: code, comments, tests, docs, or screen
+  text. Write "fighting game" or "racing game" instead. The one exception is a citation: a
+  source's own title and URL may name them. Setup templates are generic ("Fighting game",
+  "Racing game"), and the host types the game's name for each event, which is stored as data,
+  not code (Brad, 2026-11-14).

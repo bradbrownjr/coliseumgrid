@@ -141,9 +141,9 @@ describe('messages', () => {
   it('sends { type: "event", event } to a connected display within the same request that changes the event', async () => {
     const display = await pairDevice(app, host, 'display');
     const connection = await connect(display.cookie);
-    expect((await put('Summer Smash')).statusCode).toBe(200);
+    expect((await put('Summer Showdown')).statusCode).toBe(200);
     // The message is queued before the PUT answers; waitFor covers only the in-memory stream hop.
-    await vi.waitFor(() => expect(connection.messages).toEqual([{ type: 'event', event: { name: 'Summer Smash' } }]));
+    await vi.waitFor(() => expect(connection.messages).toEqual([{ type: 'event', event: { name: 'Summer Showdown' } }]));
   });
 
   it('sends every change to every connection, host and devices alike', async () => {

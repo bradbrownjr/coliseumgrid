@@ -9,7 +9,7 @@
 
 A tournament app for an afternoon of video games in one room. Kids sign up at a tablet with
 a gamer handle and get a printed name tag. The host runs the event from a laptop: 1 vs 1
-brackets for games like Super Smash Bros., and race heats for games like Mario Kart. A TV
+brackets for fighting games, and race heats for racing games. A TV
 shows the bracket, the standings, who plays next, and a match timer. Handles are remembered,
 so a player's results carry over from one event to the next.
 
@@ -608,10 +608,10 @@ Three formats, all run by `brackets-manager`. Checked against version 1.11.1 on 
 
 ### Races and free-for-all
 
-Planned in M5 (2026-11-13). The same format runs Mario Kart races and 4-player Smash
+Planned in M5 (2026-11-13). The same format runs racing game races and 4-player fighting game
 free-for-alls: a **heat** is a group of 2 to 4 players who play together on one station, and
 each finishing place earns points. On screen a heat is a "Group" (Brad, 2026-11-13), because
-Smash has no races. For the same reason the setting reads "Games in each group" on screen
+A fighting game has no races. For the same reason the setting reads "Games in each group" on screen
 (a game is a race or a match), and a tie-break heat is a "Tie-break group". The format's name,
 "Races and free-for-all", stays. The rules are in `packages/core/src/heats.ts`.
 
@@ -627,7 +627,7 @@ Smash has no races. For the same reason the setting reads "Games in each group" 
   heat of 1, and a heat of 2 only at 2 and 5 players. The UT Austin Mario Kart 8 Deluxe
   tournament FAQ splits players "into groups as evenly numbered as possible"
   (<https://universityunions.utexas.edu/sites/default/files/Mario%20Kart%20Tourney%20FAQ.pdf>),
-  and the Delaware DSEL Mario Kart 8 rules put 4 players on each Switch
+  and the Delaware DSEL Mario Kart 8 rules put 4 players on each console
   (<https://education.delaware.gov/wp-content/uploads/2025/09/dsel_mario_kart_8_rules.pdf>).
 - **2 to 4 players** play no qualifying rounds. The one heat is the final.
 - **Round 1** is the seeding, a shuffle with the caller's random source (the same
@@ -733,7 +733,7 @@ whose page was unreachable that day and is cited from the earlier research):
 
 ### Teams
 
-Smash supports 2 vs 2. The data model has an entry hold one or more players from the start,
+A fighting game supports 2 vs 2. The data model has an entry hold one or more players from the start,
 so teams can be added without a rewrite. The screens are built for single players first.
 
 ### Time estimate

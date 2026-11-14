@@ -70,7 +70,7 @@ export function phaseWords(heats: Pick<Heats, 'finished' | 'round' | 'rounds' | 
 }
 
 /**
- * "1 game", "3 games". A game is a race or a match: a Smash free-for-all has no races, which
+ * "1 game", "3 games". A game is a race or a match: a fighting game free-for-all has no races, which
  * is why a heat is a "Group" on screen (docs/DOC-STYLE.md, "Tournament words on screen").
  */
 export function gameCount(games: number): string {

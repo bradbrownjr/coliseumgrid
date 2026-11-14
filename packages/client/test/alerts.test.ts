@@ -99,13 +99,13 @@ describe('the page title', () => {
   const soon = { playerId: 3, handle: 'Zap' };
 
   it('flips between the call and the page name', () => {
-    expect(pageTitle({ called: [call], next: [], flip: false, base: 'Kart Night' })).toBe('Zap: go to station 2');
-    expect(pageTitle({ called: [call], next: [], flip: true, base: 'Kart Night' })).toBe('Kart Night');
+    expect(pageTitle({ called: [call], next: [], flip: false, base: 'Race Night' })).toBe('Zap: go to station 2');
+    expect(pageTitle({ called: [call], next: [], flip: true, base: 'Race Night' })).toBe('Race Night');
   });
 
   it('holds steady for a next banner, and goes back to the page name', () => {
-    expect(pageTitle({ called: [], next: [soon], flip: true, base: 'Kart Night' })).toBe("Zap, you're next!");
-    expect(pageTitle({ called: [], next: [], flip: false, base: 'Kart Night' })).toBe('Kart Night');
+    expect(pageTitle({ called: [], next: [soon], flip: true, base: 'Race Night' })).toBe("Zap, you're next!");
+    expect(pageTitle({ called: [], next: [], flip: false, base: 'Race Night' })).toBe('Race Night');
   });
 });
 

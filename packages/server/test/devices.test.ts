@@ -419,11 +419,11 @@ describe('the event', () => {
 
   it('is named by the host, and every screen then reads it', async () => {
     const display = await pairDevice(app, host, 'display');
-    const put = await call('PUT', '/api/event', { cookie: host, payload: { name: 'Summer Smash' } });
+    const put = await call('PUT', '/api/event', { cookie: host, payload: { name: 'Summer Showdown' } });
     expect(put.statusCode).toBe(200);
-    expect(put.json()).toEqual({ event: { name: 'Summer Smash' } });
+    expect(put.json()).toEqual({ event: { name: 'Summer Showdown' } });
     for (const cookie of [host, display.cookie]) {
-      expect((await call('GET', '/api/event', { cookie })).json()).toEqual({ event: { name: 'Summer Smash' } });
+      expect((await call('GET', '/api/event', { cookie })).json()).toEqual({ event: { name: 'Summer Showdown' } });
     }
   });
 

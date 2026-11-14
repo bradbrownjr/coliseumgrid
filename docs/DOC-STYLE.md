@@ -15,7 +15,7 @@ practical, specific, never breathless. It has to read like a person wrote it.
 
 - **"You"** for the reader. "We" sparingly, for the project.
 - **Sentence case** for headings, buttons, menu items, and labels. Proper names keep their
-  real casing: ColiseumGrid, MUI, Fastify, Super Smash Bros., Mario Kart.
+  real casing: ColiseumGrid, MUI, Fastify, Vite, Playwright.
 - **Contractions are normal, in moderation.** About one per seventy words. Writing them all
   out reads stiff; leaning on them reads chatty.
 - **No em-dashes**, anywhere: docs, source, comments, commit messages, UI text. Reach for a

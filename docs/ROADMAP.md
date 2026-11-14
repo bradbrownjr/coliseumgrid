@@ -151,7 +151,7 @@ Acceptance checks:
 
 ## Later
 
-- **Teams:** 2 vs 2 for Smash.
+- **Teams:** 2 vs 2 for fighting games.
 - **Swiss and pools:** Swiss rounds, and pools that feed a bracket.
 - **Season standings:** points across a series of events.
 - **Public results page:** a read-only event page when hosted online.

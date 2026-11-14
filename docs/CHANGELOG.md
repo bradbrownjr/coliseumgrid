@@ -12,7 +12,7 @@ use **New Features**, **Improvements**, and **Bug Fixes**, in that order.
 
 ## Milestones
 
-* **M5 Races and free-for-all.** For Mario Kart and Smash free-for-alls, the host starts
+* **M5 Races and free-for-all.** For racing game and fighting game free-for-alls, the host starts
   groups of up to 4, as even as possible, on 1 to 8 stations. Each group's finishing order
   scores points from an editable table (default 4, 3, 2, 1); later rounds regroup players by
   points, everyone plays the same number of groups, and the top 4 play a final whose order

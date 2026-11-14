@@ -92,9 +92,9 @@ describe('host requests', () => {
   });
 
   it('names the event with PUT /api/event', async () => {
-    answer(200, { event: { name: 'Smash Bash' } });
-    await setEventName('Smash Bash');
-    expect(lastRequest()).toMatchObject({ path: '/api/event', method: 'PUT', body: { name: 'Smash Bash' } });
+    answer(200, { event: { name: 'Spring Bash' } });
+    await setEventName('Spring Bash');
+    expect(lastRequest()).toMatchObject({ path: '/api/event', method: 'PUT', body: { name: 'Spring Bash' } });
   });
 
   it('sends cookies on every request', async () => {

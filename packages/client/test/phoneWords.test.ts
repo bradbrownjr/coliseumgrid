@@ -89,7 +89,7 @@ describe('alert words and titles', () => {
   });
 
   it('uses the event name for the page title, or the app name', () => {
-    expect(baseTitle('Kart Night')).toBe('Kart Night');
+    expect(baseTitle('Race Night')).toBe('Race Night');
     expect(baseTitle('  ')).toBe('ColiseumGrid');
     expect(baseTitle(null)).toBe('ColiseumGrid');
   });
