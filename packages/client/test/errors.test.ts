@@ -1,6 +1,6 @@
 import type { ApiErrorCode, HandleRefusal } from '@coliseumgrid/core';
 import { describe, expect, it } from 'vitest';
-import { ERROR_WORDS, GROUP_RESULT_WORDS, GUESS_LIMIT_WORDS, HANDLE_REFUSAL_WORDS, failureWords, guessWords, isApiErrorCode, isHandleRefusal } from '../src/api/errors.ts';
+import { ERROR_WORDS, FOLLOW_CODE_WORDS, GROUP_RESULT_WORDS, GUESS_LIMIT_WORDS, HANDLE_REFUSAL_WORDS, failureWords, guessWords, isApiErrorCode, isHandleRefusal } from '../src/api/errors.ts';
 
 // A Record over the union makes these lists fail to compile when core adds a code the
 // screens have no words for.
@@ -30,6 +30,9 @@ const API_CODES: Record<ApiErrorCode, true> = {
   'no-tie': true,
   'no-bracket': true,
   'no-heats': true,
+  'not-following': true,
+  'too-many-handles': true,
+  'push-off': true,
 };
 const REFUSALS: Record<HandleRefusal, true> = {
   'too-short': true,
@@ -113,6 +116,19 @@ describe('words for the bracket codes', () => {
 describe('words for the heats codes', () => {
   it('calls a heat a group', () => {
     expect(failureWords({ error: 'no-heats' })).toBe('No groups are running.');
+  });
+});
+
+describe('words for the phone codes', () => {
+  it('says what to do next', () => {
+    expect(failureWords({ error: 'not-following' })).toBe('Sign in to follow a player.');
+    expect(failureWords({ error: 'too-many-handles' })).toBe('This phone follows 6 players. Stop following one to add another.');
+    expect(failureWords({ error: 'push-off' })).toBe("Lock screen alerts aren't on here.");
+  });
+
+  it('sends a phone to the Sign-up screen for a new follow code, not the host', () => {
+    expect(failureWords({ error: 'wrong-code' }, FOLLOW_CODE_WORDS)).toBe("That code doesn't work. Get a new one from the Sign-up screen.");
+    expect(failureWords({ error: 'wrong-code' })).toBe("That code doesn't work. Ask the host for a new one.");
   });
 });
 

@@ -34,7 +34,10 @@ export type ApiErrorCode =
   | 'in-bracket'
   | 'no-tie'
   | 'no-bracket'
-  | 'no-heats';
+  | 'no-heats'
+  | 'not-following'
+  | 'too-many-handles'
+  | 'push-off';
 
 export type ApiError =
   | { error: 'refused'; reason: HandleRefusal }
@@ -392,4 +395,88 @@ export interface HeatUndoBody {
 /** POST /api/heats/players */
 export interface HeatPlayerBody {
   playerId: number;
+}
+
+// Phone API (docs/PLAN.md, "Phone API"), from M6. A phone isn't a device: it follows players
+// by handle and PIN, and gets one narrow answer instead of the bracket or the heats. A player
+// is still only `Player` (CLAUDE.md, rule 1).
+
+/**
+ * Where a followed player stands. `now`: on a station. `next`, `two-away`, `later`: waiting in
+ * Up next, first, second, or further back. `waiting`: in a match or group that isn't ready
+ * (the other player isn't known, or the next round isn't made), or tied and waiting for a
+ * tie-break. `out`: no match left while the event goes on. `done`: the event is finished.
+ * `not-in`: not in the bracket or groups.
+ */
+export type FollowStatus = 'now' | 'next' | 'two-away' | 'later' | 'waiting' | 'out' | 'done' | 'not-in';
+
+/** What `playerStatus` works out for one player (`packages/core/src/player-status.ts`). */
+export interface PlayerStatus {
+  status: FollowStatus;
+  /** 0 on a station; 1 first in Up next, 2 second, and so on; null otherwise. */
+  away: number | null;
+  /** The station number while `status` is `now`; null otherwise. */
+  station: number | null;
+  /** The match or group id for `now`, `next`, `two-away`, `later`, and `waiting` in a known match; null otherwise. */
+  matchId: number | null;
+  /** The other players of that match or group who are known; empty when `matchId` is null. */
+  others: Player[];
+  /** The final place, only with `done`. */
+  place: number | null;
+}
+
+/** A player a phone follows, with where they stand. */
+export interface FollowedPlayer extends PlayerStatus {
+  player: Player;
+}
+
+/** The phone's standings: the same rows as the Display, with what the page needs to word them. */
+export type PhoneStandings =
+  | { kind: 'bracket'; format: BracketFormat; finished: boolean; rows: StandingsRow[] }
+  | { kind: 'heats'; finished: boolean; rows: HeatStandingsRow[]; finalSize: number };
+
+/** GET /api/phone */
+export interface PhoneAnswer {
+  event: EventInfo | null;
+  following: FollowedPlayer[];
+  /** Null while the event has no bracket or groups. */
+  standings: PhoneStandings | null;
+}
+
+/** POST /api/phone/follow takes `HandlePinBody`. */
+
+/** POST /api/phone/follow-code */
+export interface FollowCodeBody {
+  /** The canonical 6 characters, as for `JoinBody`. */
+  code: string;
+}
+
+/** A code a phone scans to follow one player. Works once and expires after 10 minutes; `expiresAt` is ISO 8601. */
+export interface FollowCode {
+  code: string;
+  expiresAt: string;
+}
+
+/**
+ * POST /api/signup and POST /api/signup/claim. The code is made only after the PIN was set or
+ * proven, so a Sign-up tablet can't make one for any player.
+ */
+export interface SignupAnswer extends PlayerAnswer {
+  followCode: FollowCode;
+}
+
+/** POST /api/phone/follow, POST /api/phone/follow-code, DELETE /api/phone/follow/:playerId */
+export interface PhoneFollowingAnswer {
+  following: Player[];
+}
+
+/** GET /api/phone/push: `publicKey` is the VAPID key, or null offline and over plain HTTP. */
+export interface PhonePushKeyAnswer {
+  publicKey: string | null;
+}
+
+/** PUT /api/phone/push: a browser push subscription as `PushSubscription.toJSON()` gives it. */
+export interface PushSubscriptionBody {
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
 }

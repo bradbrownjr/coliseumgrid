@@ -1,6 +1,6 @@
 # Roadmap
 
-*Last updated: 2026-11-13*
+*Last updated: 2026-11-14*
 
 ## At a glance
 
@@ -30,33 +30,57 @@ start the next until the current one is done.
 
 A player follows their own matches on their own phone, so the host spends less time waiting
 for players at the concession stand or the bathroom (Brad, 2026-11-13). Design: `PLAN.md`
-section 3, "Player view".
+section 3, "Player view" and "Phone API", approved 2026-11-14.
 
 Tasks:
 
-- Sign-in on a player's phone with handle and PIN, reusing M2's claim and its limits. A
-  device token keeps the phone signed in.
-- A QR code on the Sign-up done screen that signs a phone in without typing. It follows the
-  pairing code rules: works once, expires after 10 minutes, rate limited (`CLAUDE.md`, rule
-  7).
-- One phone can follow several handles (a parent with two kids).
-- The player page: the next match or heat, how many matches away it is, the station, and
-  standings, updated live over M3's connection.
-- The alert when a followed player is up next: a full-screen flashing banner, a page title
-  change, a sound (unlocked by a first tap), and a vibration where the browser supports it.
-- Over HTTPS: Web Push notifications through a service worker, which also needs a Home
-  Screen web app on iPhone and iPad (iOS 16.4 and later), and a screen wake lock while the
-  page is open. Offline over plain HTTP, the page alert is the only alert.
+- **Core.** `playerStatus` (now, next, two away, later, waiting, out, done), `alertLevel`,
+  `newAlert`, and the phone API types.
+- **Phone sign-in.** A phone gets its own table and the `cg_phone` cookie, not a device
+  role. Handle and PIN sign-in on a new route, sharing one PIN check and its limits with the
+  claim route (`CLAUDE.md`, rule 7). Limited in both modes; online, the per-handle count is
+  shared with the claim route.
+- **The QR code** on the Sign-up done screen (now 30 seconds), made only after the PIN was
+  set or proven. It follows the pairing code rules: works once, expires after 10 minutes,
+  rate limited.
+- **Several handles.** One phone follows up to 6 players, and can follow another from the
+  page.
+- **`GET /api/phone`** gives the followed players' status and the full standings, and no
+  route a phone can reach shows a roster (`CLAUDE.md`, rule 1). A cached current answer,
+  dropped on every change, keeps 30 phones from rebuilding a round robin each.
+- **Live.** Phones connect to M3's connection and reload on each broadcast. A PIN reset
+  removes that player from every phone following them, and signs out a phone left
+  following nobody.
+- **The player page** (`/follow`): the next match or group, how many are ahead, the station,
+  and the standings.
+- **Alerts.** A full-screen flashing alert when called to a station, a banner when next, and
+  text at two away. The page title changes, a sound plays (unlocked by a first tap), and
+  the phone vibrates where the browser supports it.
+- **Over HTTPS only:** Web Push through a service worker, sent by the server on `node:crypto`
+  with VAPID keys kept in the data folder, to an allow-list of push service hosts. iPhone and
+  iPad need a Home Screen web app (iOS 16.4 and later). The page also holds a screen wake
+  lock. Offline over plain HTTP, the page alert is the only alert, and the page offers no
+  push.
 
 Acceptance checks:
 
 - A phone signs in by handle and PIN, and by the QR code; a used or expired code is refused.
 - When a followed player's match is two away, the page shows it within a second of the host
-  recording the result before it.
+  recording the result before it, for a bracket and for groups.
 - Over HTTPS, a subscribed phone gets a push notification; over plain HTTP the page offers no
   push and still shows the page alert.
+- The push sender's encryption matches the RFC 8291 Appendix A test values, and its VAPID
+  token verifies.
+- A phone is refused every host, sign-up, bracket, groups, and players route, and every new
+  answer lists its fields.
 
-**Docs:** `PLAN.md` section 3, `DESIGN.md` (the player page), `PLAYTEST.md`.
+**Docs:** `PLAN.md` section 3, `DESIGN.md` (the player page), `DEVELOPMENT.md`,
+`PLAYTEST.md`.
+
+M6 stays open after the code lands, until Brad's play-test over HTTPS on a real phone. Any
+firewall or DNS change that test needs is Brad's to approve first (`PLAN.md`, "HTTPS on a
+venue network"). Open item for the play-test: the push service hosts for Firefox and Google
+are unverified (`PLAN.md`, "Player view").
 
 ## M7 Setup wizard
 

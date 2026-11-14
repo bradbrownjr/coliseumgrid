@@ -75,7 +75,27 @@ export type {
   HeatUndoBody,
   NewHeatsBody,
   RacesPerHeat,
+  FollowCode,
+  FollowCodeBody,
+  FollowedPlayer,
+  FollowStatus,
+  PhoneAnswer,
+  PhoneFollowingAnswer,
+  PhonePushKeyAnswer,
+  PhoneStandings,
+  PlayerStatus,
+  PushSubscriptionBody,
+  SignupAnswer,
 } from './api.ts';
+export {
+  PHONE_FOLLOWS_MAX,
+  alertLevel,
+  newAlert,
+  notInStatus,
+  playerStatus,
+  type AlertLevel,
+  type AlertSource,
+} from './player-status.ts';
 export {
   BRACKET_PLAYERS_MAX,
   STATIONS_MAX,

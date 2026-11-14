@@ -2,7 +2,7 @@
 // sends codes, never sentences; this is where a code becomes text a 12-year-old can follow
 // (docs/DOC-STYLE.md). A refusal says what to do next, not why in detail.
 
-import { BRACKET_PLAYERS_MAX, HANDLE_MAX, HANDLE_MIN, PIN_LENGTH, type ApiErrorCode, type HandleRefusal } from '@coliseumgrid/core';
+import { BRACKET_PLAYERS_MAX, HANDLE_MAX, HANDLE_MIN, PHONE_FOLLOWS_MAX, PIN_LENGTH, type ApiErrorCode, type HandleRefusal } from '@coliseumgrid/core';
 
 /** The API's codes, plus one for a request that never got a usable answer. */
 export type ClientErrorCode = ApiErrorCode | 'failed';
@@ -49,6 +49,9 @@ export const ERROR_WORDS: Record<ClientErrorCode, string> = {
   'no-tie': 'Nobody is tied.',
   'no-bracket': "There's no bracket right now.",
   'no-heats': 'No groups are running.',
+  'not-following': 'Sign in to follow a player.',
+  'too-many-handles': `This phone follows ${PHONE_FOLLOWS_MAX} players. Stop following one to add another.`,
+  'push-off': "Lock screen alerts aren't on here.",
   failed: 'Something went wrong. Try again.',
 };
 
@@ -70,6 +73,11 @@ export type WordOverrides = Partial<Record<ClientErrorCode, string>>;
 export const GROUP_RESULT_WORDS: WordOverrides = {
   'not-found': "That group isn't being played anymore.",
   'not-on-station': "That group isn't being played anymore.",
+};
+
+/** Following a player by code: the code comes from the Sign-up screen, not the host. */
+export const FOLLOW_CODE_WORDS: WordOverrides = {
+  'wrong-code': "That code doesn't work. Get a new one from the Sign-up screen.",
 };
 
 /**

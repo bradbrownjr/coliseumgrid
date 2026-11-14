@@ -23,7 +23,8 @@ The first event is on July 10, 2027.
    Everything else is under "More options". Every screen is written for a kid to read (see
    `DOC-STYLE.md`).
 2. **Offline first.** Every feature works with no internet connection. Fonts, icons, and
-   images are bundled; nothing is loaded from a CDN at runtime.
+   images are bundled; nothing is loaded from a CDN at runtime. Web Push is the one feature
+   that needs the internet; it is online-only, and the page alert works without it.
 3. **Handles only.** A player is a handle and an optional PIN. No names, email addresses,
    photos, birthdays, or accounts.
 4. **One rule, one place.** The rules a tablet checks while a kid types (handles, the
@@ -77,6 +78,141 @@ it.
 An option not yet planned: a real certificate for a hostname that points at the laptop on
 the venue network would make the page a secure context offline, which allows the wake lock
 (push would still need the internet).
+
+The design below was settled on 2026-11-14. The research behind it was checked that day.
+
+**Phones are not devices.** `devices.role` has a `CHECK` that allows only `display` and
+`signup`, and SQLite's `ALTER TABLE` can't change a `CHECK`
+(<https://sqlite.org/lang_altertable.html#otheralter>). Phones also sign themselves in, with
+no code from the host. So a phone gets its own table and its own cookie, `cg_phone`: 32 random
+bytes stored as a SHA-256 hash like the other tokens, `HttpOnly`, `SameSite=Strict`, `Secure`
+over HTTPS, and 400 days. It lasts until the phone signs out or a PIN reset leaves it
+following nobody. A phone can read `GET /api/event` and `GET /api/live`, and it gets one
+narrow answer, `GET /api/phone`. It can't call the bracket, groups, players, or sign-up
+routes, so it never sees a roster (`CLAUDE.md`, rule 1). The routes are in "Phone API".
+
+**Signing in, two ways.**
+
+- **Handle and PIN.** A phone-only route, not `/api/signup/claim`: that route is Sign-up-only,
+  and it marks the player as at today's event. Both routes use one PIN check (`pinGuard` in
+  the server), so the same wrong-guess counts apply. Phones are limited in both modes, per
+  handle (5 wrong per 10 minutes) and per client IP (60 per 10 minutes), because phones, unlike
+  tablets, aren't paired by the host. Online, the per-handle count is shared with the claim
+  route, so one handle gets 5 guesses in total, not 5 on each.
+- **The QR code on the Sign-up done screen.** The answers of `POST /api/signup` and
+  `POST /api/signup/claim` carry a follow code, made only after the PIN was set or proven, so a
+  Sign-up tablet can't make one for any player. It follows the pairing code rules: the same
+  alphabet and length (`generateJoinCode`), works once, expires after 10 minutes, and wrong
+  codes are rate limited with the join route's limits. The QR code holds
+  `${location.origin}/follow?code=K7M4QX`. The page uses the code at once and removes it from
+  the address, like the join screen. The done screen stays up for 30 seconds when it shows the
+  QR code (Brad, 2026-11-14), up from 15, so a kid has time to scan it.
+
+**Several handles.** A phone follows up to 6 players (`PHONE_FOLLOWS_MAX`); a parent with two
+kids signs in twice, or scans two codes. "Follow another player" on the page takes a handle
+and PIN. Stopping the last follow signs the phone out.
+
+**Where a player stands** is a pure function in `packages/core` (`playerStatus`), so the
+server and the page agree. It reads the same answer the Display gets:
+
+| Status | Meaning |
+|---|---|
+| `now` | A station holds a match or group with the player. The station and the others are known. |
+| `next` | The player is in the first entry of Up next. |
+| `two-away` | The player is in the second entry. |
+| `later` | The player is in a later entry. `away` counts from 1. |
+| `waiting` | The player is in a match that isn't ready (the other player isn't known), is between group rounds, is held back for a first-round bye, or is tied and waiting for a tie-break. |
+| `out` | A bracket player with no match left while others play (in a round robin, every match is played). In groups, a player below the cut after qualifying. |
+| `done` | The event is finished. The final place comes with it. |
+| `not-in` | The player isn't in the bracket or groups, or nothing is running. |
+
+"Away" counts entries of Up next, not players, and a match or group is one entry. With
+several stations, or a player still on a station, the queue can skip an entry when it fills a
+station (see "Stations and the queue"), so the page says "about 2 matches away".
+
+**Alerts** come from the status, per distance:
+
+- **Called** (`now`): a full-screen alert, MUI `Dialog fullScreen`, crimson and black. It
+  flashes once a second and stays steady under `prefers-reduced-motion`, which is under
+  WCAG's limit of 3 flashes a second
+  (<https://www.w3.org/WAI/WCAG22/Understanding/three-flashes-or-below-threshold.html>). It
+  says "Zap: go to Station 2", the page title flips between that and the page name, a Web
+  Audio beep plays, and `navigator.vibrate` runs where it exists (not on iPhone, <https://caniuse.com/vibration>).
+  A **Got it** button closes it.
+- **Next** (`next`): a banner and no sound.
+- **Two away** (`two-away`): a line of text on the player's card.
+
+`newAlert` in `packages/core` decides when one is new: `called` when a player becomes `now`, or
+is on a different match or group than before, and `next` when a player becomes `next`. With
+nothing earlier to compare, such as the first load, there is no alert. Sound needs a first
+tap: the page offers "Tap to turn on sound", and the tap resumes the `AudioContext`, which
+starts suspended when it is made before a user gesture
+(<https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Autoplay>). A hidden page can be
+frozen, which stops its timers and fetch callbacks, and playing audio is a reason not to
+(<https://developer.chrome.com/docs/web-platform/page-lifecycle-api>); so page alerts on a
+locked phone stay a `PLAYTEST.md` item. Over HTTPS the page holds a screen wake lock, and
+asks for it again when the page becomes visible, because the browser drops it when the page
+is hidden (<https://developer.mozilla.org/en-US/docs/Web/API/Screen_Wake_Lock_API>).
+
+**Push** (online only, over HTTPS, and nothing else): the server sends an alert through the
+push service of the player's browser. The push API is `[SecureContext]`, its payloads are
+encrypted (RFC 8291), and `applicationServerKey` is the server's VAPID key
+(<https://www.w3.org/TR/push-api/>). A service worker needs a secure context too
+(<https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API>).
+
+- **Keys.** The VAPID key pair is made once, on first need, and stored in the database, which
+  is in `DATA_DIR`.
+- **Sender.** `node:crypto` and `fetch`, no dependency (Brad, 2026-11-14). The server POSTs to the
+  subscription's endpoint (RFC 8030, <https://www.rfc-editor.org/rfc/rfc8030>) with `TTL: 300`
+  and `Urgency: high`. `Authorization` is a VAPID header, an ES256 JWT with `aud` the
+  endpoint's origin, `exp` 12 hours out (the limit is 24), and `sub` the site's own `https://`
+  address saved with the subscription, because Apple may refuse a `localhost` subject
+  (RFC 8292, <https://www.rfc-editor.org/rfc/rfc8292>; the `web-push` README for Apple). The body is
+  `aes128gcm` from RFC 8291 (<https://www.rfc-editor.org/rfc/rfc8291>): ECDH on P-256, a 16-byte
+  authentication secret, HKDF, one record. Its Appendix A has test values, and the tests
+  check the sender against them. The encryption hides the content from the push service, not
+  the timing, the size, or who talks to whom (section 7 of the RFC). The payload has the
+  handle and the station only. Node 26.13 has `createECDH('prime256v1')`, `hkdfSync`, and
+  `aes-128-gcm`, checked on the dev box.
+- **Where it may send.** An endpoint has to be `https:` on port 443, not an IP address, and on
+  an allow-list of push service hosts, so the server can't be made to POST to an internal
+  address. Apple documents `https://*.push.apple.com`
+  (<https://developer.apple.com/documentation/usernotifications/sending-web-push-notifications-in-web-apps-and-browsers>).
+  The hosts of Firefox's and Google's push services: no published source found (unverified,
+  checked 2026-11-14); the build records them from real subscriptions, and a wrong list
+  drops pushes without an error.
+- **When.** After each bracket or groups save, off the write chain: the server works out the
+  status of every followed player, compares it with the last one it sent (kept in memory,
+  seeded at startup so a restart sends nothing), and sends in parallel with a 10-second
+  timeout. A 404 or 410 from the push service deletes the subscription (404: expired; 410: no
+  longer valid; <https://web.dev/articles/push-notifications-web-push-protocol>); Apple's 410
+  is "The device token has expired" (Apple's page above). Signing out deletes it.
+- **Offline or plain HTTP.** `GET /api/phone/push` answers `{ "publicKey": null }`, the page
+  shows no push control and registers no service worker, and `PUT /api/phone/push` answers
+  409 `push-off`. The service worker handles only `push` and `notificationclick`, and has no
+  `fetch` handler, so it can't serve a stale app.
+- **iPhone and iPad.** Push works only inside a Home Screen web app, iOS 16.4 and later, with
+  a manifest whose `display` is `standalone` or `fullscreen`, and the permission asked from a
+  tap (<https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/>). A Home
+  Screen app doesn't share cookies with Safari
+  (<https://bugs.webkit.org/show_bug.cgi?id=181849>), so the phone signs in again there. The
+  manifest (`start_url: /follow`, bundled icons) is linked from the player page only.
+
+**HTTPS on a venue network** isn't built into the app. Push and the wake lock need a hostname
+a phone trusts, with its own certificate: Let's Encrypt can issue one for a host that isn't
+reachable from the internet through its DNS-01 challenge
+(<https://letsencrypt.org/docs/challenge-types/>), or a private certificate authority can be
+installed on each phone (<https://support.apple.com/en-us/102390> for iOS). It also needs a reverse
+proxy on another machine, `TRUSTED_PROXY` set, `Host` passed through, and the WebSocket
+upgrade forwarded (see `DEVELOPMENT.md`, "Docker"), and push needs the server to reach the
+internet. Which proxy, DNS, and domain to use is Brad's choice, and any firewall or DNS
+change needs his approval first.
+
+**The host.** A PIN reset cuts every phone off from that player (Brad, 2026-11-14): the
+follow is removed from each phone that had it, and a phone left following nobody is signed
+out and its live connection closes. A parent's phone keeps their other kids. Signing in
+again needs the new PIN. This is how the host cuts a phone off; there is no phone list on the host screen
+in M6. A merge moves each phone's follow to the player kept, like the event's player list.
 
 ### Pairing a device
 
@@ -173,6 +309,89 @@ client reconnects with a growing delay after a drop.
 **The Display frame** in M3 shows the event name, live. "Up next" and the match timer have
 their places on the screen but show a waiting message until M4 brings matches.
 
+### Phone API
+
+Planned in M6 (2026-11-14). The rules of "Devices and host API" apply: bodies are JSON, every
+answer lists its fields, errors are `{ "error": code }`. The shared types are in
+`packages/core/src/api.ts`, and the design is under "Player view".
+
+| Request | Who | Answer |
+|---|---|---|
+| `POST /api/phone/follow` `{ handle, pin }` | anyone | 201 `{ following: [player] }` and the `cg_phone` cookie if the phone is new; 401 `wrong-pin`; 404 `not-found`; 409 `too-many-handles`; 429 `too-many-tries` |
+| `POST /api/phone/follow-code` `{ code }` | anyone | the same answer; 404 `wrong-code` for unknown, used, or expired; 429 `too-many-tries` |
+| `GET /api/phone` | phone | `{ event, following, standings }`; 401 `not-following` |
+| `DELETE /api/phone/follow/:playerId` | phone | `{ following }`; the last one signs the phone out |
+| `POST /api/phone/sign-out` | phone | 204, the cookie cleared, the live connection closed |
+| `GET /api/phone/push` | phone | `{ publicKey: string \| null }` |
+| `PUT /api/phone/push` `{ endpoint, keys: { p256dh, auth } }` | phone | 204; 409 `push-off`; 400 `bad-request` for an endpoint that isn't allowed |
+| `DELETE /api/phone/push` | phone | 204 |
+
+A phone that follows nobody is not signed in: its first follow makes the row, and the route
+sets the cookie. `GET /api/phone` is the one answer a phone gets about the competition:
+
+```ts
+interface PhoneAnswer {
+  event: EventInfo | null;
+  following: FollowedPlayer[];
+  standings: PhoneStandings | null;    // null while the event has no bracket or groups
+}
+interface FollowedPlayer {
+  player: Player;
+  status: 'now' | 'next' | 'two-away' | 'later' | 'waiting' | 'out' | 'done' | 'not-in';
+  away: number | null;     // 0 on a station; 1 first in Up next, and so on
+  station: number | null;  // with `now`
+  matchId: number | null;  // the match or group, so a page knows a new call from an old one
+  others: Player[];        // the other players of that match or group who are known
+  place: number | null;    // with `done`
+}
+type PhoneStandings =
+  | { kind: 'bracket'; format: BracketFormat; finished: boolean; rows: StandingsRow[] }
+  | { kind: 'heats'; finished: boolean; rows: HeatStandingsRow[]; finalSize: number };
+```
+
+`standings` has everyone's rows, as the Display does (Brad, 2026-11-14), and the rows are
+the bracket's or the groups' own. A player leaves the server only as `{ id, handle }`
+(`CLAUDE.md`, rule 1), and every schema has `additionalProperties: false`. The follow routes
+answer with the players only, `{ following: [player] }`, and `POST /api/signup` and
+`POST /api/signup/claim` also answer with `followCode: { code, expiresAt }` (`SignupAnswer`).
+
+A phone gets 401 `not-signed-in` from every host and sign-up route, and from `GET
+/api/bracket` and `GET /api/heats`. `GET /api/event` and `GET /api/live` accept a phone as
+well as the host and a device.
+
+**Error codes** added to the list (the client turns each into words in
+`packages/client/src/api/errors.ts`): `not-following` (the request needs a phone that follows
+someone), `too-many-handles` (6 are followed already), and `push-off` (push isn't available
+here). A wrong PIN, an unknown handle, and a limit use the codes the claim route has.
+
+**Live.** A phone connects to `GET /api/live` with its cookie, and the server checks the
+`phones` row for as long as the connection is open, as it does for a device. It gets the
+broadcasts every screen gets: `event`, `players`, `bracket`, and `heats`. These carry nothing
+personal, and the page reloads `GET /api/phone` when one arrives. Signing out sends
+`{ type: "unpaired" }` and closes the connection, so the page stops reconnecting.
+
+**The answer cache.** A 32-player round robin takes 258 ms to rebuild (see "Brackets API"), and
+30 phones that each reload on every result would block the server for about 8 seconds
+(30 x 258 ms) per result. So `competition.ts` keeps the current answer of the bracket or
+groups and every phone's answer is worked out from it. The cache is dropped on every save,
+start, delete, rename, merge, and event change, so a phone never reads an answer older than
+the last change. A write path that forgets to drop it would show stale data, so the tests
+cover each path.
+
+**Storage.** Migration 6 adds:
+
+- `phones`: the id, the token's SHA-256 hash (`UNIQUE`), `last_seen`, and `created_at`.
+- `phone_follows`: the phone, the player, and `created_at`. The primary key is both ids, and
+  either one deleted deletes the row.
+- `follow_codes`: the code (primary key), the player (deleted with the player), `created_at`,
+  `expires_at`, and `used_at`. A code is spent with one `UPDATE ... RETURNING`.
+- `push_subscriptions`: the phone (primary key, deleted with the phone), the endpoint
+  (`UNIQUE`), `p256dh`, `auth`, the site's origin for the VAPID subject, and `created_at`.
+- `push_keys`: one row with the VAPID public and private key and `created_at`.
+
+No handle is stored in these tables; an answer joins the current one. Foreign keys are on by
+default in `node:sqlite`, checked 2026-11-14.
+
 ## 4. Players
 
 ### Handles
@@ -218,7 +437,8 @@ Sign-up (tablet):
 | `POST /api/signup` `{ handle, pin }` | 201 `{ player }`; 409 `{ error: "taken" }`; 400 `{ error: "refused", reason }` or `{ error: "bad-pin" }` |
 | `POST /api/signup/claim` `{ handle, pin }` | `{ player }`; 401 `{ error: "wrong-pin" }`; 404 `{ error: "not-found" }`; 429 `{ error: "too-many-tries" }` |
 
-`handle` in an answer is the normalized display form from `packages/core`. The server runs
+From M6 the answers of `POST /api/signup` and `POST /api/signup/claim` also carry a
+`followCode` (see "Phone API"). `handle` in an answer is the normalized display form from `packages/core`. The server runs
 the handle check on every request that takes a handle, whatever the client checked (rule
 2). `suggestedPin` comes from the server's random source, so the tablet needs no state.
 
@@ -531,7 +751,7 @@ current one. The server rebuilds the library's state on its
 in-memory store (`brackets-memory-db`) by creating the stage and replaying the log. It checks that each logged match is ready and holds the same two players.
 A tie-break match is stored by the server with the step at which it was made, and its
 result goes in the same log. Replay of 32 players took 13 ms in two lives (63 results) and
-258 ms in a round robin (496 results), so there is no cache in M4.
+258 ms in a round robin (496 results), so there is no cache in M4; M6 adds one (see "Phone API").
 
 Every bracket write runs one at a time on a promise chain, because the library is
 asynchronous and two taps could interleave. **Undo** of the newest result drops it from the
