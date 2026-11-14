@@ -7,6 +7,8 @@ import { cutAfter } from '../../heatsWords.ts';
 import { joinHandles } from '../../handles.ts';
 import { ordinal } from '../display/model.ts';
 
+export { calledWords, nextWords } from './alertWords.ts';
+
 /** The word for one entry of Up next: a bracket has matches, groups have groups. */
 export type Unit = 'match' | 'group';
 
@@ -16,18 +18,10 @@ export const unitOf = (standings: PhoneStandings | null): Unit => (standings?.ki
 const isRoundRobin = (standings: PhoneStandings | null): boolean =>
   standings?.kind === 'bracket' && standings.format === 'round_robin';
 
-/** "Zap, go to station 2!", the line on the full-screen alert. */
-export function calledWords(handle: string, station: number | null): string {
-  return station === null ? `${handle}, you're up!` : `${handle}, go to station ${station}!`;
-}
-
 /** The page title while a call is waiting. */
 export function calledTitle(handle: string, station: number | null): string {
   return station === null ? `${handle}: you're up` : `${handle}: go to station ${station}`;
 }
-
-/** "Zap, you're next!", the line on the banner. */
-export const nextWords = (handle: string): string => `${handle}, you're next!`;
 
 const plural = (unit: Unit): string => (unit === 'match' ? 'matches' : 'groups');
 

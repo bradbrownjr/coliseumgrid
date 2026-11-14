@@ -25,6 +25,7 @@ import { NextBanner } from './NextBanner.tsx';
 import { PhoneStandings } from './PhoneStandings.tsx';
 import { baseTitle } from './phoneWords.ts';
 import { PlayerCard } from './PlayerCard.tsx';
+import { PushControl } from './PushControl.tsx';
 import { PushSlot, usePushKey } from './PushSlot.tsx';
 import { useAlertSound } from './useAlertSound.ts';
 import { useAlerts } from './useAlerts.ts';
@@ -141,6 +142,8 @@ export function PlayerView({ answer, failed, reload, onSignedOut, notice, onClea
             </Typography>
           </Box>
 
+          <PushSlot publicKey={pushKey}>{(key) => <PushControl publicKey={key} />}</PushSlot>
+
           {answer.following.map((followed) => (
             <PlayerCard key={followed.player.id} followed={followed} standings={answer.standings} onStop={() => setStopping(followed)} />
           ))}
@@ -157,8 +160,6 @@ export function PlayerView({ answer, failed, reload, onSignedOut, notice, onClea
           </Box>
 
           {answer.standings && <PhoneStandings standings={answer.standings} followedIds={followedIds} />}
-
-          <PushSlot publicKey={pushKey} />
 
           <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 2, pt: 1 }}>
             <Button variant="outlined" color="secondary" size="large" onClick={() => void signOut()}>

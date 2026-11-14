@@ -8,6 +8,7 @@ import { ERROR_WORDS, FOLLOW_CODE_WORDS, failureWords, guessWords } from '../api
 import { followWithCode } from '../api/phone.ts';
 import { FollowFlow } from './phone/FollowFlow.tsx';
 import { PlayerView } from './phone/PlayerView.tsx';
+import { unsubscribeLocal } from './phone/pushClient.ts';
 import { usePhone } from './phone/usePhone.ts';
 
 /** The words for a follow code that didn't work. A limit means waiting, like the join screen. */
@@ -21,6 +22,23 @@ const codeWords = (failure: Parameters<typeof failureWords>[0]): string =>
  * Nothing here needs the host: the phone signs itself in.
  */
 export function PhonePage() {
+  return (
+    <>
+      {/*
+        The manifest and the icon are linked from this page only (docs/PLAN.md, "Player view"),
+        so only /follow can be added to a Home Screen. React puts these in the head. iPhone and
+        iPad need the manifest, with its `display` of `standalone`, for a Home Screen web app, and
+        the app icon can come from the manifest or from apple-touch-icon, which wins when both
+        are there (https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/).
+      */}
+      <link rel="manifest" href="/manifest.webmanifest" />
+      <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+      <PhoneScreen />
+    </>
+  );
+}
+
+function PhoneScreen() {
   const [params, setParams] = useSearchParams();
   const phone = usePhone();
   const [notice, setNotice] = useState<string | null>(null);
@@ -47,6 +65,14 @@ export function PhonePage() {
     })();
     // Runs once per visit; the hook's functions and the router's change every render.
   }, []);
+
+  // Every way out of the player page ends here: sign-out, stopping the last follow, a PIN
+  // reset, and the host cutting the phone off. The server deletes its row each time, so the
+  // browser's subscription goes too, or the next player on this phone would inherit it.
+  const phase = phone.state.phase;
+  useEffect(() => {
+    if (phase === 'signed-out') void unsubscribeLocal();
+  }, [phase]);
 
   if (phone.state.phase === 'ready') {
     return (

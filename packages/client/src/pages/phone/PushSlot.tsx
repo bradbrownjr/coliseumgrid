@@ -22,14 +22,14 @@ export function usePushKey(): string | null {
 
 interface PushSlotProps {
   publicKey: string | null;
-  /** The subscribe control, given the key. Task 5 of M6 passes it with the service worker and the manifest. */
+  /** The subscribe control, given the key. */
   children?: (publicKey: string) => ReactNode;
 }
 
 /**
  * The one place "subscribe to push" goes on the player page. It shows only when the server
  * gave a key, so offline and over plain HTTP the page shows nothing and registers no service
- * worker. With no `children` yet, a key shows nothing either.
+ * worker.
  */
 export function PushSlot({ publicKey, children }: PushSlotProps) {
   return publicKey === null || !children ? null : children(publicKey);
