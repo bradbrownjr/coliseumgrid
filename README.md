@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo/logo-dark.svg">
+    <img src="assets/logo/logo.svg" alt="ColiseumGrid logo" width="160">
+  </picture>
+</p>
+
 # ColiseumGrid
 
 A self-hosted tournament app for in-person video game events. Players sign up with a gamer
@@ -6,8 +13,18 @@ standings and who plays next. It runs offline from a laptop, or online from a Do
 
 ## Status
 
-Planning. Nothing is built yet. The design is in [`docs/PLAN.md`](docs/PLAN.md) and the build
-order is in [`docs/ROADMAP.md`](docs/ROADMAP.md).
+In development, aiming at a first event on July 10, 2027. Finished so far:
+
+- Players sign up with a handle and a 4-digit PIN on a tablet, and vulgar handles are refused.
+- The host signs in with a password and pairs a TV or a sign-up tablet with a 6-character
+  code or a QR code.
+- 1 vs 1 brackets (one life, two lives, or everyone plays everyone) and groups of up to 4 for
+  races and free-for-alls, on 1 to 8 stations, with undo and late sign-up.
+- The TV shows the stations, who plays next, and the standings.
+
+In progress: a page on players' phones that shows their next match and alerts them when
+they're called. What is finished is in [`docs/CHANGELOG.md`](docs/CHANGELOG.md), and what
+comes next is in [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Docs
 
