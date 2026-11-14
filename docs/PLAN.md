@@ -97,20 +97,31 @@ routes, so it never sees a roster (`CLAUDE.md`, rule 1). The routes are in "Phon
   and it marks the player as at today's event. Both routes use one PIN check (`pinGuard` in
   the server), so the same wrong-guess counts apply. Phones are limited in both modes, per
   handle (5 wrong per 10 minutes) and per client IP (60 per 10 minutes), because phones, unlike
-  tablets, aren't paired by the host. Online, the per-handle count is shared with the claim
-  route, so one handle gets 5 guesses in total, not 5 on each.
+  tablets, aren't paired by the host. Every follow try from an address counts toward the 60,
+  right or wrong, so one address can't walk through the handles. Online, the per-handle
+  count is shared with the claim route, so one handle gets 5 guesses in total, not 5 on each.
+  A phone that already follows the player skips the PIN. A phone that follows 6 players gets
+  409 before any PIN is checked. At the limit, the page says "Too many tries. Wait 10
+  minutes, then try again."
 - **The QR code on the Sign-up done screen.** The answers of `POST /api/signup` and
   `POST /api/signup/claim` carry a follow code, made only after the PIN was set or proven, so a
   Sign-up tablet can't make one for any player. It follows the pairing code rules: the same
   alphabet and length (`generateJoinCode`), works once, expires after 10 minutes, and wrong
-  codes are rate limited with the join route's limits. The QR code holds
+  codes are rate limited with the join route's limits: the same per-IP and all-callers counts
+  as wrong pairing codes (10 per IP and 100 in all, per 10 minutes), so guessing one kind of
+  code doesn't get around the limit on the other. A phone that already follows 6 players gets
+  409 before the code is spent, so a full phone doesn't burn a good code. The QR code holds
   `${location.origin}/follow?code=K7M4QX`. The page uses the code at once and removes it from
   the address, like the join screen. The done screen stays up for 30 seconds when it shows the
-  QR code (Brad, 2026-11-14), up from 15, so a kid has time to scan it.
+  QR code (Brad, 2026-11-14) and 15 seconds without one, so a kid has time to scan it. There
+  is no QR code when the Sign-up page is on `localhost` or a loopback address, because a phone
+  can't reach it and the code would be spent on a dead link.
 
 **Several handles.** A phone follows up to 6 players (`PHONE_FOLLOWS_MAX`); a parent with two
 kids signs in twice, or scans two codes. "Follow another player" on the page takes a handle
-and PIN. Stopping the last follow signs the phone out.
+and PIN, and is switched off at 6. **Stop following** asks first ("Stop following Zap?", with
+"You need their PIN to follow again."), because following again needs the PIN. Stopping the
+last follow signs the phone out.
 
 **Where a player stands** is a pure function in `packages/core` (`playerStatus`), so the
 server and the page agree. It reads the same answer the Display gets:
@@ -133,14 +144,17 @@ station (see "Stations and the queue"), so the page says "about 2 matches away".
 **Alerts** come from the status, per distance:
 
 - **Called** (`now`): a full-screen alert, MUI `Dialog fullScreen`, crimson and black. It
-  flashes once a second and stays steady under `prefers-reduced-motion`, which is under
-  WCAG's limit of 3 flashes a second
+  pulses from crimson to black and back once a second and stays steady under
+  `prefers-reduced-motion`, which is under WCAG's limit of 3 flashes a second
   (<https://www.w3.org/WAI/WCAG22/Understanding/three-flashes-or-below-threshold.html>). It
-  says "Zap: go to Station 2", the page title flips between that and the page name, a Web
-  Audio beep plays, and `navigator.vibrate` runs where it exists (not on iPhone, <https://caniuse.com/vibration>).
-  A **Got it** button closes it.
-- **Next** (`next`): a banner and no sound.
-- **Two away** (`two-away`): a line of text on the player's card.
+  says "You're up!", then "Zap, go to station 2!" for each player called, and "With Kai"
+  when others are known. The page title flips between "Zap: go to station 2" and the page
+  name, a Web Audio beep plays, and `navigator.vibrate` runs where it exists (not on iPhone,
+  <https://caniuse.com/vibration>). An **On my way** button closes it.
+- **Next** (`next`): a banner at the top of the page, "Zap, you're next! Get ready.", with a
+  close button, and no sound.
+- **Two away** (`two-away`): a line of text on the player's card ("Two matches away", or
+  "Two groups away").
 
 `newAlert` in `packages/core` decides when one is new: `called` when a player becomes `now`, or
 is on a different match or group than before, and `next` when a player becomes `next`. With
@@ -180,25 +194,58 @@ encrypted (RFC 8291), and `applicationServerKey` is the server's VAPID key
   an allow-list of push service hosts, so the server can't be made to POST to an internal
   address. Apple documents `https://*.push.apple.com`
   (<https://developer.apple.com/documentation/usernotifications/sending-web-push-notifications-in-web-apps-and-browsers>).
-  The hosts of Firefox's and Google's push services: no published source found (unverified,
-  checked 2026-11-14); the build records them from real subscriptions, and a wrong list
-  drops pushes without an error.
-- **When.** After each bracket or groups save, off the write chain: the server works out the
-  status of every followed player, compares it with the last one it sent (kept in memory,
-  seeded at startup so a restart sends nothing), and sends in parallel with a 10-second
-  timeout. A 404 or 410 from the push service deletes the subscription (404: expired; 410: no
-  longer valid; <https://web.dev/articles/push-notifications-web-push-protocol>); Apple's 410
-  is "The device token has expired" (Apple's page above). Signing out deletes it.
-- **Offline or plain HTTP.** `GET /api/phone/push` answers `{ "publicKey": null }`, the page
-  shows no push control and registers no service worker, and `PUT /api/phone/push` answers
-  409 `push-off`. The service worker handles only `push` and `notificationclick`, and has no
-  `fetch` handler, so it can't serve a stale app.
+  The list is `fcm.googleapis.com` (Google), `updates.push.services.mozilla.com` (Firefox),
+  `*.push.apple.com`, and `*.notify.windows.com` (Edge); `web-push.ts` cites a source for
+  each, checked 2026-11-14. No real subscription from Chrome or Firefox has been seen yet, so
+  those two hosts stay unconfirmed until `PLAYTEST.md` records the hosts of real subscriptions.
+  A wrong list refuses a phone's subscription (400 `bad-request`) and sends nothing.
+- **When.** Every change to the competition (a save, start, delete, rename, merge, or event
+  change) drops the kept answer, and the drop schedules a check with `setImmediate`, so it
+  runs after the write has answered. The check works out the status of every player in the
+  bracket or groups and compares it with the last one it saw (kept in memory), using
+  `newAlert`. A player's alert goes to every subscription of every phone that follows them,
+  in parallel, each with a 10-second timeout. A new bracket or set of groups starts from
+  "not in it", so its first calls alert. The first check after startup only records the
+  statuses, so a restart sends nothing. A 404 or 410 from the push service (`gone`) deletes
+  the subscription (404: expired; 410: no longer valid;
+  <https://web.dev/articles/push-notifications-web-push-protocol>); Apple's 410 is "The
+  device token has expired" (Apple's page above). Any other failure keeps it and sends
+  nothing more. Signing out deletes it. A check that throws logs a warning and never fails a
+  write.
+- **Payload.** JSON, `{ alert, handle, station }`: `alert` is `called` or `next`, and
+  `station` is a number only with `called`.
+- **Offline or plain HTTP.** Push is on only online, with `COLISEUMGRID_PUSH_SUBJECT` set and
+  a key that loads, and a request must also arrive over HTTPS. Otherwise `GET /api/phone/push`
+  answers `{ "publicKey": null }`, the page shows no push control and registers no service
+  worker, and `PUT /api/phone/push` answers 409 `push-off`. A subscription is refused with
+  400 `bad-request` unless its endpoint is on the allow-list and its keys are a P-256 point
+  and a 16-byte secret. A browser's endpoint that another phone holds moves to the newest
+  phone to subscribe with it, because one browser that signed in as a new phone is the same
+  browser.
+- **The worker and the manifest.** `push-worker.js` and `manifest.webmanifest` are at the
+  site root, built by `packages/client/vite.push-assets.ts`: the worker as its own script,
+  because a classic service worker can't import chunks. The worker registers only on the tap
+  that turns alerts on (a page that already has a subscription made with an older key is the
+  one exception: it subscribes again with the new key, with no tap). It handles only `push`
+  and `notificationclick`, and has no `fetch` handler, so it can't serve a stale app. A tap
+  on a notification focuses the open player page or opens `/follow`.
+- **What a notification says.** The words are the page's own, from `alertWords.ts`: "Zap, go
+  to station 2!" for `called`, "Zap, you're next!" for `next`, one notification per handle
+  (a newer one replaces it and still buzzes). A payload that is missing, isn't JSON, or has
+  the wrong fields shows a plain "ColiseumGrid" notification, because browsers need a
+  notification for every push.
+- **Keeping it in step.** When the page reaches the signed-out state (sign-out, stopping the
+  last follow, a PIN reset, or the host cutting the phone off), it drops its own browser
+  subscription, so the next player on that phone doesn't inherit it. When the server's key
+  changes, the page subscribes again with the new key.
 - **iPhone and iPad.** Push works only inside a Home Screen web app, iOS 16.4 and later, with
   a manifest whose `display` is `standalone` or `fullscreen`, and the permission asked from a
   tap (<https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/>). A Home
   Screen app doesn't share cookies with Safari
   (<https://bugs.webkit.org/show_bug.cgi?id=181849>), so the phone signs in again there. The
-  manifest (`start_url: /follow`, bundled icons) is linked from the player page only.
+  manifest (`start_url: /follow`, bundled icons) and `apple-touch-icon` are linked from the
+  player page only, so only `/follow` can be added to a Home Screen. In Safari the control
+  says to add the page to the Home Screen and sign in again there.
 
 **HTTPS on a venue network** isn't built into the app. Push and the wake lock need a hostname
 a phone trusts, with its own certificate: Let's Encrypt can issue one for a host that isn't
@@ -319,13 +366,13 @@ answer lists its fields, errors are `{ "error": code }`. The shared types are in
 
 | Request | Who | Answer |
 |---|---|---|
-| `POST /api/phone/follow` `{ handle, pin }` | anyone | 201 `{ following: [player] }` and the `cg_phone` cookie if the phone is new; 401 `wrong-pin`; 404 `not-found`; 409 `too-many-handles`; 429 `too-many-tries` |
-| `POST /api/phone/follow-code` `{ code }` | anyone | the same answer; 404 `wrong-code` for unknown, used, or expired; 429 `too-many-tries` |
+| `POST /api/phone/follow` `{ handle, pin }` | anyone | 201 `{ following: [player] }` and the `cg_phone` cookie if the phone is new; 400 `refused` (the handle fails the filter) or `bad-request`; 401 `wrong-pin`; 404 `not-found`; 409 `too-many-handles`; 429 `too-many-tries` |
+| `POST /api/phone/follow-code` `{ code }` | anyone | the same answer without `wrong-pin` or `not-found`; 404 `wrong-code` for unknown, used, unreadable, or expired; 409 `too-many-handles` before the code is spent; 429 `too-many-tries` |
 | `GET /api/phone` | phone | `{ event, following, standings }`; 401 `not-following` |
-| `DELETE /api/phone/follow/:playerId` | phone | `{ following }`; the last one signs the phone out |
+| `DELETE /api/phone/follow/:playerId` | phone | `{ following }`; the last one signs the phone out; 404 `not-found` if the phone doesn't follow that player |
 | `POST /api/phone/sign-out` | phone | 204, the cookie cleared, the live connection closed |
 | `GET /api/phone/push` | phone | `{ publicKey: string \| null }` |
-| `PUT /api/phone/push` `{ endpoint, keys: { p256dh, auth } }` | phone | 204; 409 `push-off`; 400 `bad-request` for an endpoint that isn't allowed |
+| `PUT /api/phone/push` `{ endpoint, keys: { p256dh, auth } }` | phone | 204; 409 `push-off`; 400 `bad-request` for an endpoint that isn't allowed or keys of the wrong size |
 | `DELETE /api/phone/push` | phone | 204 |
 
 A phone that follows nobody is not signed in: its first follow makes the row, and the route
@@ -357,9 +404,15 @@ the bracket's or the groups' own. A player leaves the server only as `{ id, hand
 answer with the players only, `{ following: [player] }`, and `POST /api/signup` and
 `POST /api/signup/claim` also answer with `followCode: { code, expiresAt }` (`SignupAnswer`).
 
-A phone gets 401 `not-signed-in` from every host and sign-up route, and from `GET
+The routes marked "phone" answer 401 `not-following` to anyone who isn't a phone that follows
+someone. A phone gets 401 `not-signed-in` from every host and sign-up route, and from `GET
 /api/bracket` and `GET /api/heats`. `GET /api/event` and `GET /api/live` accept a phone as
-well as the host and a device.
+well as the host and a device. The follow and follow-code routes need no cookie, and the
+first one to succeed makes the phone.
+
+A phone that already follows the player in `POST /api/phone/follow` gets 201 with its
+current list and no PIN check. A merge moves every phone's follow from the merged player to
+the one kept (a phone that followed both keeps one).
 
 **Error codes** added to the list (the client turns each into words in
 `packages/client/src/api/errors.ts`): `not-following` (the request needs a phone that follows

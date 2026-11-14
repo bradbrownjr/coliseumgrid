@@ -4,7 +4,8 @@ Tests that need a person or real hardware. Brad runs them as time allows; what o
 becomes a roadmap item. A test is removed once it's reported.
 
 Each test names the milestone that makes it possible. The tests marked "after M3", "after
-M4", or "after M5" can be run on the Unraid server (`http://10.6.26.2:8390`).
+M4", or "after M5", and "Phones, over plain HTTP", can be run on the Unraid server
+(`http://10.6.26.2:8390`).
 
 ## Planned
 
@@ -123,17 +124,74 @@ and a TV, on the Unraid server.
   table split into two side by side? Note the distance and the smallest type that worked, and
   record it in `DESIGN.md`, "Display (TV)".
 
-### Alerts on players' phones (after M6)
+### Phones, over plain HTTP (after M6)
 
-Why: whether a page can alert a phone whose screen is locked isn't documented, and the
-offline plan depends on the answer (`PLAN.md`, "Player view").
+Why: the server's tests use made-up requests and no phone. These use real phones on the
+event network, on the Unraid server (`http://10.6.26.2:8390`, offline mode). Over plain HTTP the
+page has the page alert only (`PLAN.md`, "Player view").
 
-- On an Android phone and an iPhone, over plain HTTP on the event network: open the player
-  page, tap once to allow sound, then lock the screen. Does the alert sound when the player
-  comes up? After 5 minutes locked? After 15?
-- The same over HTTPS, and from an iPhone Home Screen web app.
+- Sign up a new player on the tablet. On the Done screen, scan the QR code with a phone
+  camera. Does the player page open and show the handle, with no PIN asked? Does the Done
+  screen stay 30 seconds with the code? Open the sign-up screen on the laptop at `localhost`:
+  is there no QR code, and does the screen move on after 15 seconds?
+- On a second phone, open `/follow` and follow the same handle by typing the handle and the
+  PIN. Does it work? Does a wrong PIN say so, and after 5 wrong tries does it say "Too many
+  tries. Wait 10 minutes, then try again."?
+- Start a bracket and record results from the host. Does the phone's card change within a
+  second each time, with no reload?
+- When the player is called to a station: does the full-screen alert show "You're up!" and
+  "go to station N!", pulse once a second, and play the three beeps (after a tap anywhere on
+  the page earlier)? Does the Android phone buzz? Does the tab title flip? Does **On my way**
+  close it? Does it stay steady with the phone's reduce motion setting on?
+- When the player is next: does a blue banner show "you're next! Get ready." with no sound?
+  When two away: does the card say "Two matches away"?
+- Follow two kids on one phone. Is it clear whose match is up? Does "Follow another player"
+  switch off at 6?
+- Tap **Stop following** on one. Does it ask first? After yes, does the phone keep the other
+  kid? Stop the last one: does the phone go back to the sign-in?
+- Reset a followed player's PIN from the host. Does that phone lose the player within a
+  second, and go back to the sign-in if it followed only them? Does the old PIN stop working
+  and the new one work?
 - Does the phone stay signed in after the browser is closed and reopened?
-- With a parent's phone following two handles, is it clear whose match is up?
+- Is there no lock screen alerts control on the page over HTTP?
+- Run groups with several players on a phone. Do the standings show followed rows bold with a
+  person icon and the cut line "Top 4 go to the final"? Is everything readable on the
+  smallest phone available, with no sideways scrolling?
+- Lock the screen on an Android phone and an iPhone before the player is called. Does the
+  alert sound when the player comes up? After 5 minutes locked? After 15? (Whether a locked
+  page can alert is undocumented, and the offline plan depends on it.)
+
+### Phones, over HTTPS (after M6)
+
+Why: push, the wake lock, and the Home Screen app work only in a secure context. This needs
+a reverse proxy in front of the server, a certificate the phones trust, `COLISEUMGRID_MODE=online`,
+`TRUSTED_PROXY`, and `COLISEUMGRID_PUSH_SUBJECT` (`mailto:` or `https:`, not `localhost`). Which
+proxy, DNS, and domain to use is Brad's choice, and any firewall or DNS change needs his
+approval first (`PLAN.md`, "HTTPS on a venue network").
+
+- Open `/follow` on an Android phone in Chrome and sign in. Does **Turn on lock screen
+  alerts** show? Turn it on and allow the question. Close the page and lock the phone. Have
+  the host call the player. Does a notification arrive, saying "<handle>, go to station N!"?
+  Does tapping it open the player page? Does the "next" alert arrive too?
+- The same in a desktop browser (Chrome, then Firefox if available).
+- On an iPhone with iOS 16.4 or later, open `/follow` in Safari. Does the control tell you to
+  add it to the Home Screen? Add it, open it from the Home Screen, and sign in again. Turn on
+  alerts, lock the phone, and have the host call the player. Does the alert arrive?
+- Does the Home Screen icon look right (the mark centered, on a light background, not black
+  behind it)? Does the app open on the player page? On Android, is the icon right in both
+  the round and square shapes the launcher uses?
+- Does the screen stay on while the player page is in front?
+- Record the push service host of each subscription made above: the part of the endpoint
+  after `https://`, up to the first `/`, which is in the browser's `PushSubscription` or the
+  server's `push_subscriptions` table. The Chrome and Firefox hosts are
+  from published docs but not yet seen on a real subscription (`PLAN.md`, "Player view"). Does every subscription pass the allow-list
+  (`PUT /api/phone/push` answers 204, not 400)?
+- Sign out on a phone with alerts on. Does it stop getting alerts? Sign in as another player on
+  the same phone. Is the control back to "off"?
+- Delete `vapid-private-key.pem` from the data folder and restart the server. Open the page on
+  a subscribed phone. Does it subscribe again with no tap, and do alerts keep arriving?
+- Does a phone that follows nobody get no alerts, and does no player's alert reach a phone
+  that follows someone else?
 
 ### Label printer (after M8)
 

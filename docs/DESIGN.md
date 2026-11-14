@@ -146,7 +146,7 @@ A winner, a loss, or a player's status is shown with text or an icon as well as 
 Recording a result never asks for confirmation. It shows a snackbar with **Undo**. A
 confirmation dialog is only for actions that can't be undone, like deleting a bracket or groups.
 
-## The three screens
+## The screens
 
 ### Host (laptop)
 
@@ -236,6 +236,86 @@ confirmation dialog is only for actions that can't be undone, like deleting a br
   tables side by side, and the type comes from the rows of the first table.
 - The minimum type size for the TV has no published source yet. It is set by testing on the
   real TV (see `PLAYTEST.md`) and recorded here.
+
+### Player page (phone)
+
+The page at `/follow`. It is one column, up to MUI's `sm` container width, and it works at 320
+CSS pixels (see "Phone width"): handles and status words wrap anywhere (`overflowWrap`), and
+the standings table has fixed columns, so the handle gets what is left. Top to bottom:
+
+- **Header.** The logo and the event name.
+- **Sound row.** Before sound is on, one large **Tap to turn on sound** button. After the
+  first tap anywhere on the page, it reads "Sound is on." with a speaker icon. The row keeps
+  its height either way, so the tap that turns sound on doesn't move what the finger is on.
+  Under it: "Alerts work best with this page open."
+- **Lock screen alerts.** Shown only when the server offers push (online, over HTTPS). Offline
+  and over plain HTTP the page shows nothing here. The states:
+
+  | State | What shows |
+  |---|---|
+  | Off | **Turn on lock screen alerts**, and "Get an alert even when this page is closed." |
+  | On | "Lock screen alerts are on." and **Turn off** |
+  | Blocked in the browser | "Your browser blocked alerts. Turn them on in its settings." |
+  | Not possible in this browser | "This browser can't show lock screen alerts." |
+  | iPhone or iPad in Safari | "On iPhone, lock screen alerts need the Home Screen. Tap Share, then Add to Home Screen, and sign in again there." |
+  | A try that failed | A red alert, "Couldn't turn on lock screen alerts. Try again." |
+
+  While the page checks the browser, nothing shows.
+- **Player cards**, one for each followed player (up to 6), in the order they were followed.
+  A card has the handle, a status block, a line with the others in the match, and
+  **Stop following**, which asks "Stop following Zap?" first, because following again needs
+  the PIN. A dialog fits here because only the PIN undoes it (see "Undo, not 'Are you sure?'" above).
+- **Follow another player**, switched off at 6 with the line "This phone follows 6 players. Stop
+  following one to add another."
+- **Standings**, when a bracket or groups exist.
+- **Sign out** and the color mode picker.
+
+**Status block.** Each status has an icon and words, and the block's look follows
+`alertLevel` from `packages/core`, so the card and the alerts agree. Color is never the only
+signal.
+
+| Status | Words | Look |
+|---|---|---|
+| Called | "You're up! Go to station 2" | Crimson fill, light crimson outline |
+| Next | "You're next" | `upNext` fill |
+| Two away | "Two matches away" (groups: "Two groups away") | `upNext` outline |
+| Later | "About 4 matches away" | Plain outline |
+| Waiting | "Waiting for your next match" | Plain outline |
+| Out | "You're out. Thanks for playing!" (round robin: "All your matches are played. Thanks for playing!") | Plain outline |
+| Done | "You won! Finished 1st", "Finished 2nd", and so on ("The event is over. Thanks for playing!" with no place) | Gold `win` fill for places 1 to 3, else plain outline |
+| Not in it | "The host hasn't started yet", or "You're not playing in this one" once something has started | Plain outline |
+
+The line under the block is "Against Kai" for a match and "With Kai, Blaze, and Jett" for a
+group, and is left off when nobody else is known. The words live in
+`packages/client/src/pages/phone/phoneWords.ts`.
+
+**Next banner.** "Zap, you're next! Get ready." in `upNext`, stuck to the top while the page
+scrolls, with a close button for that player. No sound. The tab title shows "Zap, you're
+next!" while it is up.
+
+**Called overlay.** A full-screen dialog with a crimson background that pulses to black and
+back once a second: one flash a second, under the limit of three in WCAG 2.2 success
+criterion 2.3.1 (<https://www.w3.org/WAI/WCAG22/Understanding/three-flashes-or-below-threshold.html>),
+and eased, not a hard cut. Under `prefers-reduced-motion` the background stays crimson. It
+reads "You're up!", then "Zap, go to station 2!" in the largest type for each player called,
+"With Kai" under it when others are known, and one white **On my way** button, white on both
+ends of the pulse. The tab title flips between "Zap: go to station 2" and the page name at
+the same pace. The sound is three rising beeps made in the page, and phones that support it
+also buzz.
+
+**Standings table.** Columns are place, handle, and two numbers: Wins and Losses for a
+bracket, Points and Groups for groups. The heading is "Standings", or "Final standings" once
+finished. Rows of players this phone follows are bold with a person icon, whose label is "You
+follow this player", so the mark isn't only the weight. For groups, the cut line is a row
+across the table that reads "Top 4 go to the final", in crimson on light and `primary.light`
+on dark, and sits above a whole tied group, as on the Display. Before any group has a
+result, the heading is "Players", the handles are a list, and the page says "Places start
+after the first group."
+
+**Home Screen app.** The manifest's `theme_color` is `primary.main`, which is the same crimson
+in both modes. Its `background_color` is the light `background.default`, because a manifest
+has one color per field and no dark variant. The icons sit on that same background, because
+iOS fills a transparent icon with black. `tools/make-icons.ts` makes them.
 
 ## Name tags
 

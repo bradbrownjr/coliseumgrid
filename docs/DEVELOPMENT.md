@@ -26,7 +26,7 @@ Run `pnpm install` once first.
 | Command | What it does |
 |---|---|
 | `pnpm lint` | Oxlint over the whole repo. `packages/core/src` also bans `Math.random`, imports of Node built-ins (with or without `node:`), `ws`, and server packages, and DOM, Node, and network globals, read bare or through `globalThis`. A scratch import of a Node built-in also fails `typecheck`, because core has no Node types. |
-| `pnpm typecheck` | `tsc` in every package, then `tools/`. `core` is checked twice: its source with ES2022 types only, its tests with Node types. `client` is checked twice too: the app with DOM types, `vite.config.ts` with Node types. |
+| `pnpm typecheck` | `tsc` in every package, then `tools/`. `core` is checked twice: its source with ES2022 types only, its tests with Node types. `client` is checked three times: the app with DOM types, the push worker (`src/worker`, `test/worker`) with WebWorker types (`tsconfig.worker.json`), and `vite.config.ts` and `vite.push-assets.ts` with Node types. |
 | `pnpm test` | Vitest in every package (`vitest run`). In `core` it runs the `node` project only. |
 | `pnpm test:browser` | The `core` `browser` project: the handle rules and the vulgarity filter in headless Chromium. Not part of `pnpm check`; CI runs it as its own job. Once per machine, run `pnpm --filter @coliseumgrid/core exec playwright install chromium`. |
 | `pnpm check:docs` | The writing-rules check (see "The docs check"). Same as `node tools/check-docs.ts`. |
@@ -51,6 +51,7 @@ A bad value stops it with a message.
 | `COLISEUMGRID_HOST_PASSWORD` | none | The host password, 8 to 128 characters, taken as typed (spaces count). When set, it is the password and first-run setup is off. **Required online**: the server stops at startup without it. Offline without it, the first visit from the laptop itself (`localhost`) sets the password, once, and it is stored hashed (scrypt, like PINs). The server never prints or returns it. Changing it between starts ends every host session at startup (see "Host and device sessions"). The Unraid template has it as a masked variable. |
 | `DATA_DIR` | `data` | The folder that holds the database file `coliseumgrid.db`. Absolute, or relative to the working directory (the server turns it into an absolute path at startup). The server creates it if it is missing. The Docker image sets `/data`. |
 | `TRUSTED_PROXY` | none | The reverse proxy's IP address. Only a request whose direct peer is this address may name the client in `X-Forwarded-For`, and only the last entry is used (`CLAUDE.md`, rule 6). Without it, the client is the socket address. Set it online, behind the proxy; without it every player shares the proxy's address and its rate limit, and the server prints a warning at startup. |
+| `COLISEUMGRID_PUSH_SUBJECT` | none | The contact the push services see in the VAPID token (RFC 8292): a `mailto:` address or an `https:` URL, never `localhost` (`mailto:you@example.com`). A bad value stops the server at startup. Online without it, push is off and the server warns at startup; phones get the page alert only. Offline it is read and checked but has no effect, because push runs only in online mode, over HTTPS. |
 | `CLIENT_DIST` | `packages/client/dist` | The folder of built client files to serve: absolute, or relative to the working directory. The default is found from the server package's location, so it works from any working directory. Read in `src/main.ts`, not by `loadConfig`. Without an `index.html` there, the server answers only `/api`. |
 
 ### Host and device sessions
@@ -79,8 +80,9 @@ A bad value stops it with a message.
   doesn't match `Host` (another site's script) all make the request an ordinary one that
   needs the password. Don't put an offline server behind a reverse proxy on the same machine.
 - **Which route needs what.** Host routes need a host session (401 `not-signed-in`), sign-up
-  routes a Sign-up device or a host session, `GET /api/event` and `GET /api/live` any host or
-  device. The check runs as an `onRequest` hook, before the body is read. A Display is
+  routes a Sign-up device or a host session, `GET /api/event` and `GET /api/live` any host,
+  device, or phone (`requireViewer`), and the phone routes a phone that follows someone (401
+  `not-following`, `requirePhone`). The check runs as an `onRequest` hook, before the body is read. A Display is
   refused the sign-up routes with the same 401.
 - **Guessing limits.** Wrong host passwords and wrong pairing codes are limited per client IP
   in both modes (`rate-limit.ts`: 10 wrong tries per 10 minutes each, counted before the slow
@@ -108,6 +110,68 @@ A bad value stops it with a message.
 - **The current event** is the newest row of `events`. `PUT /api/event` renames it, or makes
   the first one. Names are 1 to 60 characters with spaces tidied.
 
+### Phones and push
+
+`PLAN.md` section 3, "Player view" and "Phone API", is the contract. The server files are
+`phone-routes.ts` (the routes), `phones.ts` (phones and their follows), `follow-codes.ts`,
+`push-subscriptions.ts`, `push-notify.ts` (when to send), `web-push.ts` (the sender),
+`vapid-keys.ts`, and `pin-guard.ts`.
+
+- **One PIN check.** `pin-guard.ts` is the only place a PIN is checked against its limits.
+  The tablet's claim (`checkClaim`) and the phone's follow (`checkFollow`) both go through it,
+  so the per-handle count is one count online. `allowFollowFrom` is the phone's per-IP count
+  and is called before `checkFollow`. A new route that checks a PIN calls the guard, not
+  `verifyPin` directly. Anything that changes a handle's PIN or name calls `forget`.
+- **The answer cache.** `competition.answer()` builds the bracket or groups answer once and
+  keeps it, and every phone's `GET /api/phone` is worked out from it, so 30 phones don't
+  each rebuild a round robin. It reads everything in its first tick, so one answer is one
+  moment of the database, and callers who ask during a build share it.
+  **Every write path calls `competition.drop()` after the write**: a save, start, delete,
+  rename, merge, and event change (`bracket-routes.ts`, `heat-routes.ts`, `players-routes.ts`
+  through `onCompetitionChanged`, and `host-routes.ts` through `onEventChanged`). A new route
+  that changes what the answer holds must call it, or phones show stale data. Call it before
+  `hub.broadcast`, so a phone that reloads at once gets the new answer.
+  `phone-cache.test.ts` covers each path.
+- **`onDrop`.** `drop()` also runs the listeners from `competition.onDrop`. `push-notify.ts`
+  is the one listener: it schedules its check with `setImmediate`, so the check starts after
+  the write has answered, and it never fails or slows a write. The tests wait for it with
+  `app.pushIdle()`.
+- **Push is off unless all of these hold.** Online mode, `COLISEUMGRID_PUSH_SUBJECT` set, a
+  VAPID key that loads, and a request over HTTPS (`isHttps`). The key file
+  `vapid-private-key.pem` (mode 0600) is in `DATA_DIR`. It is made the first time push needs
+  it, which is the first `GET /api/phone/push` over HTTPS or the first send, and it is never
+  replaced once there. Deleting it and restarting makes a new key, and each phone's page
+  subscribes again with it the next time the page loads.
+- **The worker and the manifest.** `src/worker/push-worker.ts` is built by
+  `vite.push-assets.ts` (a plugin in `vite.config.ts`) into `push-worker.js` at the site
+  root, and the plugin emits `manifest.webmanifest` beside it. The plugin runs a second,
+  nested Vite build of the worker as one `iife` script: a service worker registered as a
+  classic script can't import chunks, and the main build shares code into chunks. Both
+  files keep fixed names, because a worker's scope is its folder and the browser compares its
+  bytes to see a change. The worker imports only `pushNotification.ts`, which imports only
+  `alertWords.ts`; keep what it imports that small. The manifest's colors come from
+  `PALETTE` (`DESIGN.md`, "Player page (phone)").
+- **`tsconfig.worker.json`.** The worker's files are checked with the `WebWorker` types and
+  excluded from the app's `tsconfig.json`, because the `WebWorker` and `DOM` libraries
+  declare the same globals differently and can't share one program.
+- **Icons.** `packages/client/public/icons` holds `icon-192.png`, `icon-512.png`,
+  `icon-maskable-512.png`, and `apple-touch-icon.png`. `node tools/make-icons.ts` makes them
+  from `assets/logo/icon.svg` on the light `background.default`, using Chromium through
+  Playwright (`packages/core` depends on it; run `pnpm --filter @coliseumgrid/core exec
+  playwright install chromium` once). Run it by hand when the logo or the palette changes,
+  and commit the PNGs. Vite copies `public/` to the site root as is.
+- **Testing push.** `pnpm dev` has a manifest but no worker, and push needs HTTPS and the
+  server's key, so the page never offers it there. Try it on a production build (`pnpm build`,
+  then the server in online mode with `COLISEUMGRID_PUSH_SUBJECT`) behind HTTPS with a
+  certificate the phone trusts (see "Docker" for the proxy, and `PLAYTEST.md`, "Phones, over
+  HTTPS"). The server speaks plain HTTP, so it counts a request as HTTPS only behind the proxy
+  (`TRUSTED_PROXY` set, and the proxy sending `X-Forwarded-Proto: https`); a direct
+  `localhost` request never gets a push key. The tests use a fake sender and fake keys (`push.send`,
+  `push.loadKeys` in `buildApp`).
+- **Phone page tests.** The words (`phoneWords.ts`), alert rules (`alerts.ts`), and push logic
+  (`pushClient.ts`, `pushNotification.ts`) are plain functions, tested without a DOM. The
+  push client reads the browser's globals when called, not when loaded, so tests stub them.
+
 ### Client screens and the API
 
 How the client talks to the server (`packages/client/src`).
@@ -130,7 +194,7 @@ How the client talks to the server (`packages/client/src`).
 - **The join address.** The pairing panel builds it from `window.location.origin`. On `localhost`
   no other screen can reach that, so the panel asks the host to type the laptop's network
   address; the server doesn't report one.
-- **QR codes.** `lean-qr` makes one SVG path (`pairing.ts`, `pages/host/JoinQr.tsx`). The code is
+- **QR codes.** `lean-qr` makes one SVG path (`pairing.ts`, `components/QrCode.tsx`). The code is
   always dark on light, in both color modes.
 - **Screens in tests.** Client tests need no DOM, so the pure parts are in `api/live.ts` and
   `pairing.ts`. Screens are checked with Playwright against `packages/client/dist`, with `/api`
@@ -234,9 +298,9 @@ The rules are in `PLAN.md`, section 5 and "Heats API". These are the facts a cha
 | Path | What it holds |
 |---|---|
 | `packages/core` | `@coliseumgrid/core`: rules shared by the browser and the server (see `PLAN.md` section 9): the seeded random source, handles and the vulgarity filter, PINs, join codes, bracket seeding, the station queue, tie ranking, heats (`heats.ts`), and the API types. |
-| `packages/server` | `@coliseumgrid/server`: `src/app.ts` builds the Fastify app (`buildApp`), `src/config.ts` reads the settings, `src/main.ts` starts it, `src/database.ts` holds the schema, `src/players-routes.ts` the players API, `src/pin-hash.ts` PIN and password hashing (scrypt), `src/client-ip.ts` and `src/rate-limit.ts` the client address and the guessing limits, `src/access.ts`, `src/host-routes.ts`, `src/devices.ts`, `src/host-store.ts`, `src/events.ts`, and `src/live.ts` host sign-in, pairing, and live updates. The bracket files are `src/bracket-engine.ts` (a bracket's state and each change to it), `src/bracket-library.ts` (the only file that calls brackets-manager), `src/bracket-store.ts` (its tables), `src/bracket-routes.ts` (the bracket API), `src/write-chain.ts` (one write at a time), and `src/event-players.ts` (who is in the event). The group files are `src/heat-engine.ts` (a group's state and each change to it), `src/heat-store.ts` (its tables), `src/heat-routes.ts` (the groups API), and `src/competition.ts` (one competition per event, for brackets and groups). |
-| `packages/client` | `@coliseumgrid/client`: Vite, React, and MUI. `src/theme/` holds the palette and the theme, `src/pages/` the Host (`/host`), Sign-up (`/signup`), and Display (`/display`) screens, `src/components/` shared pieces (`useNow.ts` is the timer hook), `src/api/` the calls (`bracket.ts` for brackets, `heats.ts` for groups), `src/pages/host/` and `src/pages/display/` the bracket and group pieces of the Host and the TV, `src/heatsWords.ts` and `src/handles.ts` the words and handle lists both screens read, `test/` the Vitest tests. `/` is the join screen and `/host` is the host's entry; an unknown path goes to `/`. |
-| `tools/` | Scripts run by hand or in CI, type-checked by `tools/tsconfig.json`. |
+| `packages/server` | `@coliseumgrid/server`: `src/app.ts` builds the Fastify app (`buildApp`), `src/config.ts` reads the settings, `src/main.ts` starts it, `src/database.ts` holds the schema, `src/players-routes.ts` the players API, `src/pin-hash.ts` PIN and password hashing (scrypt), `src/client-ip.ts` and `src/rate-limit.ts` the client address and the guessing limits, `src/access.ts`, `src/host-routes.ts`, `src/devices.ts`, `src/host-store.ts`, `src/events.ts`, and `src/live.ts` host sign-in, pairing, and live updates. The bracket files are `src/bracket-engine.ts` (a bracket's state and each change to it), `src/bracket-library.ts` (the only file that calls brackets-manager), `src/bracket-store.ts` (its tables), `src/bracket-routes.ts` (the bracket API), `src/write-chain.ts` (one write at a time), and `src/event-players.ts` (who is in the event). The group files are `src/heat-engine.ts` (a group's state and each change to it), `src/heat-store.ts` (its tables), `src/heat-routes.ts` (the groups API), and `src/competition.ts` (one competition per event, for brackets and groups, and the kept answer the phones read). The phone files are `src/phone-routes.ts`, `src/phones.ts`, `src/follow-codes.ts`, `src/pin-guard.ts` (the one PIN check), `src/push-notify.ts`, `src/push-subscriptions.ts`, `src/web-push.ts` (the sender on `node:crypto`), and `src/vapid-keys.ts`. |
+| `packages/client` | `@coliseumgrid/client`: Vite, React, and MUI. `src/theme/` holds the palette and the theme, `src/pages/` the Host (`/host`), Sign-up (`/signup`), and Display (`/display`) screens, `src/components/` shared pieces (`useNow.ts` is the timer hook), `src/api/` the calls (`bracket.ts` for brackets, `heats.ts` for groups), `src/pages/host/` and `src/pages/display/` the bracket and group pieces of the Host and the TV, `src/heatsWords.ts` and `src/handles.ts` the words and handle lists both screens read, `test/` the Vitest tests. `src/pages/phone/` the player page at `/follow` (cards, alerts, the push control and its client), `src/worker/` the push service worker (checked by `tsconfig.worker.json`), `public/icons/` the Home Screen icons, `vite.push-assets.ts` the plugin that builds the worker and the manifest. `/` is the join screen and `/host` is the host's entry; an unknown path goes to `/`. |
+| `tools/` | Scripts run by hand or in CI, type-checked by `tools/tsconfig.json`. `make-icons.ts` makes the Home Screen icons (see "Phones and push"). |
 | `docs/` | The docs listed in `DOC-STYLE.md`, "Where things go". |
 
 ## TypeScript
