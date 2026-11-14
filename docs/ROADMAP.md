@@ -59,7 +59,7 @@ Acceptance checks:
 - A late player plays the same number of heats as everyone else, and no heat already run or
   called changes. A late join is refused when no round 1 heat is waiting with room, or round 1
   is finished.
-- Ties are settled by the rule in `PLAN.md`, "Ties": one tie-break race among the players
+- Ties are settled by the rule in `PLAN.md`, "Ties": one tie-break heat among the players
   level across the cut for the final, played again for whoever is still level. Ties of 2, 4,
   and 6 players settle.
 - Undo follows the M4 rules: undoing the newest result restores the answer exactly, and an

@@ -1,6 +1,6 @@
 import type { ApiErrorCode, HandleRefusal } from '@coliseumgrid/core';
 import { describe, expect, it } from 'vitest';
-import { ERROR_WORDS, GUESS_LIMIT_WORDS, HANDLE_REFUSAL_WORDS, failureWords, guessWords, isApiErrorCode, isHandleRefusal } from '../src/api/errors.ts';
+import { ERROR_WORDS, GROUP_RESULT_WORDS, GUESS_LIMIT_WORDS, HANDLE_REFUSAL_WORDS, failureWords, guessWords, isApiErrorCode, isHandleRefusal } from '../src/api/errors.ts';
 
 // A Record over the union makes these lists fail to compile when core adds a code the
 // screens have no words for.
@@ -47,6 +47,19 @@ describe('error words', () => {
   it.each(Object.keys(REFUSALS) as HandleRefusal[])('has words for the refusal %s', (reason) => {
     expect(failureWords({ error: 'refused', reason }).length).toBeGreaterThan(0);
     expect(isHandleRefusal(reason)).toBe(true);
+  });
+
+  it('words the merge refusal for a finished bracket or groups too', () => {
+    expect(failureWords({ error: 'in-bracket' })).toBe('That player is in the bracket or groups. Delete it to merge them.');
+  });
+
+  it('gives recording a group its own words for a group that is gone', () => {
+    for (const error of ['not-found', 'not-on-station'] as const) {
+      expect(failureWords({ error }, GROUP_RESULT_WORDS)).toBe("That group isn't being played anymore.");
+    }
+    // The players routes keep the standard words, and other codes fall back to them.
+    expect(failureWords({ error: 'not-found' })).toBe("That player isn't there anymore.");
+    expect(failureWords({ error: 'bad-request' }, GROUP_RESULT_WORDS)).toBe('Something went wrong. Try again.');
   });
 
   it('has words for a call that got no usable answer', () => {

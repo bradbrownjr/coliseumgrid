@@ -101,19 +101,23 @@ export async function registerBracketRoutes(app: FastifyInstance, options: Brack
 
   /**
    * Runs an engine change on the current bracket, stores it, and answers `{ bracket }`, or
-   * 404 `no-bracket` when the event has none. `statuses` maps the engine's codes.
+   * 404 `no-bracket` when the event has none. `statuses` maps the engine's codes. `saved` runs
+   * on the chain right after the save, for what must follow it in order.
    */
   const change = (
     reply: FastifyReply,
     work: (state: BracketState, handles: HandleLookup) => Promise<EngineAnswer>,
     statuses: Record<string, number>,
+    saved?: () => void,
   ): Promise<FastifyReply | BracketNowAnswer> =>
     chain.run(async () => {
       const found = current();
       if (!found) return fail(reply, 404, 'no-bracket');
       const answer = await work(found.state, handleLookup());
       if (!answer.ok) return refuse(reply, answer.error, statuses);
-      return { bracket: commit(found.eventId, answer) };
+      const bracket = commit(found.eventId, answer);
+      saved?.();
+      return { bracket };
     });
 
   app.get<{ Reply: BracketAnswer | ApiError }>(
@@ -160,10 +164,10 @@ export async function registerBracketRoutes(app: FastifyInstance, options: Brack
         // The event is named now if the host hasn't yet, so the bracket has one to belong to.
         const { id, event, created } = events.ensureCurrent();
         if (created) hub.broadcast({ type: 'event', event });
-        // A player the host picked from "Not signed up" is here now, so the event lists them.
-        for (const playerId of playerIds) eventPlayers.add(playerId);
         // Finished heats the event had are gone with it, so the screens that showed them reload.
         if (competition.startBracket(id, answer.state)) hub.broadcast({ type: 'heats' });
+        // A player the host picked from "Not signed up" is here now, so the event lists them.
+        for (const playerId of playerIds) eventPlayers.add(playerId);
         hub.broadcast({ type: 'bracket' });
         return reply.code(201).send({ bracket: answer.bracket });
       }),
@@ -235,16 +239,14 @@ export async function registerBracketRoutes(app: FastifyInstance, options: Brack
         },
       },
     },
-    async (request, reply) => {
-      const answer = await change(
+    async (request, reply) =>
+      change(
         reply,
         (state, handles) => joinLate(state, request.body.playerId, handles),
         { 'not-found': 404, 'late-closed': 409, 'already-in': 409 },
-      );
-      // A late player is here now, so the event lists them.
-      if ('bracket' in answer) eventPlayers.add(request.body.playerId);
-      return answer;
-    },
+        // A late player is here now, so the event lists them, once the bracket is saved.
+        () => void eventPlayers.add(request.body.playerId),
+      ),
   );
 
   app.post<{ Reply: BracketNowAnswer | ApiError }>(

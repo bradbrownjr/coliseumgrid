@@ -200,12 +200,19 @@ The rules are in `PLAN.md`, section 5 and "Heats API". These are the facts a cha
   and touches no database; the route passes in the time and the new result's id.
 - **The engine is synchronous.** A call finishes before the next one starts, so the write
   chain matters only against the bracket engine, whose writes await `brackets-manager`. Heat
-  routes run on the chain too (`heat-routes.ts`).
+  routes run on the chain too (`heat-routes.ts`). A route that lists a player in the event
+  (`eventPlayers.add`) does it inside the chained task, after the store save, in both route
+  files.
 - **Heat ids.** A round heat is `round * 100 + number` (`ROUND_ID_STEP`). A round has at most
   8 heats (32 players in groups of 4), so round ids stay under 400. Tie-break heats start at
   1000 (`TIE_BREAK_HEAT_BASE`) and take their id from their place in the tie-break list. The
   final is 2000 (`FINAL_HEAT_ID`). The list only grows at the end or is cut back from the end,
   so an id never names two heats.
+- **A late join's `step` is a record only.** `HeatLateJoin.step` is stored and moved back when
+  an undo removes an earlier log entry, but `rebuild` doesn't read it. A join is accepted only
+  into a heat that was never called, so seating the player from step 0 gives the same queue,
+  scores, and rounds as seating them at `step`. Brackets differ: their queue and late-join
+  check do read steps.
 - **Only qualifying heats score.** `scoreHeats` counts qualifying heats alone, so tie-break
   heats and the final add no points and don't count toward `heatsPlayed`.
 - **One competition per event** is in `competition.ts`. `running` checks the bracket and the
@@ -215,7 +222,7 @@ The rules are in `PLAN.md`, section 5 and "Heats API". These are the facts a cha
 - **`inTransaction` nests through savepoints.** Inside another transaction it runs as
   `SAVEPOINT nested_N`. So `heat-store.save` and `bracket-store.save` can run inside
   `startHeats` or `startBracket`, and the swap is all or nothing.
-- **Shared words.** `heatsWords.ts` (the cut line, the tie sentence, and the "no results yet"
+- **Shared words.** `heatsWords.ts` (the cut line and its "Top N go to the final" label, the tie sentence, and the "no results yet"
   check) and `handles.ts` (the handle list) are read by the host (`pages/host/groupWords.ts`,
   `GroupsBody.tsx`) and the Display (`HeatsScreen.tsx`). Change them once, there.
 - **The store rewrites a run whole.** `heat-store.save` rewrites all of a run's rows in one

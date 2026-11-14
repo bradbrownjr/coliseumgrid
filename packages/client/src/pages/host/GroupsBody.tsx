@@ -1,16 +1,17 @@
 import type { Heat, Heats, Player } from '@coliseumgrid/core';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { GROUP_RESULT_WORDS } from '../../api/errors.ts';
 import { recordHeat, startHeatTieBreak, undoHeat } from '../../api/heats.ts';
 import { useNow } from '../../components/useNow.ts';
 import { heatCutAfter, heatTieMessage } from '../../heatsWords.ts';
 import { TieNotices } from './BracketLists.tsx';
-import { doneHeats, groupsSummary, heatTitle, orderWords, phaseWords, savedWords, showStandings, showsPoints } from './groupWords.ts';
+import { doneHeats, groupsSummary, heatOnStation, heatTitle, orderWords, phaseWords, savedWords, showStandings, showsPoints } from './groupWords.ts';
 import { GroupResults, GroupStandings, UpNextGroups } from './GroupLists.tsx';
 import { GroupStations } from './GroupStations.tsx';
 import { RecordDialog } from './RecordDialog.tsx';
-import { useWriter, type Say } from './useWriter.ts';
+import { STILL_SAVING, useWriter, type Say } from './useWriter.ts';
 
 interface GroupsBodyProps {
   heats: Heats;
@@ -26,9 +27,18 @@ interface GroupsBodyProps {
  * only shows them (docs/PLAN.md, "Heats API").
  */
 export function GroupsBody({ heats, apply, reload, say }: GroupsBodyProps) {
-  const { busy, run } = useWriter(apply, reload, say);
+  const { busy, run, isWorking } = useWriter(apply, reload, say);
   const [recording, setRecording] = useState<Heat | null>(null);
   const now = useNow(heats.stations.some((station) => station.heat !== null));
+
+  // The snackbar's Undo works while the dialog is open, and it can take back the round the open
+  // group belongs to. The dialog closes with the group, so Save never goes to a group that is gone.
+  const gone = recording !== null && !heatOnStation(heats, recording.id);
+  useEffect(() => {
+    if (!gone) return;
+    setRecording(null);
+    say("That group isn't on a station anymore.");
+  }, [gone, say]);
 
   const undo = (resultId: number, message: string) =>
     run(
@@ -38,11 +48,17 @@ export function GroupsBody({ heats, apply, reload, say }: GroupsBodyProps) {
     );
 
   const save = (heat: Heat, order: Player[]) => {
+    // While another change is on its way, keep the dialog open with the order the host entered.
+    if (isWorking()) {
+      say(STILL_SAVING);
+      return;
+    }
     setRecording(null);
     void run(
       () => recordHeat(heat.id, order.map((player) => player.id)),
       (data) => data.heats,
       (data) => say(savedWords(heat, heats.heats), () => void undo(data.resultId, 'Result undone')),
+      GROUP_RESULT_WORDS,
     );
   };
 
@@ -54,7 +70,7 @@ export function GroupsBody({ heats, apply, reload, say }: GroupsBodyProps) {
     run(
       () => startHeatTieBreak(),
       (data) => data.heats,
-      () => say('Tie-break races are on the stations'),
+      () => say('Tie-break groups are on the stations'),
     );
 
   return (
@@ -76,7 +92,7 @@ export function GroupsBody({ heats, apply, reload, say }: GroupsBodyProps) {
         <GroupStandings rows={heats.standings} finished={heats.finished} finalSize={heats.finalSize} cutAfter={heatCutAfter(heats)} points={showsPoints(heats)} />
       )}
       <GroupResults done={doneHeats(heats)} all={heats.heats} busy={busy} onUndo={undoHeatResult} />
-      {recording && (
+      {recording && !gone && (
         <RecordDialog heat={recording} races={heats.races} heats={heats.heats} onSave={save} onClose={() => setRecording(null)} />
       )}
     </Stack>

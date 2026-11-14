@@ -86,12 +86,14 @@ export async function registerHeatRoutes(app: FastifyInstance, options: HeatRout
 
   /**
    * Runs an engine change on the current heats, stores it, and answers `{ heats }`, or 404
-   * `no-heats` when the event has none. `statuses` maps the engine's codes.
+   * `no-heats` when the event has none. `statuses` maps the engine's codes. `saved` runs on
+   * the chain right after the save, for what must follow it in order.
    */
   const change = (
     reply: FastifyReply,
     work: (state: HeatState, handles: HandleLookup) => HeatEngineAnswer,
     statuses: Record<string, number>,
+    saved?: () => void,
   ): Promise<FastifyReply | HeatsNowAnswer> =>
     chain.run(() => {
       const found = current();
@@ -99,6 +101,7 @@ export async function registerHeatRoutes(app: FastifyInstance, options: HeatRout
       const answer = work(found.state, competition.handles());
       if (!answer.ok) return refuse(reply, answer.error, statuses);
       store.save(found.eventId, answer.state);
+      saved?.();
       hub.broadcast({ type: 'heats' });
       return { heats: answer.heats };
     });
@@ -146,10 +149,10 @@ export async function registerHeatRoutes(app: FastifyInstance, options: HeatRout
         // The event is named now if the host hasn't yet, so the heats have one to belong to.
         const { id, event, created } = events.ensureCurrent();
         if (created) hub.broadcast({ type: 'event', event });
-        // A player the host picked from "Not signed up" is here now, so the event lists them.
-        for (const playerId of playerIds) eventPlayers.add(playerId);
         // A finished bracket the event had is gone with it, so the screens that showed it reload.
         if (competition.startHeats(id, answer.state)) hub.broadcast({ type: 'bracket' });
+        // A player the host picked from "Not signed up" is here now, so the event lists them.
+        for (const playerId of playerIds) eventPlayers.add(playerId);
         hub.broadcast({ type: 'heats' });
         return reply.code(201).send({ heats: answer.heats });
       }),
@@ -220,16 +223,14 @@ export async function registerHeatRoutes(app: FastifyInstance, options: HeatRout
         },
       },
     },
-    async (request, reply) => {
-      const answer = await change(reply, (state, handles) => joinHeatsLate(state, request.body.playerId, handles), {
-        'not-found': 404,
-        'late-closed': 409,
-        'already-in': 409,
-      });
-      // A late player is here now, so the event lists them.
-      if ('heats' in answer) eventPlayers.add(request.body.playerId);
-      return answer;
-    },
+    async (request, reply) =>
+      change(
+        reply,
+        (state, handles) => joinHeatsLate(state, request.body.playerId, handles),
+        { 'not-found': 404, 'late-closed': 409, 'already-in': 409 },
+        // A late player is here now, so the event lists them, once the heats are saved.
+        () => void eventPlayers.add(request.body.playerId),
+      ),
   );
 
   app.post<{ Reply: HeatsNowAnswer | ApiError }>(

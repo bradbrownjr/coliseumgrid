@@ -20,12 +20,12 @@ import { joinHandles } from '../../handles.ts';
 import { noResultsYet } from '../../heatsWords.ts';
 import { placeWords, stationWords } from './bracketWords.ts';
 
-/** "Round 2, group 3", "Final", "Tie-break race". Tie-break heats are numbered only when a pass has more than one. */
+/** "Round 2, group 3", "Final", "Tie-break group". Tie-break heats are numbered only when a pass has more than one. */
 export function heatTitle(heat: Pick<Heat, 'kind' | 'round' | 'number'>, all: readonly Pick<Heat, 'kind' | 'round'>[] = []): string {
   if (heat.kind === 'final') return 'Final';
   if (heat.kind === 'round') return `Round ${heat.round}, group ${heat.number}`;
   const sameRound = all.filter((other) => other.kind === 'tie-break' && other.round === heat.round).length;
-  const name = sameRound > 1 ? `Tie-break race ${heat.number}` : 'Tie-break race';
+  const name = sameRound > 1 ? `Tie-break group ${heat.number}` : 'Tie-break group';
   return heat.round > 1 ? `${name}, try ${heat.round}` : name;
 }
 
@@ -44,6 +44,15 @@ export function doneHeats(heats: Heats): Heat[] {
   return heats.heats.filter((heat) => heat.status === 'done' && heat.resultId !== null).sort((a, b) => (b.resultId ?? 0) - (a.resultId ?? 0));
 }
 
+/**
+ * True while the heat is on a station in this answer: the only time "Record result" can work.
+ * Taking back a result can remove a group the host has open, so the record dialog checks this
+ * on every answer (the server refuses it with 404 `not-found` or 409 `not-on-station`).
+ */
+export function heatOnStation(heats: Pick<Heats, 'stations'>, heatId: number): boolean {
+  return heats.stations.some((station) => station.heat?.id === heatId);
+}
+
 /** The ids of every player in the groups, for "Add to group" on the players still out. */
 export function playersInHeats(heats: Heats): Set<number> {
   const ids = new Set<number>();
@@ -60,19 +69,24 @@ export function phaseWords(heats: Pick<Heats, 'finished' | 'round' | 'rounds' | 
   return heats.ties.length > 0 ? 'Tie-break' : 'Final';
 }
 
-/** "1 race", "3 races". */
-export function raceCount(races: number): string {
-  return races === 1 ? '1 race' : `${races} races`;
+/**
+ * "1 game", "3 games". A game is a race or a match: a Smash free-for-all has no races, which
+ * is why a heat is a "Group" on screen (docs/DOC-STYLE.md, "Tournament words on screen").
+ */
+export function gameCount(games: number): string {
+  return games === 1 ? '1 game' : `${games} games`;
 }
 
-/** The start dialog's label for the races setting: the host records one order per group. */
-export function racesWords(races: RacesPerHeat): string {
-  return races === 1 ? 'Each group plays 1 race. Record the order they finish.' : `Each group plays ${races} races. Record the cup's final order.`;
+/** The start dialog's words for the games setting: the host records one order per group. */
+export function gamesWords(games: RacesPerHeat): string {
+  return games === 1
+    ? 'Each group plays 1 game, a race or a match. Record the order they finish.'
+    : `Each group plays ${games} games, each a race or a match. Record the order after all of them.`;
 }
 
 /** What the record dialog asks the host to tap. */
-export function recordHelp(races: RacesPerHeat): string {
-  return races === 1 ? 'Tap the players in the order they finished.' : `Tap the players in their order after all ${races} races.`;
+export function recordHelp(games: RacesPerHeat): string {
+  return games === 1 ? 'Tap the players in the order they finished.' : `Tap the players in their order after all ${games} games.`;
 }
 
 /** The rounds line: with 2 to 4 players there are no rounds. */
@@ -123,15 +137,10 @@ export function pointsWords(points: readonly number[]): string {
   return points.join(', ');
 }
 
-/** The line under the section title: kind, stations, races, and points. Only the final scores places, so 2 to 4 players have no points. */
+/** The line under the section title: kind, stations, games, and points. Only the final scores places, so 2 to 4 players have no points. */
 export function groupsSummary(heats: Pick<Heats, 'stations' | 'races' | 'points' | 'rounds'>): string {
-  const line = `Races and free-for-all, ${stationWords(heats.stations.length)}. Each group plays ${raceCount(heats.races)}.`;
+  const line = `Races and free-for-all, ${stationWords(heats.stations.length)}. Each group plays ${gameCount(heats.races)}.`;
   return heats.rounds === 0 ? line : `${line} Points for 1st to 4th: ${pointsWords(heats.points)}.`;
-}
-
-/** The cut line in the standings: "Top 4 go to the final". */
-export function cutWords(finalSize: number): string {
-  return `Top ${finalSize} go to the final`;
 }
 
 // What the record dialog shows while the host taps players in order (docs/PLAN.md, "Races and

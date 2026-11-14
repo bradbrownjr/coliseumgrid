@@ -2,7 +2,6 @@ import { DEFAULT_POINTS, isPointsTable, type Heat, type Heats, type Player } fro
 import { describe, expect, it } from 'vitest';
 import { stationWords } from '../src/pages/host/bracketWords.ts';
 import {
-  cutWords,
   doneHeats,
   groupSizesWords,
   groupsProblem,
@@ -15,8 +14,9 @@ import {
   phaseWords,
   playersInHeats,
   pointsProblem,
-  raceCount,
-  racesWords,
+  gameCount,
+  gamesWords,
+  heatOnStation,
   recordHelp,
   roundsWords,
   savedWords,
@@ -59,16 +59,16 @@ describe('heatTitle', () => {
   it('calls the final "Final"', () => {
     expect(heatTitle(heat(2000, { kind: 'final', round: 1, number: 1 }))).toBe('Final');
   });
-  it('calls a lone tie-break "Tie-break race" and numbers them when a pass has several', () => {
+  it('calls a lone tie-break "Tie-break group" and numbers them when a pass has several', () => {
     const one = heat(1000, { kind: 'tie-break', round: 1, number: 1 });
-    expect(heatTitle(one, [one])).toBe('Tie-break race');
+    expect(heatTitle(one, [one])).toBe('Tie-break group');
     const two = heat(1001, { kind: 'tie-break', round: 1, number: 2 });
-    expect(heatTitle(one, [one, two])).toBe('Tie-break race 1');
-    expect(heatTitle(two, [one, two])).toBe('Tie-break race 2');
+    expect(heatTitle(one, [one, two])).toBe('Tie-break group 1');
+    expect(heatTitle(two, [one, two])).toBe('Tie-break group 2');
   });
   it('says which try a later tie-break pass is', () => {
     const again = heat(1100, { kind: 'tie-break', round: 2, number: 1 });
-    expect(heatTitle(again, [again])).toBe('Tie-break race, try 2');
+    expect(heatTitle(again, [again])).toBe('Tie-break group, try 2');
   });
   it('words the snackbar after a save', () => {
     expect(savedWords(heat(1), [])).toBe('Saved: Round 1, group 1');
@@ -166,11 +166,28 @@ describe('start words', () => {
     expect(roundsWords(2, 5)).toBe('Everyone plays 2 rounds of groups. Then the top 4 play the final.');
     expect(roundsWords(1, 5)).toBe('Everyone plays 1 round of groups. Then the top 4 play the final.');
   });
-  it('says what races per group means', () => {
-    expect(racesWords(1)).toBe('Each group plays 1 race. Record the order they finish.');
-    expect(racesWords(3)).toBe("Each group plays 3 races. Record the cup's final order.");
+  it('says what games per group means: a race or a match, never only a race', () => {
+    expect(gamesWords(1)).toBe('Each group plays 1 game, a race or a match. Record the order they finish.');
+    expect(gamesWords(3)).toBe('Each group plays 3 games, each a race or a match. Record the order after all of them.');
     expect(recordHelp(1)).toBe('Tap the players in the order they finished.');
-    expect(recordHelp(4)).toBe('Tap the players in their order after all 4 races.');
+    expect(recordHelp(4)).toBe('Tap the players in their order after all 4 games.');
+  });
+});
+
+describe('heatOnStation', () => {
+  const station = (number: number, held: Heat | null) => ({ number, heat: held, calledAt: held ? '2027-07-10T14:00:00.000Z' : null });
+  it('is true for a heat on any station', () => {
+    const answer = heats({ stations: [station(1, heat(101)), station(2, heat(102))] });
+    expect(heatOnStation(answer, 101)).toBe(true);
+    expect(heatOnStation(answer, 102)).toBe(true);
+  });
+  it('is false for a heat that left, was never called, or is in Up next', () => {
+    const answer = heats({ stations: [station(1, heat(101)), station(2, null)], upNext: [heat(103)] });
+    expect(heatOnStation(answer, 102)).toBe(false);
+    expect(heatOnStation(answer, 103)).toBe(false);
+  });
+  it('is false when there are no stations', () => {
+    expect(heatOnStation(heats(), 101)).toBe(false);
   });
 });
 
@@ -188,20 +205,19 @@ describe('words for what is running', () => {
   it('words an order', () => {
     expect(orderWords([zap, kai, blaze])).toBe('1st Zap, 2nd Kai, 3rd Blaze');
   });
-  it('counts stations, races, and the cut', () => {
+  it('counts stations and games', () => {
     expect(stationWords(1)).toBe('1 station');
     expect(stationWords(2)).toBe('2 stations');
-    expect(raceCount(1)).toBe('1 race');
-    expect(raceCount(3)).toBe('3 races');
-    expect(cutWords(4)).toBe('Top 4 go to the final');
+    expect(gameCount(1)).toBe('1 game');
+    expect(gameCount(3)).toBe('3 games');
   });
   it('summarizes the groups', () => {
     const answer = heats({ stations: [{ number: 1, heat: null, calledAt: null }, { number: 2, heat: null, calledAt: null }], races: 2 });
-    expect(groupsSummary(answer)).toBe('Races and free-for-all, 2 stations. Each group plays 2 races. Points for 1st to 4th: 4, 3, 2, 1.');
+    expect(groupsSummary(answer)).toBe('Races and free-for-all, 2 stations. Each group plays 2 games. Points for 1st to 4th: 4, 3, 2, 1.');
   });
   it('leaves the points out when 2 to 4 players play only the final', () => {
     const answer = heats({ rounds: 0, races: 1, stations: [{ number: 1, heat: null, calledAt: null }] });
-    expect(groupsSummary(answer)).toBe('Races and free-for-all, 1 station. Each group plays 1 race.');
+    expect(groupsSummary(answer)).toBe('Races and free-for-all, 1 station. Each group plays 1 game.');
   });
   it('names the phase', () => {
     expect(phaseWords(heats({ round: 2 }))).toBe('Round 2 of 2');

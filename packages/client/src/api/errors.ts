@@ -45,7 +45,7 @@ export const ERROR_WORDS: Record<ClientErrorCode, string> = {
   'nothing-to-undo': 'There is nothing to undo.',
   'late-closed': "It's too late to add a player.",
   'already-in': 'That player is already in.',
-  'in-bracket': 'That player is playing right now. Delete the bracket or groups to merge them.',
+  'in-bracket': 'That player is in the bracket or groups. Delete it to merge them.',
   'no-tie': 'Nobody is tied.',
   'no-bracket': "There's no bracket right now.",
   'no-heats': 'No groups are running.',
@@ -60,10 +60,25 @@ export function isHandleRefusal(value: unknown): value is HandleRefusal {
   return typeof value === 'string' && Object.hasOwn(HANDLE_REFUSAL_WORDS, value);
 }
 
-/** The text for a failed call. A refusal with a known reason gets the reason's words. */
-export function failureWords(failure: Pick<Failure, 'error' | 'reason'>): string {
+/** Words that replace `ERROR_WORDS` for one call, where a code means something else there. */
+export type WordOverrides = Partial<Record<ClientErrorCode, string>>;
+
+/**
+ * Recording a group's result: its 404 `not-found` and 409 `not-on-station` mean the group is
+ * no longer on a station, not a missing player (`ERROR_WORDS` is for the players routes).
+ */
+export const GROUP_RESULT_WORDS: WordOverrides = {
+  'not-found': "That group isn't being played anymore.",
+  'not-on-station': "That group isn't being played anymore.",
+};
+
+/**
+ * The text for a failed call. A refusal with a known reason gets the reason's words. `overrides`
+ * are the words of one call, tried first.
+ */
+export function failureWords(failure: Pick<Failure, 'error' | 'reason'>, overrides: WordOverrides = {}): string {
   if (failure.error === 'refused' && failure.reason) return HANDLE_REFUSAL_WORDS[failure.reason];
-  return ERROR_WORDS[failure.error];
+  return overrides[failure.error] ?? ERROR_WORDS[failure.error];
 }
 
 /**

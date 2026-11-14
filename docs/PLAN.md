@@ -295,7 +295,9 @@ Three formats, all run by `brackets-manager`. Checked against version 1.11.1 on 
 Planned in M5 (2026-11-13). The same format runs Mario Kart races and 4-player Smash
 free-for-alls: a **heat** is a group of 2 to 4 players who play together on one station, and
 each finishing place earns points. On screen a heat is a "Group" (Brad, 2026-11-13), because
-Smash has no races. The rules are in `packages/core/src/heats.ts`.
+Smash has no races. For the same reason the setting reads "Games in each group" on screen
+(a game is a race or a match), and a tie-break heat is a "Tie-break group". The format's name,
+"Races and free-for-all", stays. The rules are in `packages/core/src/heats.ts`.
 
 | Setting | Range | Default |
 |---|---|---|
@@ -331,7 +333,7 @@ Smash has no races. The rules are in `packages/core/src/heats.ts`.
   (15, 12, 10, and down to 1); 4, 3, 2, 1 is the same idea sized for heats of 4. The table is
   checked by `isPointsTable`: 1st has to score at least 1, so winning a heat always counts.
 - **Recording** is once per heat (Brad, 2026-11-13): the host taps the players in finishing
-  order from the game's results screen after the cup. **Races per heat is a label**, like
+  order from the game's results screen after the cup. **Races per heat ("Games in each group" on screen) is a label**, like
   best of in a bracket. Entering every race would be 16 taps a heat.
 - **Fairness.** Everyone plays the same number of qualifying heats, `rounds`, before the
   final, late players included (see "Late sign-up"). Tie-break heats score nothing.
@@ -351,7 +353,7 @@ Smash has no races. The rules are in `packages/core/src/heats.ts`.
   of one round don't depend on each other, so an older undo works within a round.
 
 With 32 players and 2 rounds there are 16 qualifying heats, then any tie-breaks and the
-final. The 4, 3, 2, 1 table gives many ties, so the cut often needs a tie-break race.
+final. The 4, 3, 2, 1 table gives many ties, so the cut often needs a tie-break heat.
 
 ### Ties
 
@@ -384,7 +386,7 @@ are the server's own matches (side `tie-break`), not the library's. The rules ar
 
 **Heats (M5).** Ties are played off only at the cut for the final. After the last
 qualifying round, players level on points who straddle 4th and 5th are listed in `ties`, and
-"Play tie-break" makes one tie-break race among only them; its finishing order settles their
+"Play tie-break" makes one tie-break heat among only them; its finishing order settles their
 order. More than 4 tied are split into heats by the group sizes rule and ordered by place in
 their tie-break heat (the 1st places level with each other, then the 2nd places), and whoever
 is still level across the cut plays again. Each pass leaves at most one player from each heat
@@ -401,7 +403,7 @@ whose page was unreachable that day and is cited from the earlier research):
   the end of a game, "an additional one (1) race will be set up" and the team with more
   points in it wins
   (<http://help.playvs.com/en/articles/5872507-playvs-scholastic-mario-kart-8-deluxe-rulebook>).
-  This is the model for the heat tie-break race.
+  This is the model for the heat tie-break.
 - SmashWiki, "Round Robin": a round robin may have no clear winner, and one way to settle it
   is to have the top two play one more set
   (<https://www.ssbwiki.com/Round_Robin>). This is the model for the tie-break round.
@@ -652,6 +654,11 @@ start at 1000 and the final is 2000.
 The four `POST` routes under `/api/heats/` answer 404 `no-heats` when the event has no heats.
 `stations` is 1 to 8, `races` 1 to 4, `rounds` 1 to 3, and `points` 4 whole numbers that pass
 `isPointsTable`. `playerIds` are 2 to 32 players; with 2 to 4, `rounds` is stored as 0.
+
+On the host screen, a refused result (404 `not-found`, 409 `not-on-station`) reads "That group
+isn't being played anymore." (`GROUP_RESULT_WORDS` in `api/errors.ts`; the same codes on the
+players routes keep their own words). The record panel also closes, with a snackbar line, as
+soon as an answer has its group off every station, such as after Undo on the snackbar.
 
 The heats answer is:
 

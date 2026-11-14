@@ -1,6 +1,6 @@
 import type { Heats, Player, TieNotice } from '@coliseumgrid/core';
 import { describe, expect, it } from 'vitest';
-import { cutAfter, heatCutAfter, heatTieMessage, noResultsYet } from '../src/heatsWords.ts';
+import { cutAfter, cutWords, heatCutAfter, heatTieMessage, noResultsYet } from '../src/heatsWords.ts';
 import { joinHandles } from '../src/handles.ts';
 import { showStandings } from '../src/pages/host/groupWords.ts';
 
@@ -57,13 +57,13 @@ describe('the tie notice', () => {
   it('words a tie by what is at stake', () => {
     const four: TieNotice = { place: 3, players: [3, 4, 5, 6].map((id) => player(id, `T${id}`)), started: false };
     const state = heats({ standings, ties: [four] });
-    expect(heatTieMessage(four, state)).toBe('T3, T4, T5, and T6 are tied. 2 of them go to the final. Tie-break race coming up.');
-    expect(heatTieMessage({ ...four, started: true }, state)).toBe('T3, T4, T5, and T6 are tied. 2 of them go to the final. Playing the tie-break race.');
+    expect(heatTieMessage(four, state)).toBe('T3, T4, T5, and T6 are tied. 2 of them go to the final. Tie-break group coming up.');
+    expect(heatTieMessage({ ...four, started: true }, state)).toBe('T3, T4, T5, and T6 are tied. 2 of them go to the final. Playing the tie-break group.');
   });
   it('says "1 of them goes" for one spot', () => {
     const two: TieNotice = { place: 4, players: [player(4, 'Zap'), player(5, 'Kai')], started: false };
     const state = heats({ standings: [row(1, 1, 8), row(2, 2, 7), row(3, 3, 6), row(4, 4, 5), row(4, 5, 5)], ties: [two] });
-    expect(heatTieMessage(two, state)).toBe('Zap and Kai are tied. 1 of them goes to the final. Tie-break race coming up.');
+    expect(heatTieMessage(two, state)).toBe('Zap and Kai are tied. 1 of them goes to the final. Tie-break group coming up.');
   });
 });
 
@@ -76,5 +76,11 @@ describe('before the first result', () => {
   it('shows the host no standings until a group has a result', () => {
     expect(showStandings(heats({ standings: [row(1, 1, 0, 0), row(1, 2, 0, 0)] }))).toBe(false);
     expect(showStandings(heats({ standings: [row(1, 1, 4, 1), row(2, 2, 0, 0)] }))).toBe(true);
+  });
+});
+
+describe('cutWords', () => {
+  it('names the places that go to the final', () => {
+    expect(cutWords(4)).toBe('Top 4 go to the final');
   });
 });

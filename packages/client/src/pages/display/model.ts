@@ -371,7 +371,7 @@ export const heatStationCards = (stations: HeatStation[]): StationCard[] =>
 /** What a group is called on screen (docs/DOC-STYLE.md, "Tournament words on screen"). */
 export function heatLabel(heat: Heat): string {
   if (heat.kind === 'final') return 'Final';
-  if (heat.kind === 'tie-break') return 'Tie-break race';
+  if (heat.kind === 'tie-break') return 'Tie-break group';
   return `Group ${heat.number}`;
 }
 

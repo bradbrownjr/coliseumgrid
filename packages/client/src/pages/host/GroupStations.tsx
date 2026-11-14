@@ -11,7 +11,7 @@ import { heatTitle } from './groupWords.ts';
 
 interface GroupStationsProps {
   stations: HeatStation[];
-  /** Every heat made so far, to number the tie-break races. */
+  /** Every heat made so far, to number the tie-break groups. */
   heats: readonly Heat[];
   now: number;
   busy: boolean;

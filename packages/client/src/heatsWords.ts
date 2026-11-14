@@ -12,6 +12,9 @@ import { joinHandles } from './handles.ts';
 export const cutAfter = (rowCount: number, finalSize: number): number | null =>
   finalSize > 0 && finalSize < rowCount ? finalSize : null;
 
+/** The label on the cut line, on the host screen and the Display: "Top 4 go to the final". */
+export const cutWords = (finalSize: number): string => `Top ${finalSize} go to the final`;
+
 /** The row index of the first player in an open tie at the cut, or -1 when no tie is open. */
 function firstTiedIndex(heats: Heats): number {
   const tied = new Set(heats.ties.flatMap((tie) => tie.players.map((player) => player.id)));
@@ -34,11 +37,11 @@ export const noResultsYet = (heats: Heats): boolean =>
 
 /**
  * The one line a tie at the cut shows, worded by what is at stake: "Zap, Jett, Dash, and Jinx
- * are tied. 2 of them go to the final. Tie-break race coming up." The spots are the places the
+ * are tied. 2 of them go to the final. Tie-break group coming up." The spots are the places the
  * final has left after the players surely in (docs/PLAN.md, "Ties").
  */
 export function heatTieMessage(tie: TieNotice, heats: Heats): string {
-  const tail = tie.started ? 'Playing the tie-break race.' : 'Tie-break race coming up.';
+  const tail = tie.started ? 'Playing the tie-break group.' : 'Tie-break group coming up.';
   const tied = tie.players.map((player) => player.id);
   const first = heats.standings.findIndex((row) => tied.includes(row.player.id));
   const spots = heats.finalSize - first;

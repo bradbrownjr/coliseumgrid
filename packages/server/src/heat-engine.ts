@@ -81,6 +81,11 @@ export interface HeatResultRecord {
 /**
  * A player added after the start, into round 1 heat `heatId`. `step` is the number of log
  * entries when they joined. The heat's place in the queue doesn't change.
+ *
+ * `rebuild` never reads `step`: a join is only accepted into a heat that was never called, so
+ * putting the player in that heat from step 0 gives the same queue, scores, and rounds as
+ * putting them in at `step`. It is kept (and moved back when an undo removes an earlier log
+ * entry) as the record of when the player joined.
  */
 export interface HeatLateJoin {
   playerId: number;

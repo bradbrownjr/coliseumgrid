@@ -98,7 +98,7 @@ Why: the server's tests use made-up players and no screen. These use real phones
 and a TV, on the Unraid server.
 
 - Sign up 10 players on two phones or tablets. Start races and free-for-all on 2 stations,
-  with 2 rounds, 1 race in each group, and the default points. Does the dialog say "3 groups
+  with 2 rounds, 1 game in each group, and the default points. Does the dialog say "3 groups
   in round 1: 4, 3, and 3 players"? Do the first two groups go on the stations?
 - Record each group's cup order from the host's phone. Tap the players in finishing order.
   After one tap, does the panel ask "Who came 2nd?" and fill in the last player? Does Save
@@ -109,9 +109,9 @@ and a TV, on the Unraid server.
   at the front of Up next, while the groups on stations keep their stations and timers?
 - Make a tie at the cut. Try the default points first. If no tie comes up, start a new groups
   event with 1, 1, 1, 1 points, which makes ties likely. Does the banner say the tied players
-  are tied, how many go to the final, and that a tie-break race is coming? Is the cut line
+  are tied, how many go to the final, and that a tie-break group is coming? Is the cut line
   above the tied players, not under them?
-- Tap **Play tie-break**. Are the tie-break races on the stations, labelled "Tie-break race"?
+- Tap **Play tie-break**. Are the tie-break groups on the stations, labelled "Tie-break group"?
   Record one. Does the banner clear, and does the final show its four players?
 - Finish the final. Does the TV show "Final standings", with 1st, 2nd, and 3rd each in its own
   box? Is 1st in gold with the word "Winner"? Does no place in the top three share?

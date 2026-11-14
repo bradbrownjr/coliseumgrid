@@ -164,17 +164,18 @@ confirmation dialog is only for actions that can't be undone, like deleting a br
 - While a tie is open, **Play tie-break** starts its matches. While late sign-up is open,
   **Add to bracket** (or **Add to group**, when the event runs groups) is in a player's menu.
 - The start dialog's first choice is **Bracket** or **Races and free-for-all**. Groups add
-  **Races in each group** (1 to 4), **Rounds before the final** (1 to 3, or none with 2 to 4
+  **Games in each group** (1 to 4; a game is a race or a match), **Rounds before the final** (1 to 3, or none with 2 to 4
   players), and the points for 1st to 4th. **Use 4, 3, 2, 1** appears once the points change.
 - A group's station card shows its title, its players, a timer, and one **Record result**
   button. The record panel is centered and asks "Who came 1st?", then 2nd, and so on. The
   last player is filled in. **Start over** clears the taps. **Save** turns on once the order
-  is complete.
+  is complete. If an Undo takes the open group off its station, the panel closes and the
+  snackbar says "That group isn't on a station anymore."
 - Saving shows "Saved: Round 1, group 3" in the snackbar, with **Undo**. The Results list has
   its own **Undo** for every result, newest first.
 - The standings show points and groups played, with the line "Top 4 go to the final". A tie
   across that line gets a banner, worded by what is at stake: "Zap, Jett, Dash, and Jinx are
-  tied. 2 of them go to the final. Tie-break race coming up." It comes with **Play tie-break**.
+  tied. 2 of them go to the final. Tie-break group coming up." It comes with **Play tie-break**.
 
 ### Sign-up (tablet)
 
@@ -210,7 +211,7 @@ confirmation dialog is only for actions that can't be undone, like deleting a br
 - A tie shows as a banner: "Tie for 1st: Zap and Kai. Tie-break coming up."
 - A finished bracket shows the final standings, with the podium large.
 - **Groups.** The stations and "Up next" stay on the left. A station card shows the group's
-  title ("Group 2", "Final", or "Tie-break race") and its handles. The right side holds the
+  title ("Group 2", "Final", or "Tie-break group") and its handles. The right side holds the
   tie banner, then the standings, or the final.
 - Stations for groups are one column up to four on the TV, and two from five. On a laptop,
   one column for one or two stations, and two from three.

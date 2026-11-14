@@ -53,9 +53,9 @@ function heats(extra: Partial<Heats> = {}): Heats {
 const row = (place: number, id: number, points: number, heatsPlayed = 2) => ({ place, player: player(id), points, heatsPlayed });
 
 describe('what a group is called', () => {
-  it('says Group, Tie-break race, and Final, never heat', () => {
+  it('says Group, Tie-break group, and Final, never heat', () => {
     expect(heatLabel(group([1, 2, 3, 4], 'round', 3))).toBe('Group 3');
-    expect(heatLabel(group([1, 2], 'tie-break'))).toBe('Tie-break race');
+    expect(heatLabel(group([1, 2], 'tie-break'))).toBe('Tie-break group');
     expect(heatLabel(group([1, 2, 3, 4], 'final'))).toBe('Final');
   });
 });
@@ -71,7 +71,7 @@ describe('station cards', () => {
     const cards = heatStationCards(stations);
     expect(cards[0]).toMatchObject({ number: 1, note: 'Group 3', calledAt: '2027-01-01T00:00:00Z' });
     expect(cards[0]?.slots.map((slot) => slot.player?.handle)).toEqual(['P1', 'P2', 'P3', 'P4']);
-    expect(cards[1]?.note).toBe('Tie-break race');
+    expect(cards[1]?.note).toBe('Tie-break group');
   });
 
   it('leaves an idle station empty', () => {
@@ -149,15 +149,15 @@ describe('round and tie words', () => {
     const standings = [row(1, 1, 8), row(2, 2, 7), row(3, 3, 6), row(3, 4, 6), row(3, 5, 6), row(3, 6, 6), row(7, 7, 3)];
     const four: TieNotice = { place: 3, players: [3, 4, 5, 6].map((id) => player(id, `T${id}`)), started: false };
     const state = heats({ standings, ties: [four] });
-    expect(heatTieMessage(four, state)).toBe('T3, T4, T5, and T6 are tied. 2 of them go to the final. Tie-break race coming up.');
-    expect(heatTieMessage({ ...four, started: true }, state)).toBe('T3, T4, T5, and T6 are tied. 2 of them go to the final. Playing the tie-break race.');
+    expect(heatTieMessage(four, state)).toBe('T3, T4, T5, and T6 are tied. 2 of them go to the final. Tie-break group coming up.');
+    expect(heatTieMessage({ ...four, started: true }, state)).toBe('T3, T4, T5, and T6 are tied. 2 of them go to the final. Playing the tie-break group.');
   });
 
   it('says "1 of them goes" for one spot, and names no spots for a tie that does not reach the cut', () => {
     const standings = [row(1, 1, 8), row(2, 2, 7), row(3, 3, 6), row(4, 4, 5), row(4, 5, 5)];
     const two: TieNotice = { place: 4, players: [player(4, 'Zap'), player(5, 'Kai')], started: false };
-    expect(heatTieMessage(two, heats({ standings, ties: [two] }))).toBe('Zap and Kai are tied. 1 of them goes to the final. Tie-break race coming up.');
-    expect(heatTieMessage(two, heats({ standings: [], ties: [two] }))).toBe('Zap and Kai are tied. Tie-break race coming up.');
+    expect(heatTieMessage(two, heats({ standings, ties: [two] }))).toBe('Zap and Kai are tied. 1 of them goes to the final. Tie-break group coming up.');
+    expect(heatTieMessage(two, heats({ standings: [], ties: [two] }))).toBe('Zap and Kai are tied. Tie-break group coming up.');
   });
 
   it('says 1 point and 12 points', () => {

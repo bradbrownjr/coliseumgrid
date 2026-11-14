@@ -7,7 +7,7 @@ import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
 import { placeWords } from './bracketWords.ts';
-import { pointsProblem, racesWords, roundsWords } from './groupWords.ts';
+import { pointsProblem, gamesWords, roundsWords } from './groupWords.ts';
 
 const RACES: readonly RacesPerHeat[] = Array.from({ length: HEAT_RACES_MAX - HEAT_RACES_MIN + 1 }, (_, i) => (HEAT_RACES_MIN + i) as RacesPerHeat);
 const ROUNDS = Array.from({ length: HEAT_ROUNDS_MAX - HEAT_ROUNDS_MIN + 1 }, (_, i) => HEAT_ROUNDS_MIN + i);
@@ -23,7 +23,7 @@ interface GroupOptionsProps {
   onPoints: (points: string[]) => void;
 }
 
-/** Races per group, rounds, and the points table, for new groups (docs/PLAN.md, "Races and free-for-all"). */
+/** Games per group, rounds, and the points table, for new groups (docs/PLAN.md, "Races and free-for-all"). */
 export function GroupOptions({ races, rounds, points, playerCount, onRaces, onRounds, onPoints }: GroupOptionsProps) {
   const problem = pointsProblem(points);
   const noRounds = !hasQualifying(playerCount);
@@ -31,7 +31,7 @@ export function GroupOptions({ races, rounds, points, playerCount, onRaces, onRo
     <>
       <Box>
         <FormLabel id="start-races" sx={{ display: 'block', mb: 1 }}>
-          Races in each group
+          Games in each group
         </FormLabel>
         <ToggleButtonGroup
           exclusive
@@ -41,13 +41,13 @@ export function GroupOptions({ races, rounds, points, playerCount, onRaces, onRo
           onChange={(_event, value: RacesPerHeat | null) => value !== null && onRaces(value)}
         >
           {RACES.map((count) => (
-            <ToggleButton key={count} value={count} aria-label={`${count} ${count === 1 ? 'race' : 'races'}`} sx={{ px: 3 }}>
+            <ToggleButton key={count} value={count} aria-label={`${count} ${count === 1 ? 'game' : 'games'}`} sx={{ px: 3 }}>
               {count}
             </ToggleButton>
           ))}
         </ToggleButtonGroup>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-          {racesWords(races)}
+          {gamesWords(races)}
         </Typography>
       </Box>
 

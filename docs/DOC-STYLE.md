@@ -53,6 +53,7 @@ either, once explained.
 | Winners bracket | No losses |
 | Losers bracket | One life left |
 | Heat | Group |
+| Race or match in a group | Game ("Games in each group"), "Tie-break group" for a tie-break heat |
 
 ### Plain wording
 

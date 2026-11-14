@@ -14,7 +14,7 @@ import { heatTitle, orderEntry, orderQuestion, recordHelp } from './groupWords.t
 interface RecordDialogProps {
   heat: Heat;
   races: RacesPerHeat;
-  /** Every heat made so far, to number the tie-break races. */
+  /** Every heat made so far, to number the tie-break groups. */
   heats: readonly Heat[];
   /** The finishing order, 1st first. */
   onSave: (heat: Heat, order: Player[]) => void;

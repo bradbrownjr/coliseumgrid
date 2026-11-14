@@ -20,7 +20,7 @@ import {
   scaleType,
 } from './model.ts';
 import { useScreen } from './useScreen.ts';
-import { heatCutAfter, heatTieMessage, noResultsYet } from '../../heatsWords.ts';
+import { cutWords, heatCutAfter, heatTieMessage, noResultsYet } from '../../heatsWords.ts';
 
 /**
  * The TV for races and free-for-alls (docs/PLAN.md, "Races and free-for-all"): the stations and
@@ -79,7 +79,7 @@ export function HeatsScreen({ heats }: { heats: Heats }) {
                 rows={lines}
                 headings={['Points', 'Groups']}
                 typeFor={heatTableType}
-                cut={cut === null ? null : { after: cut, label: `Top ${heats.finalSize} go to the final` }}
+                cut={cut === null ? null : { after: cut, label: cutWords(heats.finalSize) }}
               />
             )}
           </>

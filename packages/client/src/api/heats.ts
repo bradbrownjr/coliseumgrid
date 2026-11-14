@@ -29,7 +29,7 @@ export const undoHeat = (resultId: number) =>
 export const addLateHeatPlayer = (playerId: number) =>
   call<HeatsNowAnswer>('POST', '/api/heats/players', { playerId } satisfies HeatPlayerBody);
 
-/** Makes the tie-break races for a tie at the cut for the final. */
+/** Makes the tie-break groups for a tie at the cut for the final. */
 export const startHeatTieBreak = () => call<HeatsNowAnswer>('POST', '/api/heats/tie-break');
 
 /** Can't be undone, so the host screen asks first. */

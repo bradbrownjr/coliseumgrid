@@ -18,7 +18,8 @@ import { useState } from 'react';
 import { placeWords } from './bracketWords.ts';
 import { SHORT_LIST, UndoButton } from './BracketLists.tsx';
 import { joinHandles } from '../../handles.ts';
-import { cutWords, heatTitle, orderWords } from './groupWords.ts';
+import { cutWords } from '../../heatsWords.ts';
+import { heatTitle, orderWords } from './groupWords.ts';
 
 /** More standings rows than this start folded to the top; 32 players is a long table. */
 const SHORT_STANDINGS = 12;
