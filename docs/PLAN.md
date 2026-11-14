@@ -1075,8 +1075,8 @@ milestone.
 | Package manager | pnpm 12.18.0 | Workspaces: `core`, `server`, `client` |
 | Language | TypeScript 7.0.2, strict | `erasableSyntaxOnly` on, so Node can run every file |
 | Lint | Oxlint 1.93.0 | TypeScript 7 has no compiler API yet, so no typescript-eslint |
-| Tests | Vitest 5.1.0; Playwright 1.65.0 | Playwright for screen tests and screenshots |
-| Server | Fastify 5.12.8 | With `@fastify/websocket` 11.3.7, `@fastify/static` 10.1.10, `@fastify/rate-limit` 11.2.2 |
+| Tests | Vitest 5.1.0; Playwright 1.65.1 | Playwright for screen tests and screenshots |
+| Server | Fastify 5.12.8 | With `@fastify/websocket` 11.3.7, `@fastify/static` 10.1.11, `@fastify/rate-limit` 11.2.2 |
 | Database | `node:sqlite` | See section 8 |
 | Brackets | `brackets-manager` 1.11.1, `brackets-memory-db` 1.0.6, `brackets-model` 1.7.0 | Checked 2026-11-13. Manager: MIT, released 2026-09-20. Memory store: ISC, released 2026-05-16, the library's in-memory database that the replay rebuilds on. Model: ISC, released 2026-05-16, the library's own dependency for its types. In `packages/server` only (see Packages) |
 | Client build | Vite 8.3.8, `@vitejs/plugin-react` 6.3.0 | |

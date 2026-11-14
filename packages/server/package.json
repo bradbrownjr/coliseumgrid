@@ -17,7 +17,7 @@
   "dependencies": {
     "@coliseumgrid/core": "workspace:*",
     "@fastify/rate-limit": "11.2.2",
-    "@fastify/static": "10.1.10",
+    "@fastify/static": "10.1.11",
     "@fastify/websocket": "11.3.7",
     "brackets-manager": "1.11.1",
     "brackets-memory-db": "1.0.6",
