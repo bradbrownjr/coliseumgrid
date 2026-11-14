@@ -12,6 +12,16 @@ use **New Features**, **Improvements**, and **Bug Fixes**, in that order.
 
 ## Milestones
 
+* **M5 Races and free-for-all.** For Mario Kart and Smash free-for-alls, the host starts
+  groups of up to 4, as even as possible, on 1 to 8 stations. Each group's finishing order
+  scores points from an editable table (default 4, 3, 2, 1); later rounds regroup players by
+  points, everyone plays the same number of groups, and the top 4 play a final whose order
+  sets places 1 to 4. A tie at the cut for the final gets a tie-break group. The host records
+  a group by tapping who came 1st, 2nd, and 3rd, with Undo; an older undo reopens its group
+  without moving anyone playing. Late players join a round 1 group that hasn't started. One
+  competition runs per event, a bracket or groups. The TV shows the stations, Up next, and
+  standings with "Top 4 go to the final", then the finalists and the podium. Hand tests are
+  in `PLAYTEST.md`.
 * **M4 1 vs 1 brackets.** The host starts a bracket from the host screen: One life (single
   elimination with a 3rd-place match), Two lives (double elimination with the rematch for
   the title), or Everyone plays everyone (round robin), best of 1, 3, or 5, on 1 to 8
