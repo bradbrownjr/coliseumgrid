@@ -29,6 +29,7 @@ Run `pnpm install` once first.
 | `pnpm typecheck` | `tsc` in every package, then `tools/`. `core` is checked twice: its source with ES2022 types only, its tests with Node types. `client` is checked three times: the app with DOM types, the push worker (`src/worker`, `test/worker`) with WebWorker types (`tsconfig.worker.json`), and `vite.config.ts` and `vite.push-assets.ts` with Node types. |
 | `pnpm test` | Vitest in every package (`vitest run`). In `core` it runs the `node` project only. |
 | `pnpm test:browser` | The `core` `browser` project: the handle rules and the vulgarity filter in headless Chromium. Not part of `pnpm check`; CI runs it as its own job. Once per machine, run `pnpm --filter @coliseumgrid/core exec playwright install chromium`. |
+| `pnpm print-check <folder>` | Prints name tags in headless Chromium against a production build and checks the pages and the print dialog (see "Name tags", "Checking a print"). Run `pnpm build` first. Not part of `pnpm check` or CI. |
 | `pnpm check:docs` | The writing-rules check (see "The docs check"). Same as `node tools/check-docs.ts`. |
 | `pnpm check:palette` | The palette contrast check. Imports `packages/client/src/theme/palette.ts`; exits non-zero on any failing row (see `DESIGN.md`, "Colors"). |
 | `pnpm check` | `lint`, `typecheck`, `test`, `check:docs`, and `check:palette`, in that order, stopping at the first failure. Run it before every commit. |
@@ -405,8 +406,9 @@ The rules are in `PLAN.md` section 7. These are the facts a change has to keep.
   `graphic_height`, all null for no graphic and written together (`Events.setGraphic`). The file
   name is a `newToken()` (`tokens.ts`), so it is random, made by the server, and also the
   graphic's `version` and ETag. `tag_queue` holds one row per player (deleted with the player):
-  `pin`, the plain 4-digit PIN or null, `pin_stored_at`, both or neither, and `queued_at`. It
-  has no event column: a new event empties it, as it starts with no players.
+  `pin`, the plain 4-digit PIN or null, `pin_stored_at`, both or neither, `queued_at`, and
+  `version`, taken from the one row of `tag_queue_counter` on every `queue` call (a counter, not
+  `MAX(version)`, so a deleted tag's number is never reused). It has no event column: a new event empties it, as it starts with no players.
 - **Where a tag is queued.** `players-routes.ts` calls `tags.queue` on sign-up, claim, host
   add, and PIN reset, in the same tick as the write that stored the PIN, with no `await`
   between. The claim relies on `pin-guard.ts` having checked that the hash didn't change during
@@ -421,7 +423,9 @@ The rules are in `PLAN.md` section 7. These are the facts a change has to keep.
   `phone-purge.ts`, with a timer that is `unref`'d and stopped when the app closes. It reads the
   app's clock (`now`), so tests move time by hand.
 - **Host screens only.** The queue's live message goes through `hub.broadcastToHosts`, which
-  sends only to connections that signed in as the host (a session, or the laptop). Every queue
+  sends only to connections whose `hostAllowed` predicate is true at send time: the laptop, or a
+  session that hasn't ended or expired (a browser that is also a paired Display keeps its
+  socket after its session expires, and must not get queue news). Every queue
   change calls `onTagsChanged`; a change to the event (the graphic) is an ordinary `event`
   broadcast and drops the phone answer cache, because a phone's answer has the event.
 - **The upload.** `name-tag-routes.ts` registers `PUT /api/event/graphic` in its own plugin
@@ -429,8 +433,16 @@ The rules are in `PLAN.md` section 7. These are the facts a change has to keep.
   handler that turns 413 and 415 into `too-large` and `bad-type`. Other routes keep app.ts's
   handler and still refuse an image body. `imageInfo` (`packages/core/src/image-info.ts`) reads
   the type and size and walks the file's structure to its end, so a cut-off file is refused.
-  The file is written before the database changes and deleted again if the change fails; a
-  replaced file is deleted after it once no event uses it (a new event copies the graphic).
+  The file is written before the database changes and deleted again if the write or the change
+  fails. `Events.setGraphic` clears a replaced file from every event in the same transaction,
+  and the route then deletes it, because only the current event's graphic is shown (a new
+  event copies the graphic, so past events may name the same file). At startup
+  `removeOrphans` deletes files in the folder that no event names and whose names match
+  `newToken()`'s 43 base64url characters. The graphic is served with `nosniff`, a sandbox
+  policy, and `Cross-Origin-Resource-Policy: same-origin`; `GET /api/tags` is `no-store`.
+- **Checkpoint after removing a PIN.** `PRAGMA wal_checkpoint(TRUNCATE)` answers a row whose
+  `busy` is 1 when a reader kept it from finishing. `tag-queue.ts` logs a warning with no PIN,
+  and `wipeOldPins` checkpoints on every hourly run, so a busy one is retried.
 - **The data folder.** `buildApp` takes `dataDir`; the graphics go in its `graphics` folder,
   made on the first upload. Without it, `buildApp` makes a temporary folder and deletes it on
   close, which the tests use.
@@ -462,12 +474,18 @@ The rules are in `PLAN.md` section 7. These are the facts a change has to keep.
   not. The result is in each handle's `data-pt` attribute, which the print check reads.
 - **The print flow.** A job is `queue` (the tags loaded now) or `test`. When the sheet reports
   ready, the panel calls `window.print()` once, and the `afterprint` event ends the job. A
-  queue job then asks "Did all 5 tags print?"; **Yes** posts exactly the ids that were printed,
-  not the queue as it is by then. The test tag asks nothing and never touches the queue.
-- **Checking a print.** `window.print()` can't run headless, so a script replaces it with a
+  queue job then asks "Did all 5 tags print?"; **Yes** posts the `playerId` and `version` of each tag that
+  was printed, not the queue as it is by then, and the server keeps any tag whose version has
+  moved on (a PIN reset, a claim, or a reprint while the dialog was open). The test tag asks nothing and never touches the queue.
+- **Checking a print.** Run `pnpm build`, then `pnpm print-check <output folder>`
+  (`tools/print-check.ts`). It needs Chromium through Playwright and poppler's `pdftoppm` and
+  `pdfinfo`, so it is not part of `pnpm check` or CI. It starts the server on a free port with a
+  temporary data folder. `window.print()` can't run headless, so the script replaces it with a
   counter, waits for it, calls `page.pdf({ preferCSSPageSize: true, printBackground: true })`,
-  fires `afterprint` by hand, and then reads the PDF page sizes with `pdfinfo` and looks at
-  `pdftoppm -png -r 150` pages. Chrome rounds a page to whole points, so sizes agree to about
+  fires `afterprint` by hand, reads the PDF page sizes with `pdfinfo`, and writes
+  `pdftoppm -png -r 150` pages to the folder, which you look at. It also checks the dialog: Yes
+  posts exactly the printed ids and versions, No and Escape keep the tags, the test tag never
+  posts, and a PIN reset while the dialog is open leaves the new tag queued. Chrome rounds a page to whole points, so sizes agree to about
   0.2 mm, inside the 0.5 mm the roadmap allows.
 
 ## Layout

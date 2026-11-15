@@ -410,8 +410,9 @@ iOS fills a transparent icon with black. `tools/make-icons.ts` makes them.
   keep them**. The question names the count, because a browser can't tell a printed page from
   a cancelled one.
 - Each player row in the players list has a **Print tag** icon button with that label as its
-  tooltip and accessible name. It adds the tag to the print list and says so in a snackbar:
-  "Added to the print list. Reprints have no PIN."
+  tooltip and accessible name. It adds the tag to the print list and says so in a snackbar.
+  The words follow the tag the server answers with: with a PIN waiting, "Added to the print
+  list."; with none, "Added to the print list. Reprints have no PIN."
 - A refused picture says why in words: "Use a PNG, JPEG, or WebP picture.", "That picture is
   over 2 MB.", "That picture is too small or too big. Use one from 16 to 4000 pixels on each
   side.", or, for a file that isn't a picture at all, "That file isn't a picture we can read.

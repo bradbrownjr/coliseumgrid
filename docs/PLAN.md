@@ -1479,7 +1479,10 @@ PIN therefore adds little risk (Brad's decision, 2026-11-15).
 - **Leaving the queue.** After the print dialog closes, the host page asks "Did all 5 tags
   print?" A browser can't tell a printed page from a cancelled one (`afterprint` fires either
   way), so the host answers. **Yes** deletes those tags and their PINs. **No** keeps them for
-  another try.
+  another try. Each queued tag has a `version` that goes up every time it is queued again (a
+  new PIN, a claim, a reprint), taken from a counter that only grows. The host sends the
+  `playerId` and `version` of each tag it printed, and the server deletes a tag only if both
+  still match, so a tag queued again while the dialog was open stays, with its new PIN.
 - **The 12-hour limit.** A PIN still queued 12 hours after it was stored is wiped, and its tag
   prints with no PIN. The server checks at startup and every hour, beside the phone purge
   (`phone-purge.ts`, which runs daily).
@@ -1501,11 +1504,15 @@ PIN therefore adds little risk (Brad's decision, 2026-11-15).
   read from RFC 6386, the WebP lossless spec, and ITU-T T.81 before the parser is written,
   and cited in it.
 - **Storing.** The file goes in `DATA_DIR/graphics` under a random name the server makes. The
-  event keeps the name, type, width, and height. A new event keeps the last event's graphic. A
-  replaced file is deleted once no event uses it.
+  event keeps the name, type, width, and height. A new event keeps the last event's graphic.
+  Only the current event's graphic is ever shown, so when it is replaced or removed the file is
+  deleted and past events forget it. A file is also deleted if its write or its database
+  change fails, and at startup the server deletes files in the folder that no event names
+  (only names of the form it makes itself).
 - **Serving.** `GET /api/event/graphic` answers with the stored type, `X-Content-Type-Options:
   nosniff`, and `Content-Security-Policy: default-src 'none'; sandbox`, for the host and paired
-  devices. The page shows it only through `<img>`.
+  devices, and `Cross-Origin-Resource-Policy: same-origin`. The page shows it only through
+  `<img>`.
 - **Not re-encoded.** The OWASP
   [File Upload Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html)
   recommends re-encoding images. That needs an image library, and a native one breaks the
@@ -1517,12 +1524,12 @@ PIN therefore adds little risk (Brad's decision, 2026-11-15).
 
 | Request | Who | Answer |
 |---|---|---|
-| `PUT /api/event/graphic` (raw image body) | host | `{ event }`; 400 `bad-image` when the bytes don't match the type, `bad-size` when a side is outside 16 to 4000 pixels; 413 `too-large`; 415 `bad-type` |
+| `PUT /api/event/graphic` (raw image body) | host | `{ event }`; 400 `bad-image` when the bytes don't match the type, `bad-size` when a side is 1 to 15 or over 4000 pixels (a side of 0 isn't a valid image, so it is `bad-image`); 413 `too-large`; 415 `bad-type` |
 | `DELETE /api/event/graphic` | host | `{ event }` |
 | `GET /api/event/graphic` | host or paired device | the image; 404 when there's none |
-| `GET /api/tags` | host | `{ tags: [{ playerId, handle, pin }] }`, `pin` a string or null, sorted by handle |
+| `GET /api/tags` | host | `{ tags: [{ playerId, handle, pin, version }] }`, `pin` a string or null, sorted by handle; `Cache-Control: no-store`, because it holds plain PINs |
 | `POST /api/tags` `{ playerId }` | host | 201 `{ tag }`, a reprint; it keeps a PIN still waiting to print, and otherwise has none; 404 |
-| `POST /api/tags/printed` `{ playerIds }` | host | 204; those tags and their PINs are deleted |
+| `POST /api/tags/printed` `{ tags: [{ playerId, version }] }` (up to 1000) | host | 204; each tag whose id and version both match is deleted with its PIN, and any other stays |
 
 An event becomes `{ name, game, graphic }`, where `graphic` is `{ width, height, version }`
 or null, and `version` changes with each upload so the page reloads the file. Uploading or
@@ -1536,7 +1543,9 @@ with no payload, to host screens only.
 - `ghcr.io/bradbrownjr/coliseumgrid`: the server and the built client in one image, with
   a `/data` volume for the database and uploaded graphics. Same pattern as Pattern Break's
   `Dockerfile` and `docker.yml` workflow.
-- Runs behind a reverse proxy that provides HTTPS.
+- Runs behind a reverse proxy that provides HTTPS. The proxy must accept 2 MB request bodies
+  for the graphic upload: nginx's `client_max_body_size` defaults to 1m and answers 413 above
+  it ([nginx](https://nginx.org/en/docs/http/ngx_http_core_module.html#client_max_body_size)).
 - `COLISEUMGRID_MODE=online` turns off the `localhost` host sign-in and turns on rate limits.
 - The client IP for rate limits is the last `X-Forwarded-For` entry, and only when the
   direct peer is the proxy. The first entry is set by the caller and can't be trusted (the
