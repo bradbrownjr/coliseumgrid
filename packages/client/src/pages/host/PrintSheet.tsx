@@ -172,7 +172,9 @@ export function PrintSheet({ tags, page, eventName, game, graphic, outline = fal
     return () => {
       cancelled = true;
     };
-  }, [tags, page, graphic]);
+    // The sizes and the picture's version, not `page` and `graphic` themselves: a caller builds
+    // those objects again on every render, and the fit must run again only when something changed.
+  }, [tags, page.widthMm, page.heightMm, graphic?.version]);
 
   return createPortal(
     <>

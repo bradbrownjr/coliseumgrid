@@ -13,9 +13,8 @@ export const PRINT_PAPER = 'white';
 
 /** The handle is sized to fit, from the biggest it can be down to the smallest that still reads across a room. */
 export const HANDLE_PT_MAX = 72;
-export const HANDLE_PT_MIN = 28;
 /**
- * A handle that doesn't fit at `HANDLE_PT_MIN` keeps shrinking down to here instead of running
+ * A handle that doesn't fit at 28 points keeps shrinking down to here instead of running
  * past the safe edge: a handle cut off at the edge is worse than a small one. 16 ordinary
  * characters fit at 28 points; only a handle of the widest letters needs this.
  */
