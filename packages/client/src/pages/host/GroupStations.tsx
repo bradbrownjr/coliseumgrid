@@ -20,6 +20,8 @@ interface GroupStationsProps {
   /** Minutes after the call before the card asks "Still waiting?". */
   noShowMinutes: number;
   onRecord: (heat: Heat) => void;
+  /** **They're here**: the players of the group on this station came. */
+  onHere: (station: HeatStation) => void;
   /** Opens the record panel with "Who is missing?" first. */
   onForfeit: (heat: Heat) => void;
 }
@@ -43,10 +45,10 @@ interface StationCardProps extends Omit<GroupStationsProps, 'stations'> {
  * A station's group: its players, a count-up timer from the time it was called, and one "Record
  * result" button (docs/PLAN.md, "Races and free-for-all": recording is once per group).
  */
-function StationCard({ station, heats, now, busy, noShowMinutes, onRecord, onForfeit }: StationCardProps) {
+function StationCard({ station, heats, now, busy, noShowMinutes, onRecord, onHere, onForfeit }: StationCardProps) {
   const { heat } = station;
   const elapsed = elapsedText(station.calledAt, now);
-  const waited = heat !== null && waitIsOver(station.calledAt, noShowMinutes, now);
+  const waited = heat !== null && waitIsOver(station.calledAt, noShowMinutes, now, station.arrived);
   return (
     <Paper variant="outlined" sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
@@ -84,7 +86,7 @@ function StationCard({ station, heats, now, busy, noShowMinutes, onRecord, onFor
           >
             Record result
           </Button>
-          {waited && <NoShowPrompt busy={busy} onForfeit={() => onForfeit(heat)} />}
+          {waited && <NoShowPrompt busy={busy} onHere={() => onHere(station)} onForfeit={() => onForfeit(heat)} />}
         </>
       ) : (
         <Typography color="text.secondary">Waiting for a group.</Typography>

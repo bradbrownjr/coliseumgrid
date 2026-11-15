@@ -154,6 +154,7 @@ describe('the competition as a whole', () => {
       lateJoins: [],
       results: [],
       tieBreaks: [],
+      arrivals: [],
     });
     const run = startHeats(5, 3, { stations: 1, rounds: 1 });
     const broken = { ...run.state, settings: { ...run.state.settings, createdAt: null as never } };

@@ -217,6 +217,28 @@ export const MIGRATIONS: readonly string[] = [
   ALTER TABLE bracket_results ADD COLUMN forfeit INTEGER NOT NULL DEFAULT 0 CHECK (forfeit IN (0, 1));
   ALTER TABLE heat_results ADD COLUMN missing TEXT;
   `,
+  // M7 review: a tie-break's own start time, and "They're here" (docs/PLAN.md, "Waiting for a
+  // missing player"). `at` is when the host pressed Play tie-break, null on a row from before
+  // this migration, which is then called at the last result's time as it was. An arrival is the
+  // match (or heat) and the `called_at` of the call it was tapped for, so a match called again
+  // starts a new wait; it is not a result, so no log, standing, or undo reads it. Ids and times
+  // only (CLAUDE.md, rule 1).
+  `
+  ALTER TABLE bracket_tie_breaks ADD COLUMN at TEXT;
+  ALTER TABLE heat_tie_breaks ADD COLUMN at TEXT;
+  CREATE TABLE bracket_arrivals (
+    bracket_id INTEGER NOT NULL REFERENCES brackets(id) ON DELETE CASCADE,
+    match_id   INTEGER NOT NULL,
+    called_at  TEXT NOT NULL,
+    PRIMARY KEY (bracket_id, match_id, called_at)
+  );
+  CREATE TABLE heat_arrivals (
+    run_id    INTEGER NOT NULL REFERENCES heat_runs(id) ON DELETE CASCADE,
+    heat_id   INTEGER NOT NULL,
+    called_at TEXT NOT NULL,
+    PRIMARY KEY (run_id, heat_id, called_at)
+  );
+  `,
 ];
 
 export function migrate(db: Database): void {

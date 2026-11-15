@@ -4,8 +4,9 @@
 // log gives the same stations, so an undo restores them exactly.
 //
 // A step is a count of results: step 0 is the bracket as created, step k is the bracket
-// after its k-th result. Times are opaque strings the caller passes through (the server
-// uses ISO 8601), so this file never reads a clock.
+// after its k-th result. Times are strings the caller passes through (the server uses ISO 8601
+// in UTC, which sorts as text), so this file never reads a clock. The one thing it does with
+// two times is take the later (`QueueMatch.readyAt`).
 
 import { STATIONS_MAX, STATIONS_MIN } from './bracket-seeding.ts';
 
@@ -28,6 +29,13 @@ export interface QueueMatch {
    * which the player joined, so they queue behind matches that were already waiting.
    */
   readyStep: number;
+  /**
+   * The time the match was made, for a match made some time after the result that opened its
+   * step: a tie-break is made when the host presses Play tie-break, after the last result. A
+   * station it fills is called at this time, or at the time of the step when that is later
+   * (the station only came free then). Left out, the station is called at the step's time.
+   */
+  readyAt?: string;
   /**
    * Its readyStep is the step a late player joined. It goes behind matches that became ready
    * at that same step, because those were called, or queued, before the player joined.
@@ -145,7 +153,7 @@ export function buildQueue(input: QueueInput): QueueState {
       if (next) {
         held[index] = next;
         station.matchId = next.id;
-        station.calledAt = at;
+        station.calledAt = next.readyAt !== undefined && next.readyAt > at ? next.readyAt : at;
       }
     });
   };

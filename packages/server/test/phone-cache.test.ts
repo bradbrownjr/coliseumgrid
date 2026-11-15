@@ -84,6 +84,14 @@ describe('the kept answer is dropped on', () => {
     await dropsOn(async () => expect((await host('POST', '/api/bracket/players', { playerId: ids[6] })).statusCode).toBe(200));
   });
 
+  it('a "They\'re here" on a bracket and on groups (saves)', async () => {
+    const made = await makeBracket();
+    await dropsOn(() => host('POST', '/api/bracket/arrived', { matchId: onStations(made)[0]!.id, arrived: true }));
+    await host('DELETE', '/api/bracket');
+    const heats = await makeHeats();
+    await dropsOn(() => host('POST', '/api/heats/arrived', { heatId: heats.stations[0]!.heat!.id, arrived: true }));
+  });
+
   it('a heats result (save)', async () => {
     const made = await makeHeats();
     const heat = made.stations[0]!.heat!;

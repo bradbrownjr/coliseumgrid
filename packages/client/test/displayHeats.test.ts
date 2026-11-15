@@ -64,9 +64,9 @@ describe('what a group is called', () => {
 
 describe('station cards', () => {
   const stations: HeatStation[] = [
-    { number: 1, heat: group([1, 2, 3, 4], 'round', 3, 'playing'), calledAt: '2027-01-01T00:00:00Z' },
-    { number: 2, heat: group([5, 6], 'tie-break', 1, 'playing'), calledAt: null },
-    { number: 3, heat: null, calledAt: null },
+    { number: 1, heat: group([1, 2, 3, 4], 'round', 3, 'playing'), calledAt: '2027-01-01T00:00:00Z', arrived: false },
+    { number: 2, heat: group([5, 6], 'tie-break', 1, 'playing'), calledAt: null, arrived: false },
+    { number: 3, heat: null, calledAt: null, arrived: false },
   ];
 
   it('lists up to four handles and names the group after the station', () => {
@@ -77,16 +77,16 @@ describe('station cards', () => {
   });
 
   it('leaves an idle station empty', () => {
-    expect(heatStationCards(stations)[2]).toEqual({ number: 3, note: null, slots: [], calledAt: null });
+    expect(heatStationCards(stations)[2]).toEqual({ number: 3, note: null, slots: [], calledAt: null, arrived: false });
   });
 
   it('keeps a bracket card as it was: the note only for a tie-break match', () => {
     const slots = [{ player: player(1), bye: false }, { player: player(2), bye: false }] as const;
     const base = { id: 1, round: 1, number: 1, status: 'playing' as const, slots: [...slots] as [typeof slots[0], typeof slots[1]], winner: null, forfeit: false, resultId: null };
     const cards = bracketStationCards([
-      { number: 1, match: { ...base, side: 'main' }, calledAt: 'x' },
-      { number: 2, match: { ...base, side: 'tie-break' }, calledAt: 'y' },
-      { number: 3, match: null, calledAt: null },
+      { number: 1, match: { ...base, side: 'main' }, calledAt: 'x', arrived: false },
+      { number: 2, match: { ...base, side: 'tie-break' }, calledAt: 'y', arrived: false },
+      { number: 3, match: null, calledAt: null, arrived: false },
     ]);
     expect(cards.map((card) => card.note)).toEqual([null, 'tie-break', null]);
     expect(cards[2]?.slots).toEqual([]);

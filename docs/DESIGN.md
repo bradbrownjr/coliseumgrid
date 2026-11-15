@@ -79,7 +79,9 @@ theme imports; `node tools/check-palette.ts` imports the same file and checks th
 - **Dark-mode overrides.** The theme sets `primary.light` for the text, outline, and
   selected states of `MuiButton` (text and outlined), `MuiLink`, `MuiIconButton`, `MuiTab`
   (selected text and indicator), `MuiCheckbox`, `MuiRadio`, and `MuiSwitch` (checked),
-  `MuiChip` (outlined), and `MuiOutlinedInput` and `MuiInputLabel` (focused). A selected
+  `MuiChip` (outlined), `MuiOutlinedInput` and `MuiInputLabel` (focused), and `MuiStepIcon`
+  (the active and completed steps in `primary.light`, with the number in `background.default`
+  so it reads on the lighter red). A selected
   `MuiToggleButton` gets the same, with a `primary.light` border.
 - **The TV route is always dark.** See `DEVELOPMENT.md`, "Theme".
 
@@ -168,7 +170,12 @@ confirmation dialog is only for actions that can't be undone, like deleting a br
   the final** (1 to 3, or none with 2 to 4 players), and the points for 1st to 4th. **Use 4,
   3, 2, 1** appears once the points change. They sit under "More options" in the wizard.
 - When a station's wait for a missing player is over, its card says "Still waiting?" and
-  has a **Forfeit** button, on a match and on a group (see "Setup wizard", "Forfeit").
+  has two buttons, **They're here** and **Forfeit**, on a match and on a group (see "Setup
+  wizard", "Forfeit"). Both are outlined buttons in the alert's text color,
+  **They're here** with a check icon, and they wrap onto two lines when the card is narrow. A tap removes the
+  prompt from every host screen and the call line from the TV. The snackbar says "Station 2:
+  they're here" with **Undo**, which brings the prompt back. A station whose match or group
+  is re-called after an older undo shows the prompt again when its wait is over.
 - A group's station card shows its title, its players, a timer, and one **Record result**
   button. The record panel is centered and asks "Who came 1st?", then 2nd, and so on. The
   last player is filled in. **Start over** clears the taps. **Save** turns on once the order
@@ -225,10 +232,23 @@ numbers on its screens come from "Time estimate".
   says "Zap forfeited. Kai wins." with **Undo**; there is no confirmation. The panel also
   says "If both are missing, pick one. The other moves on." On a group, **Forfeit** opens the
   same panel with a toggle for each player, then the usual "Who came 1st?" for those who are
-  there. The bracket view and the results list mark a forfeited match with the word
-  "Forfeit", and a missing player in a group's result reads "Zap: Missing, 0 points".
+  there. A toggle that isn't selected keeps the text color, so it doesn't read as switched
+  off; a selected one is the primary color. The bracket view and the results list mark a
+  forfeited match with the word "Forfeit", and a missing player in a group's result reads
+  "Zap: Missing, 0 points" in a qualifying group and just "Zap: Missing" in a tie-break
+  group or the final, where there are no points to score.
 - **The TV call line.** While a station's wait is over, its card on the TV adds a line in
-  large type: "Zap and Kai, come to station 2!" It clears when the result is recorded.
+  large type: "Zap and Kai, come to station 2!" It clears when the result is recorded or the
+  host taps **They're here**.
+- **Step 3 while the players load.** The count isn't known yet, so the count, summary, and
+  estimate wait, and **Start** is off with the line "Getting the players." and no problem
+  words; once the count is known **Start** turns
+  on, and if it stays off, the reason shows above it.
+- **New event** is off while a bracket or groups are being played, with the line "Finish or
+  delete the bracket first." (or "groups") under it. Opening the wizard never hides a running
+  competition's station cards.
+- **A refused game name** shows under the game field and a refused event name under the name
+  field.
 
 ### Sign-up (tablet)
 

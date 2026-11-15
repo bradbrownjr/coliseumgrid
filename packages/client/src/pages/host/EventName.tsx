@@ -48,7 +48,10 @@ export function EventName({ event, onSaved }: EventNameProps) {
           setName(value);
           setWords(null);
         }}
-        onGame={setGame}
+        onGame={(value) => {
+          setGame(value);
+          setWords(null);
+        }}
       />
       <Button type="submit" variant="contained" size="large" disabled={!eventNameFits(name) || busy || unchanged} sx={{ flexShrink: 0, minHeight: (theme) => theme.spacing(7) }}>
         Save

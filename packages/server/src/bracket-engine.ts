@@ -82,6 +82,23 @@ export interface TieBreakRecord {
   players: [number, number];
   /** The number of log entries when it was made. */
   step: number;
+  /**
+   * ISO 8601; when the host pressed Play tie-break. A station it fills is called at this time
+   * or later, not at the time of the last result before it (`QueueMatch.readyAt`). Left off a
+   * record stored before M7's review, which is called at the last result's time as it was.
+   */
+  at?: string;
+}
+
+/**
+ * The host tapped **They're here** for `matchId`'s call at `calledAt` (docs/PLAN.md, "Waiting
+ * for a missing player"). It names the call, not only the match, so a match reopened by an undo
+ * and called again starts a new wait. It is not a result: a bracket's log, standings, and
+ * undo never read it.
+ */
+export interface ArrivalRecord {
+  matchId: number;
+  calledAt: string;
 }
 
 export interface BracketState {
@@ -95,6 +112,7 @@ export interface BracketState {
    */
   results: BracketResultRecord[];
   tieBreaks: TieBreakRecord[];
+  arrivals: ArrivalRecord[];
 }
 
 /** Player id to the current handle. Every player in the seeding must be in it. */
@@ -265,7 +283,7 @@ async function rebuild(state: BracketState): Promise<Built | null> {
   }
   const joinStep = new Map(lateJoins.map((j) => [j.playerId, j.step]));
   const queueMatches: QueueMatch[] = [];
-  const queueEntry = (m: EngineMatch, players: [number, number], from: number, until: number | null, reopened: boolean): void => {
+  const queueEntry = (m: EngineMatch, players: [number, number], from: number, until: number | null, reopened: boolean, readyAt?: string): void => {
     // A late player's match is ready from the step they joined, behind matches already waiting.
     const joined = Math.max(-1, ...players.map((id) => joinStep.get(id) ?? -1));
     const readyStep = Math.max(from, joined);
@@ -278,6 +296,7 @@ async function rebuild(state: BracketState): Promise<Built | null> {
       readyStep,
       late: joined >= from,
       ...(reopened ? { reopened } : {}),
+      ...(readyAt !== undefined ? { readyAt } : {}),
       ...(until !== null ? { until } : {}),
       firstRound: firstRound(m),
       hasByePlayer: byePlayers.has(players[0]) || byePlayers.has(players[1]),
@@ -287,7 +306,7 @@ async function rebuild(state: BracketState): Promise<Built | null> {
   for (const r of replay.ready) queueEntry(libraryById.get(r.matchId) as EngineMatch, r.players, r.from, r.until, r.reopened);
   tieBreakMatches.forEach((m, index) => {
     const t = tieBreaks[index] as TieBreakRecord;
-    queueEntry(m, t.players, t.step, null, false);
+    queueEntry(m, t.players, t.step, null, false, t.at);
     for (const step of tieReopened.get(m.id) ?? []) queueEntry(m, t.players, step, null, true);
   });
   const queue = buildQueue({
@@ -380,6 +399,16 @@ function eliminationPlaces(format: BracketFormat, built: Built): Map<number, num
   return places;
 }
 
+/** True when `They're here` was tapped for this call of the match. */
+const isArrived = (state: BracketState, matchId: number, calledAt: string | null): boolean =>
+  calledAt !== null && state.arrivals.some((a) => a.matchId === matchId && a.calledAt === calledAt);
+
+/**
+ * The arrivals of matches that still exist. An undo that takes tie-breaks out of the bracket
+ * leaves their ids free for a new tie-break, which must not inherit an old arrival.
+ */
+const arrivalsKept = (state: BracketState, built: Built): ArrivalRecord[] => state.arrivals.filter((a) => built.byId.has(a.matchId));
+
 function buildAnswer(state: BracketState, built: Built, handles: HandleLookup, lateOpen: boolean, noShowMinutes: number): Bracket {
   const player = (id: number): Player => {
     const handle = handles.get(id);
@@ -446,7 +475,12 @@ function buildAnswer(state: BracketState, built: Built, handles: HandleLookup, l
     lateOpen,
     lastResultId: lastResult ? lastResult.id : null,
     noShowMinutes,
-    stations: built.queue.stations.map((s) => ({ number: s.number, match: s.matchId === null ? null : viewOf(s.matchId), calledAt: s.calledAt })),
+    stations: built.queue.stations.map((s) => ({
+      number: s.number,
+      match: s.matchId === null ? null : viewOf(s.matchId),
+      calledAt: s.calledAt,
+      arrived: s.matchId !== null && isArrived(state, s.matchId, s.calledAt),
+    })),
     upNext: built.queue.upNext.map(viewOf),
     matches: built.matches.map((m) => viewOf(m.id)),
     standings,
@@ -530,6 +564,7 @@ export async function createBracket(input: NewBracket, random: RandomSource, han
     lateJoins: [],
     results: [],
     tieBreaks: [],
+    arrivals: [],
   };
   const built = await rebuildOrThrow(state);
   return { ok: true, state, bracket: await answerFor(state, built, handles, input.noShowMinutes ?? NO_SHOW_DEFAULT) };
@@ -609,7 +644,9 @@ export async function undoResult(
       lateJoins: state.lateJoins.map((j) => (j.step > index ? { ...j, step: j.step - 1 } : j)),
       tieBreaks: state.tieBreaks.filter((t) => t.step <= index),
     };
-    return { ok: true, state: next, bracket: await answerFor(next, await rebuildOrThrow(next), handles, noShowMinutes) };
+    const built = await rebuildOrThrow(next);
+    const kept: BracketState = { ...next, arrivals: arrivalsKept(next, built) };
+    return { ok: true, state: kept, bracket: await answerFor(kept, built, handles, noShowMinutes) };
   }
 
   if (state.tieBreaks.some((t) => t.step > index)) return { ok: false, error: 'undo-later-first' };
@@ -645,18 +682,49 @@ export async function joinLate(
   return { ok: true, state: joined.state, bracket: await answerFor(joined.state, joined.built, handles, noShowMinutes) };
 }
 
-/** Makes the matches of every tie-break round the answer asks for that aren't made yet. */
-export async function startTieBreak(state: BracketState, handles: HandleLookup, noShowMinutes = NO_SHOW_DEFAULT): Promise<EngineAnswer> {
+/**
+ * Makes the matches of every tie-break round the answer asks for that aren't made yet. `at` is
+ * the time the host pressed Play tie-break: the stations they fill are called then (see
+ * `TieBreakRecord.at`).
+ */
+export async function startTieBreak(
+  state: BracketState,
+  handles: HandleLookup,
+  noShowMinutes = NO_SHOW_DEFAULT,
+  at?: string,
+): Promise<EngineAnswer> {
   const built = await rebuildOrThrow(state);
   const made = new Set(state.tieBreaks.map((t) => `${t.round}:${Math.min(...t.players)}-${Math.max(...t.players)}`));
   const added: TieBreakRecord[] = [];
   for (const needed of built.ranking?.tieBreaks ?? []) {
     for (const [a, b] of needed.pairs) {
       if (made.has(`${needed.round}:${Math.min(a, b)}-${Math.max(a, b)}`)) continue;
-      added.push({ round: needed.round, players: [a, b], step: stepNow(state) });
+      added.push({ round: needed.round, players: [a, b], step: stepNow(state), ...(at !== undefined ? { at } : {}) });
     }
   }
   if (added.length === 0) return { ok: false, error: 'no-tie' };
   const next: BracketState = { ...state, tieBreaks: [...state.tieBreaks, ...added] };
   return { ok: true, state: next, bracket: await answerFor(next, await rebuildOrThrow(next), handles, noShowMinutes) };
+}
+
+export interface ArrivedInput {
+  matchId: number;
+  /** True for **They're here**, false to take it back. */
+  arrived: boolean;
+}
+
+/**
+ * Notes that the players of a match on a station are here, or takes it back (docs/PLAN.md,
+ * "Waiting for a missing player"). It is stored against the station's current call, so it ends
+ * with the call. Saying the same thing twice changes nothing.
+ */
+export async function setArrived(state: BracketState, input: ArrivedInput, handles: HandleLookup, noShowMinutes = NO_SHOW_DEFAULT): Promise<EngineAnswer> {
+  const built = await rebuildOrThrow(state);
+  if (!built.byId.has(input.matchId)) return { ok: false, error: 'not-found' };
+  const station = built.queue.stations.find((s) => s.matchId === input.matchId);
+  if (!station || station.calledAt === null) return { ok: false, error: 'not-on-station' };
+  const { calledAt } = station;
+  const others = state.arrivals.filter((a) => !(a.matchId === input.matchId && a.calledAt === calledAt));
+  const next: BracketState = { ...state, arrivals: input.arrived ? [...others, { matchId: input.matchId, calledAt }] : others };
+  return { ok: true, state: next, bracket: await answerFor(next, built, handles, noShowMinutes) };
 }

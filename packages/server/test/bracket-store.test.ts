@@ -2,7 +2,7 @@
 
 import { createSeededRandom } from '@coliseumgrid/core';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { bracketAnswer, joinLate, startTieBreak, type BracketState } from '../src/bracket-engine.ts';
+import { bracketAnswer, joinLate, setArrived, startTieBreak, type BracketState } from '../src/bracket-engine.ts';
 import { createBracketStore, type BracketStore } from '../src/bracket-store.ts';
 import { openDatabase, type Database } from '../src/database.ts';
 import { addPlayers } from './bracket-api-helpers.ts';
@@ -60,6 +60,32 @@ describe('the bracket store', () => {
     expect(store.load(eventId)).toEqual(run.state);
     expect(count('bracket_tie_breaks')).toBe(run.state.tieBreaks.length);
     expect(count('bracket_results')).toBe(run.state.results.length);
+  });
+
+  it('stores a tie-break\'s time and the arrivals, and a tie-break without a time loads without one', async () => {
+    let run = await start('round_robin', 3, 11, 1);
+    const beats = new Map([[1, 2], [2, 3], [3, 1]]);
+    while (onStations(run.bracket).length > 0) {
+      const live = onStations(run.bracket)[0] as NonNullable<ReturnType<typeof onStations>[0]>;
+      run = await play(run, live, beats.get(live.slots[0].player?.id as number) === live.slots[1].player?.id ? 0 : 1);
+    }
+    const old = expectOk(await startTieBreak(run.state, handles));
+    store.save(eventId, old.state);
+    expect(store.load(eventId)?.tieBreaks.every((t) => !('at' in t))).toBe(true);
+    expect(db.prepare('SELECT at FROM bracket_tie_breaks').all().every((r) => r['at'] === null)).toBe(true);
+
+    const made = expectOk(await startTieBreak(run.state, handles, 5, at(30)));
+    const here = expectOk(await setArrived(made.state, { matchId: onStations(made.bracket)[0]?.id as number, arrived: true }, handles));
+    store.save(eventId, here.state);
+    expect(store.load(eventId)).toEqual(here.state);
+    expect(store.load(eventId)?.tieBreaks.every((t) => t.at === at(30))).toBe(true);
+    expect(count('bracket_arrivals')).toBe(1);
+    // A save rewrites the arrivals with the rest, and a delete takes them away.
+    store.save(eventId, made.state);
+    expect(count('bracket_arrivals')).toBe(0);
+    store.save(eventId, here.state);
+    store.remove(eventId);
+    expect(count('bracket_arrivals')).toBe(0);
   });
 
   it('rewrites the rows when a result is undone, so the database equals the state', async () => {
@@ -153,6 +179,7 @@ describe('the bracket store', () => {
       lateJoins: [],
       results: [],
       tieBreaks: [],
+      arrivals: [],
     });
     expect(() =>
       db

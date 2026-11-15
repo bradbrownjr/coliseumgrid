@@ -172,6 +172,21 @@ export function minutesLabel(template: PlanTemplate): string {
 
 // Step 3 ---------------------------------------------------------------------------------
 
+/** Shown above Start until the player list and the event's sign-ups are loaded, so the count isn't 0 for a moment. */
+export const PLAYERS_LOADING_WORDS = 'Getting the players.';
+
+/** Why **New event** is switched off while a bracket or groups are being played. */
+export function newEventBlockedWords(kind: 'bracket' | 'groups'): string {
+  return `Finish or delete the ${kind} first.`;
+}
+
+/** True when two plans make the same choices. `points` is compared by value. */
+export function samePlan(a: EventPlan | null, b: EventPlan | null): boolean {
+  if (a === null || b === null) return a === b;
+  const keys = Object.keys(a) as Array<keyof EventPlan>;
+  return keys.length === Object.keys(b).length && keys.every((key) => (key === 'points' ? a.points.join() === b.points.join() : a[key] === b[key]));
+}
+
 /** "12 players signed up". */
 export function signedUpWords(count: number): string {
   return `${playerCountWords(count)} signed up`;

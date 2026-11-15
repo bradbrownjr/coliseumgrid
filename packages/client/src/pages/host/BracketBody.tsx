@@ -1,9 +1,10 @@
-import type { Bracket, BracketMatch, Player } from '@coliseumgrid/core';
+import type { Bracket, BracketMatch, BracketStation, Player } from '@coliseumgrid/core';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { useState } from 'react';
-import { recordResult, startTieBreak, undoResult } from '../../api/bracket.ts';
+import { markArrived, recordResult, startTieBreak, undoResult } from '../../api/bracket.ts';
 import { useNow } from '../../components/useNow.ts';
+import { arrivedWords, waitingAgainWords } from '../../noShow.ts';
 import { Results, Standings, TieNotices, UpNext } from './BracketLists.tsx';
 import { byePlayer, doneMatches, forfeitWords, formatName, matchTitle, resultWords, stationWords } from './bracketWords.ts';
 import { ForfeitDialog } from './ForfeitDialog.tsx';
@@ -41,6 +42,24 @@ export function BracketBody({ bracket, apply, reload, say }: BracketBodyProps) {
       (data) => data.bracket,
       (data) => say(`${handle} won`, () => void undo(data.resultId, 'Result undone')),
     );
+
+  // **They're here** ends the wait for this call of the match, on the host's cards and on the TV.
+  // The snackbar's Undo puts the wait back (docs/PLAN.md, "Waiting for a missing player").
+  const here = (station: BracketStation) => {
+    const match = station.match;
+    if (!match) return;
+    const waitAgain = () =>
+      run(
+        () => markArrived(match.id, false),
+        (data) => data.bracket,
+        () => say(waitingAgainWords(station.number)),
+      );
+    void run(
+      () => markArrived(match.id),
+      (data) => data.bracket,
+      () => say(arrivedWords(station.number), () => void waitAgain()),
+    );
+  };
 
   // A forfeit is an ordinary result for the player who came, flagged so the lists can say so
   // (docs/PLAN.md, "Waiting for a missing player").
@@ -87,6 +106,7 @@ export function BracketBody({ bracket, apply, reload, say }: BracketBodyProps) {
             busy={busy}
             noShowMinutes={bracket.noShowMinutes}
             onWinner={(...args) => void winner(...args)}
+            onHere={here}
             onForfeit={setForfeiting}
           />
           <UpNext matches={bracket.upNext} />

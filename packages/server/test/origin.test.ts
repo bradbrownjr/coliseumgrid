@@ -55,7 +55,7 @@ describe('a state-changing request from a page on another origin', () => {
     const ids = ['Ann', 'Bo', 'Cy', 'Di'].map((h) => Number(players.run(h, h.toLowerCase()).lastInsertRowid));
     const body = { format: 'single', bestOf: 1, stations: 1, playerIds: ids };
     expect((await send('POST', '/api/bracket', OTHER_PORT, body)).statusCode).toBe(403);
-    expect((await send('GET', '/api/bracket', undefined)).json()).toEqual({ bracket: null });
+    expect((await send('GET', '/api/bracket', undefined)).json().bracket).toBeNull();
     expect((await send('POST', '/api/bracket', SAME_ORIGIN, body)).statusCode).toBe(201);
     for (const [method, url] of [['DELETE', '/api/bracket'], ['POST', '/api/bracket/tie-break']] as const) {
       const res = await send(method, url, OTHER_PORT);

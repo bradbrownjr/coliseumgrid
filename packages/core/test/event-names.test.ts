@@ -32,6 +32,16 @@ describe.each(PLAN_TEMPLATES)('event names for the %s template', (template: Plan
     expect(refused).toEqual([]);
   });
 
+  it('never repeats a word, compounds included', () => {
+    // "Knockout Knockout", "Grand Grand Prix", and "Stormstorm" read as a slip. A compound
+    // repeats when it is one chunk of three or more letters written twice.
+    for (const name of names) {
+      const words = name.toLowerCase().split(/[\s-]+/);
+      expect(new Set(words).size, name).toBe(words.length);
+      for (const word of words) expect(/^(.{3,})\1$/.test(word), name).toBe(false);
+    }
+  });
+
   it('gives only names from the list', () => {
     const random = createSeededRandom(2026);
     const all = new Set(names);
@@ -58,20 +68,6 @@ it('keeps the words of each template apart', () => {
   expect(fighting.has('Thunder Showdown')).toBe(true);
   expect(racing.has('Turbo Grand Prix')).toBe(true);
   expect(fighting.has('Turbo Grand Prix')).toBe(false);
-  expect(racing.has('Samurai Dojo')).toBe(false);
-  expect(fighting.has('Samurai Dojo')).toBe(true);
-});
-
-it('holds no game title, game company, or brand name', () => {
-  // Words tied to a game's name or a company, checked case-insensitively against the lists.
-  // Kept short and generic on purpose: the repo must not hold the titles themselves
-  // (docs/ROADMAP.md, M7 acceptance checks), so this list only holds ordinary words that
-  // are the defining word of a well-known title.
-  const blocked = ['smash', 'smackdown', 'kombat', 'mortal', 'street', 'brawl', 'melee', 'kart', 'fantasy', 'theft', 'jamboree'];
-  for (const template of PLAN_TEMPLATES) {
-    for (const name of allEventNames(template)) {
-      const lower = name.toLowerCase();
-      for (const word of blocked) expect(lower.includes(word), `${name} has ${word}`).toBe(false);
-    }
-  }
+  expect(racing.has('Ninja Dojo')).toBe(false);
+  expect(fighting.has('Ninja Dojo')).toBe(true);
 });

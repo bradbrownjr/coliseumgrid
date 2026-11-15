@@ -9,10 +9,22 @@ import { useEffect, useRef, useState } from 'react';
 /** The server's limits (`cleanEventName` and `cleanGameName` in packages/server/src/events.ts): 1 to 60 characters for a name, up to 60 for a game. */
 export const EVENT_NAME_MIN = 1;
 
-/** True when the server will take the name: 1 to 60 characters once trimmed. */
+/**
+ * True when the server will take the text as an event name or a game: 1 to 60 characters once
+ * runs of spaces are joined and the ends trimmed, and no control character (`cleanEventName`).
+ */
 export function eventNameFits(name: string): boolean {
-  const trimmed = name.trim();
-  return trimmed.length >= EVENT_NAME_MIN && trimmed.length <= EVENT_NAME_MAX;
+  const tidy = name.replace(/\s+/g, ' ').trim();
+  return tidy.length >= EVENT_NAME_MIN && tidy.length <= EVENT_NAME_MAX && !/[\p{Cc}\p{Cf}]/u.test(tidy);
+}
+
+/**
+ * Which field a refusal from the server belongs to. The server answers `bad-request` for either
+ * (`PUT /api/event`), so the client looks at what was typed: the game is the culprit when it has
+ * text the server can't take and the name is fine. Anything else is the name's.
+ */
+export function refusedField(name: string, game: string): 'name' | 'game' {
+  return eventNameFits(name) && game.trim() !== '' && !eventNameFits(game) ? 'game' : 'name';
 }
 
 /**
@@ -35,7 +47,7 @@ export function useSyncedField(saved: string): [string, (value: string) => void]
 interface EventFieldsProps {
   name: string;
   game: string;
-  /** The server's refusal, shown under the name. */
+  /** The server's refusal, shown under the field it belongs to (`refusedField`). */
   words: string | null;
   onName: (name: string) => void;
   onGame: (game: string) => void;
@@ -49,14 +61,17 @@ interface EventFieldsProps {
  * "The setup wizard").
  */
 export function EventFields({ name, game, words, onName, onGame, onDice }: EventFieldsProps) {
+  const gameRefused = words !== null && refusedField(name, game) === 'game';
+  const nameWords = gameRefused ? null : words;
+  const gameWords = gameRefused ? words : null;
   return (
     <Stack sx={{ gap: 2, flex: 1, minWidth: 0 }}>
       <TextField
         fullWidth
         label="Event name"
         value={name}
-        error={words !== null}
-        helperText={words ?? `Shows on the TV. Up to ${EVENT_NAME_MAX} characters.`}
+        error={nameWords !== null}
+        helperText={nameWords ?? `Shows on the TV. Up to ${EVENT_NAME_MAX} characters.`}
         onChange={(event) => onName(event.target.value)}
         autoComplete="off"
         slotProps={{
@@ -76,7 +91,8 @@ export function EventFields({ name, game, words, onName, onGame, onDice }: Event
         fullWidth
         label="What game are you playing?"
         value={game}
-        helperText="You can leave this empty."
+        error={gameWords !== null}
+        helperText={gameWords ?? 'You can leave this empty.'}
         onChange={(event) => onGame(event.target.value)}
         autoComplete="off"
         slotProps={{ htmlInput: { maxLength: EVENT_NAME_MAX } }}

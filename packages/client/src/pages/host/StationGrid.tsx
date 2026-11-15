@@ -18,6 +18,8 @@ interface StationGridProps {
   /** Minutes after the call before the card asks "Still waiting?". */
   noShowMinutes: number;
   onWinner: (matchId: number, winnerId: number, winnerHandle: string) => void;
+  /** **They're here**: the players of the match on this station came. */
+  onHere: (station: BracketStation) => void;
   onForfeit: (match: BracketMatch) => void;
 }
 
@@ -41,10 +43,10 @@ interface StationCardProps extends Omit<StationGridProps, 'stations'> {
  * of the whole match, whatever the best-of label says (docs/PLAN.md, "1 vs 1 bracket"). The
  * timer counts up from the time the match was called.
  */
-function StationCard({ station, bestOf, now, busy, noShowMinutes, onWinner, onForfeit }: StationCardProps) {
+function StationCard({ station, bestOf, now, busy, noShowMinutes, onWinner, onHere, onForfeit }: StationCardProps) {
   const { match } = station;
   const elapsed = elapsedText(station.calledAt, now);
-  const waited = match !== null && match.slots.every((slot) => slot.player) && waitIsOver(station.calledAt, noShowMinutes, now);
+  const waited = match !== null && match.slots.every((slot) => slot.player) && waitIsOver(station.calledAt, noShowMinutes, now, station.arrived);
   return (
     <Paper variant="outlined" sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
@@ -82,7 +84,7 @@ function StationCard({ station, bestOf, now, busy, noShowMinutes, onWinner, onFo
               <Typography key={index}>To be decided</Typography>
             ),
           )}
-          {waited && <NoShowPrompt busy={busy} onForfeit={() => onForfeit(match)} />}
+          {waited && <NoShowPrompt busy={busy} onHere={() => onHere(station)} onForfeit={() => onForfeit(match)} />}
         </>
       ) : (
         <Typography color="text.secondary">Waiting for a match.</Typography>

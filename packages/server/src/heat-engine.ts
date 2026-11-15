@@ -112,6 +112,22 @@ export interface HeatTieBreakRecord {
   players: number[];
   /** The number of log entries when it was made. */
   step: number;
+  /**
+   * ISO 8601; when the host pressed Play tie-break. A station the heat fills is called at this
+   * time or later, not at the time of the last result before it (`QueueMatch.readyAt`). Left
+   * off a record stored before M7's review, which is called at the last result's time as it was.
+   */
+  at?: string;
+}
+
+/**
+ * The host tapped **They're here** for `heatId`'s call at `calledAt` (docs/PLAN.md, "Waiting
+ * for a missing player"). It names the call, so a heat reopened by an undo and called again
+ * starts a new wait. It is not a result: the log, the scores, and undo never read it.
+ */
+export interface HeatArrivalRecord {
+  heatId: number;
+  calledAt: string;
 }
 
 export interface HeatState {
@@ -125,6 +141,7 @@ export interface HeatState {
    */
   results: HeatResultRecord[];
   tieBreaks: HeatTieBreakRecord[];
+  arrivals: HeatArrivalRecord[];
 }
 
 export type HeatEngineAnswer = { ok: true; state: HeatState; heats: Heats } | { ok: false; error: ApiErrorCode };
@@ -357,7 +374,9 @@ function rebuild(state: HeatState): Built | null {
   const queueMatches: QueueMatch[] = [];
   for (const h of made) {
     const entry = { id: h.id, round: h.round, number: h.number, players: h.players, firstRound: false, hasByePlayer: false };
-    queueMatches.push({ ...entry, readyStep: madeAt.get(h.id) as number });
+    // A tie-break heat is called at the time the host made it, if that is after the last result.
+    const madeTime = h.kind === 'tie-break' ? (tieBreaks[h.id - TIE_BREAK_HEAT_BASE] as HeatTieBreakRecord).at : undefined;
+    queueMatches.push({ ...entry, readyStep: madeAt.get(h.id) as number, ...(madeTime !== undefined ? { readyAt: madeTime } : {}) });
     for (const step of reopenedAt.get(h.id) ?? []) queueMatches.push({ ...entry, readyStep: step, reopened: true });
   }
   const queue = buildQueue({
@@ -388,6 +407,16 @@ function stationsKept(before: Built, after: Built, mayTake: (heatId: number) => 
     return samePlayers((before.byId.get(s.matchId) as EngineHeat).players, (after.byId.get(s.matchId) as EngineHeat).players);
   });
 }
+
+/** True when `They're here` was tapped for this call of the heat. */
+const isArrived = (state: HeatState, heatId: number, calledAt: string | null): boolean =>
+  calledAt !== null && state.arrivals.some((a) => a.heatId === heatId && a.calledAt === calledAt);
+
+/**
+ * The arrivals of heats that still exist. An undo that takes a round, a tie-break, or the final
+ * away leaves its ids free for a new one, which must not inherit an old arrival.
+ */
+const arrivalsKept = (state: HeatState, built: Built): HeatArrivalRecord[] => state.arrivals.filter((a) => built.byId.has(a.heatId));
 
 function buildAnswer(state: HeatState, built: Built, handles: HandleLookup, lateOpen: boolean, noShowMinutes: number): Heats {
   const player = (id: number): Player => {
@@ -440,7 +469,12 @@ function buildAnswer(state: HeatState, built: Built, handles: HandleLookup, late
     lastResultId: lastResult ? lastResult.id : null,
     noShowMinutes,
     round: built.round,
-    stations: built.queue.stations.map((s) => ({ number: s.number, heat: s.matchId === null ? null : viewOf(s.matchId), calledAt: s.calledAt })),
+    stations: built.queue.stations.map((s) => ({
+      number: s.number,
+      heat: s.matchId === null ? null : viewOf(s.matchId),
+      calledAt: s.calledAt,
+      arrived: s.matchId !== null && isArrived(state, s.matchId, s.calledAt),
+    })),
     upNext: built.queue.upNext.map(viewOf),
     heats: built.heats.map((h) => viewOf(h.id)),
     standings: ranking.flatMap((g) => g.players.map((id) => row(g.place, id))),
@@ -520,6 +554,7 @@ export function createHeats(input: NewHeats, random: RandomSource, handles: Hand
     lateJoins: [],
     results: [],
     tieBreaks: [],
+    arrivals: [],
   };
   return { ok: true, state, heats: answerFor(state, rebuildOrThrow(state), handles, input.noShowMinutes ?? NO_SHOW_DEFAULT) };
 }
@@ -586,7 +621,9 @@ export function undoHeatResult(state: HeatState, input: HeatUndoInput, handles: 
       lateJoins: state.lateJoins.map((j) => (j.step > index ? { ...j, step: j.step - 1 } : j)),
       tieBreaks: state.tieBreaks.filter((t) => t.step <= index),
     };
-    return { ok: true, state: next, heats: answerFor(next, rebuildOrThrow(next), handles, noShowMinutes) };
+    const built = rebuildOrThrow(next);
+    const kept: HeatState = { ...next, arrivals: arrivalsKept(next, built) };
+    return { ok: true, state: kept, heats: answerFor(kept, built, handles, noShowMinutes) };
   }
 
   if (state.tieBreaks.some((t) => t.step > index)) return { ok: false, error: 'undo-later-first' };
@@ -610,11 +647,37 @@ export function joinHeatsLate(state: HeatState, playerId: number, handles: Handl
   return { ok: true, state: joined.state, heats: answerFor(joined.state, joined.built, handles, noShowMinutes) };
 }
 
-/** Makes the tie-break heats of the pass the cut for the final is waiting on. */
-export function startHeatTieBreak(state: HeatState, handles: HandleLookup, noShowMinutes = NO_SHOW_DEFAULT): HeatEngineAnswer {
+/**
+ * Makes the tie-break heats of the pass the cut for the final is waiting on. `at` is the time
+ * the host pressed Play tie-break: the stations they fill are called then (see
+ * `HeatTieBreakRecord.at`).
+ */
+export function startHeatTieBreak(state: HeatState, handles: HandleLookup, noShowMinutes = NO_SHOW_DEFAULT, at?: string): HeatEngineAnswer {
   const tie = rebuildOrThrow(state).cut?.tie;
   if (!tie || tie.started) return { ok: false, error: 'no-tie' };
   const step = stepNow(state);
-  const next: HeatState = { ...state, tieBreaks: [...state.tieBreaks, ...tie.heats.map((players) => ({ players: [...players], step }))] };
+  const next: HeatState = { ...state, tieBreaks: [...state.tieBreaks, ...tie.heats.map((players) => ({ players: [...players], step, ...(at !== undefined ? { at } : {}) }))] };
   return { ok: true, state: next, heats: answerFor(next, rebuildOrThrow(next), handles, noShowMinutes) };
+}
+
+export interface HeatArrivedInput {
+  heatId: number;
+  /** True for **They're here**, false to take it back. */
+  arrived: boolean;
+}
+
+/**
+ * Notes that the players of a heat on a station are here, or takes it back (docs/PLAN.md,
+ * "Waiting for a missing player"). It is stored against the station's current call, so it ends
+ * with the call. Saying the same thing twice changes nothing.
+ */
+export function setHeatArrived(state: HeatState, input: HeatArrivedInput, handles: HandleLookup, noShowMinutes = NO_SHOW_DEFAULT): HeatEngineAnswer {
+  const built = rebuildOrThrow(state);
+  if (!built.byId.has(input.heatId)) return { ok: false, error: 'not-found' };
+  const station = built.queue.stations.find((s) => s.matchId === input.heatId);
+  if (!station || station.calledAt === null) return { ok: false, error: 'not-on-station' };
+  const { calledAt } = station;
+  const others = state.arrivals.filter((a) => !(a.heatId === input.heatId && a.calledAt === calledAt));
+  const next: HeatState = { ...state, arrivals: input.arrived ? [...others, { heatId: input.heatId, calledAt }] : others };
+  return { ok: true, state: next, heats: answerFor(next, built, handles, noShowMinutes) };
 }

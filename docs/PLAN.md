@@ -387,8 +387,9 @@ password), and the sign-up routes need a Sign-up device or a host session. Witho
 route answers 401 `{ error: "not-signed-in" }`.
 
 **Live messages** are JSON with a `type`: `{ type: "event", event }` when the event changes,
-`{ type: "players" }` when the player list changes (the host page reloads it), and
-`{ type: "unpaired" }` just before the server closes an unpaired device's connection. A
+`{ type: "players" }` when the player list changes (the host page reloads it),
+`{ type: "plan" }` when the event's plan changes or a new event starts (no payload: a host
+screen reads the plan itself), and `{ type: "unpaired" }` just before the server closes an unpaired device's connection. A
 client reconnects with a growing delay after a drop.
 
 **The Display frame** in M3 shows the event name, live. "Up next" and the match timer have
@@ -924,8 +925,8 @@ staying there; `GroupOptions`; the stations select; and `PlayerPicker`, with **P
 - **Three cards**, as in section 5: 1 vs 1 bracket, Everyone plays everyone, and Races and
   free-for-all. Their lines are the ones the dialog has: "Players face off one on one.
   Winners move on.", "Every player plays all the others. The most wins takes 1st.", and
-  "Groups of up to 4 score points by place. The top 4 play a final." (`KIND_WORDS` in
-  `StartCompetitionDialog.tsx` and `FORMAT_CHOICES` in `bracketWords.ts`).
+  "Groups of up to 4 score points by place. The top 4 play a final." (`CARD_CHOICES` in
+  `wizardWords.ts`, which takes the second line from `FORMAT_CHOICES` in `bracketWords.ts`).
 - **The estimate line**, "With 16 players, this takes about 2 hours", where the players
   count is a picker from 2 to 32. It starts at the number signed up when that is 2 or more,
   else 16. It is only for the estimate and is not stored. A count below the format's minimum
@@ -979,9 +980,12 @@ for M10's stats, which makes the old brackets real data from M7 on.
 `packages/core` and answers 400 `bad-request` for anything else (`CLAUDE.md`, rule 2). A
 stored plan that can't be read becomes null, so a hand-edited database can't break the page.
 `GET /api/event` lists its fields one by one: `{ name, game }` (rule 1). `PUT /api/event`
-takes `{ name, game? }`: leaving `game` out keeps the stored one, so the rename box in play
-mode doesn't clear it, and an empty string clears it. `GET` and `PUT /api/event/plan` are host
-only and take `{ plan }`. A phone and the Sign-up tablet read the game from `GET /api/event`
+takes `{ name, game? }`: leaving `game` out keeps the stored one, and an empty string clears
+it. Leaving it out is only an option for an API caller: the rename box always sends the game
+it shows, so what the host sees is what is stored. `GET` and `PUT /api/event/plan` are host
+only and take `{ plan }`; a `PUT` also sends every screen a `plan` live message with no
+payload, as `POST /api/events` does (a wizard open in a second host window reads the plan
+again when it has no change of its own waiting to be saved). A phone and the Sign-up tablet read the game from `GET /api/event`
 and the `event` live message; `GET /api/phone` carries it in its `event`. The plan is flat
 and its schema is closed (`additionalProperties: false`):
 
@@ -1003,7 +1007,11 @@ interface EventPlan {
 
 The plan is the host's settings. The competition keeps its own settings, sent by `POST
 /api/bracket` or `POST /api/heats` at the start, so changing the plan never changes a
-running bracket.
+running bracket's format, best of, stations, rounds, or points. The one exception is
+`noShowMinutes`: the bracket and groups answers read it from the plan each time they are
+built, so a change shows on the running competition at once (see "Waiting for a missing
+player"). The wizard saves the plan one change after another, and **Start** waits for those
+saves and sends the plan the server answered with.
 
 ### Late sign-up
 
@@ -1064,7 +1072,9 @@ history into the stations, so the same log gives the same stations after a resta
   had a first-round bye waits. The cost is that with two stations one may sit idle near the
   end of round 1.
 - **`calledAt`** is the time of the result that freed the station, or the bracket's creation
-  time for the first matches. The TV counts up from it. Nothing sounds or changes by
+  time for the first matches. For a tie-break match it is the later of the time the host
+  pressed **Play tie-break** and the time of the result that freed the station (see "Waiting
+  for a missing player"). The TV counts up from it, in the server's time. Nothing sounds or changes by
   itself; from M7 the host is prompted when the plan's wait is over (see "Waiting for a
   missing player").
 - **Up next** is the waiting matches in queue order. A match whose player is still on a
@@ -1102,12 +1112,43 @@ under "More options" (`noShowMinutes`: 3, 5, 10, or 15; checked 2026-11-14).
 
 **The prompt.** A station's `calledAt` (see "Stations and the queue"; for the first matches
 it is the bracket's creation time) plus `noShowMinutes` is when the wait is over. Then the
-host's station card shows "Still waiting?" and a **Forfeit** button, and the host taps who is
-missing. Nothing happens by itself. The TV shows a call line for that station while the wait
-is over, naming every player of the match or group, since the TV can't know who is missing:
-"Zap and Kai, come to station 2!" The bracket and heats answers carry `noShowMinutes`, read
-from the event's plan, so the screens agree on when the wait is over; it is 5 when the event
-has no plan.
+host's station card shows "Still waiting?" with two buttons, **They're here** and
+**Forfeit**, and the host taps who is missing. Nothing happens by itself. The TV shows a call
+line for that station while the wait is over, naming every player of the match or group,
+since the TV can't know who is missing: "Zap and Kai, come to station 2!" The bracket and
+heats answers carry `noShowMinutes`, read from the event's plan, so the screens agree on when
+the wait is over; it is 5 when the event has no plan.
+
+**They're here** (Brad, 2026-11-15). Without it the prompt and the call line stayed up for
+the rest of every match, since only a result cleared them. **They're here** says the players
+came: the prompt goes from every host screen and the call line from the TV, for that match
+or group. The snackbar says "Station 2: they're here" with **Undo**, which puts the wait
+back. It is stored on the server (`POST /api/bracket/arrived` takes `{ matchId, arrived }`,
+and `POST /api/heats/arrived` takes `{ heatId, arrived }`; host only, so a phone, a device,
+or a stranger gets 401), and each station in the answers carries `arrived`. It belongs to one
+call: the table `bracket_arrivals` (or `heat_arrivals`) keeps the match and the `calledAt` it
+was tapped for, so a match reopened by an older undo and called again starts a new wait. An
+arrival is not a result, so no log, standing, or undo reads it. Undoing the newest result
+brings the same call back with its arrival, and an undo that takes away a tie-break (or a
+later round or the final of a group event) takes the arrivals of those with it, so a new one
+with the same id starts fresh. It answers 409 `not-on-station` for a match that isn't on a
+station and 404 `not-found` for one that doesn't exist.
+
+**The server's clock.** `calledAt` is the server's time, so a wait or a timer that read the
+laptop's, tablet's, or TV's own clock would be wrong by however far that clock is off. Every
+answer that carries the bracket or the groups also carries `now`, the server's time as ISO
+8601, read when the answer is sent and never kept with a cached answer. The client keeps the
+difference to its own clock (the middle of the request to `now`) and the station timers, the
+wait for a missing player, and the TV's call line all count in server time. There is no live
+hello message, so each reload of the bracket or the groups also refreshes the offset.
+
+**A tie-break's call time.** A tie-break match or group is called when the host presses
+**Play tie-break**, not at the time of the last result before it, so its wait starts when the
+players are told. The tie-break records hold that time (`at`, set by the route from the
+server's clock); a station it fills is called at the later of that time and the time of the
+result that freed the station, and a tie-break stored before migration 8 has no time and is
+called at the last result's time, as before. Undoing the result a tie-break was made after
+takes the tie-break and its time away, so the bracket is exactly what it was.
 
 **In a bracket**, a forfeit is recorded as an ordinary result for the player who showed up,
 with `forfeit: true` on the result record. The flag is copied through the result log and its
@@ -1141,7 +1182,9 @@ event and the player). An event has one bracket, and a new one replaces it. Migr
 adds `undone_step` and `undone_at` to `bracket_results`: a result taken back by an older undo
 keeps its row, with the step and time of the undo. Migration 7 (M7) adds `forfeit` (0 or 1,
 default 0): the result is for the player who came, recorded because the other didn't (see
-"Waiting for a missing player"). No handle is stored; an answer joins the current one. The server rebuilds the library's state on its
+"Waiting for a missing player"). Migration 8 adds `at` to `bracket_tie_breaks` (when the host
+pressed Play tie-break; null on an older row) and the table `bracket_arrivals` (the bracket,
+the match, and the `calledAt` it was tapped for). No handle is stored; an answer joins the current one. The server rebuilds the library's state on its
 in-memory store (`brackets-memory-db`) by creating the stage and replaying the log. It checks that each logged match is ready and holds the same two players.
 A tie-break match is stored by the server with the step at which it was made, and its
 result goes in the same log. Replay of 32 players took 13 ms in two lives (63 results) and
@@ -1167,13 +1210,19 @@ bracket finished with one player in each of places 1 to 3. The library's own
 | `POST /api/bracket/undo` `{ resultId }` | host | `{ bracket }`; 409 `undo-later-first`, or `nothing-to-undo` for a result not in the log or already undone |
 | `POST /api/bracket/players` `{ playerId }` | host | `{ bracket }`; 409 `late-closed` or `already-in`; 404 `not-found` for a player who isn't there |
 | `POST /api/bracket/tie-break` | host | `{ bracket }` with the tie-break matches made; 409 `no-tie` if the bracket answer lists no tie that still needs matches |
+| `POST /api/bracket/arrived` `{ matchId, arrived }` | host | `{ bracket }`; 409 `not-on-station`; 404 `not-found` for a match that isn't there |
 | `DELETE /api/bracket` | host | 204; the host screen asks first, since it can't be undone |
 | `GET /api/event/players` | host | `{ playerIds }`: the players signed up to the current event |
 
 `forfeit` (M7) is optional and false when left out. When true, `winnerId` is the player who
 came, and the result is logged and undone like any other.
 
-The four `POST` routes under `/api/bracket/` answer 404 `no-bracket` when the event has no
+Every bracket answer also carries `now`, the server's time (see "Waiting for a missing
+player"): `{ bracket, now }`, and `{ bracket, resultId, now }` for a result. It sits beside the
+bracket, not inside it, because the phone answer cache keeps a bracket and would keep a
+stale time with it.
+
+The five `POST` routes under `/api/bracket/` answer 404 `no-bracket` when the event has no
 bracket. `format` is `single`, `double`, or `round_robin`; `bestOf` is 1, 3, or 5; `stations`
 is 1 to 8. A new bracket replaces a finished one. A running bracket answers 409 `bracket-running`.
 `playerIds` are 2 to 32 players (3 or more for `double`).
@@ -1189,7 +1238,7 @@ interface Bracket {
   lateOpen: boolean;        // the host can still add a player (see "Late sign-up")
   lastResultId: number | null;  // the newest result not undone
   noShowMinutes: number;    // M7: when a station's wait is over (see "Waiting for a missing player")
-  stations: { number: number; match: BracketMatch | null; calledAt: string | null }[];
+  stations: { number: number; match: BracketMatch | null; calledAt: string | null; arrived: boolean }[];
   upNext: BracketMatch[];
   matches: BracketMatch[];
   standings: { place: number; player: Player; wins: number; losses: number }[];
@@ -1256,7 +1305,9 @@ mean rebuilding `brackets` (its format `CHECK`) and `bracket_results` (`winner_i
   time, and `undone_step` and `undone_at` for an older undo. Migration 7 (M7) adds
   `missing`, a JSON list of player ids, null for none (see "Waiting for a missing player").
 - `heat_late_joins`: the run, its position, the player, the heat, and the step.
-- `heat_tie_breaks`: the run, its position, the players as JSON, and the step.
+- `heat_tie_breaks`: the run, its position, the players as JSON, and the step. Migration 8
+  adds `at` (when the host pressed Play tie-break; null on an older row).
+- `heat_arrivals`: the run, the heat, and the `calledAt` it was tapped for (migration 8).
 
 Ids and times only (`CLAUDE.md`, rule 1); an answer joins the current handle.
 `heat-engine.ts` follows the bracket engine: state in, state and answer out, the log made by
@@ -1272,9 +1323,13 @@ start at 1000 and the final is 2000.
 | `POST /api/heats/undo` `{ resultId }` | host | `{ heats }`; 409 `undo-later-first`, or `nothing-to-undo` for a result not in the log or already undone |
 | `POST /api/heats/players` `{ playerId }` | host | `{ heats }`; 409 `late-closed` or `already-in`; 404 `not-found` for a player who isn't there |
 | `POST /api/heats/tie-break` | host | `{ heats }` with the tie-break heats made; 409 `no-tie` if no tie at the cut still needs heats |
+| `POST /api/heats/arrived` `{ heatId, arrived }` | host | `{ heats }`; 409 `not-on-station`; 404 `not-found` for a heat that isn't there |
 | `DELETE /api/heats` | host | 204; the host screen asks first, since it can't be undone |
 
-The four `POST` routes under `/api/heats/` answer 404 `no-heats` when the event has no heats.
+Every heats answer carries `now` the same way: `{ heats, now }`, and `{ heats, resultId, now }`
+for a result.
+
+The five `POST` routes under `/api/heats/` answer 404 `no-heats` when the event has no heats.
 `stations` is 1 to 8, `races` 1 to 4, `rounds` 1 to 3, and `points` 4 whole numbers that pass
 `isPointsTable`. `playerIds` are 2 to 32 players; with 2 to 4, `rounds` is stored as 0. `missing` (M7) is
 optional and empty when left out. When it is used, `order` lists only the players who played,
@@ -1300,7 +1355,7 @@ interface Heats {
   lastResultId: number | null;
   noShowMinutes: number;    // M7: when a station's wait is over
   round: number | null;     // the qualifying round being played; null for tie-breaks and the final
-  stations: { number: number; heat: Heat | null; calledAt: string | null }[];
+  stations: { number: number; heat: Heat | null; calledAt: string | null; arrived: boolean }[];
   upNext: Heat[];
   heats: Heat[];            // every heat made so far
   standings: { place: number; player: Player; points: number; heatsPlayed: number }[];

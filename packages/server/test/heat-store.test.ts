@@ -3,7 +3,7 @@
 import { createSeededRandom } from '@coliseumgrid/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { openDatabase, type Database } from '../src/database.ts';
-import { heatsAnswer, joinHeatsLate, startHeatTieBreak, type HeatState } from '../src/heat-engine.ts';
+import { heatsAnswer, joinHeatsLate, setHeatArrived, startHeatTieBreak, type HeatState } from '../src/heat-engine.ts';
 import { createHeatStore, type HeatStore } from '../src/heat-store.ts';
 import { at, expectOk, handles, listedPick, onStations, play, playOut, randomPick, start, undo, type HeatRun } from './heat-helpers.ts';
 
@@ -69,6 +69,26 @@ describe('the heat store', () => {
     expect(db.prepare('SELECT players, step FROM heat_tie_breaks ORDER BY position').all()).toEqual(
       run.state.tieBreaks.map((t) => ({ players: JSON.stringify(t.players), step: t.step })),
     );
+  });
+
+  it('stores a tie-break\'s time and the arrivals, and a tie-break without a time loads without one', () => {
+    const run = playToTie(start(10, 3, { stations: 2, rounds: 2 }));
+    const old = expectOk(startHeatTieBreak(run.state, handles));
+    store.save(eventId, old.state);
+    expect(store.load(eventId)?.tieBreaks.every((t) => !('at' in t))).toBe(true);
+    expect(db.prepare('SELECT at FROM heat_tie_breaks').all().every((r) => r['at'] === null)).toBe(true);
+
+    const made = expectOk(startHeatTieBreak(run.state, handles, 5, at(30)));
+    const here = expectOk(setHeatArrived(made.state, { heatId: onStations(made.heats)[0]?.id as number, arrived: true }, handles));
+    store.save(eventId, here.state);
+    expect(store.load(eventId)).toEqual(here.state);
+    expect(store.load(eventId)?.tieBreaks.every((t) => t.at === at(30))).toBe(true);
+    expect(count('heat_arrivals')).toBe(1);
+    store.save(eventId, made.state);
+    expect(count('heat_arrivals')).toBe(0);
+    store.save(eventId, here.state);
+    store.remove(eventId);
+    expect(count('heat_arrivals')).toBe(0);
   });
 
   it('rewrites the rows when the newest result is undone, so the database equals the state', () => {

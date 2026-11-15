@@ -144,7 +144,12 @@ export const bracketSchema = objectSchema({
   noShowMinutes: { type: 'integer' },
   stations: {
     type: 'array',
-    items: objectSchema({ number: { type: 'integer' }, match: nullable(matchSchema), calledAt: { type: ['string', 'null'] } }),
+    items: objectSchema({
+      number: { type: 'integer' },
+      match: nullable(matchSchema),
+      calledAt: { type: ['string', 'null'] },
+      arrived: { type: 'boolean' },
+    }),
   },
   upNext: { type: 'array', items: matchSchema },
   matches: { type: 'array', items: matchSchema },
@@ -189,7 +194,12 @@ export const heatsSchema = objectSchema({
   round: { type: ['integer', 'null'] },
   stations: {
     type: 'array',
-    items: objectSchema({ number: { type: 'integer' }, heat: nullable(heatSchema), calledAt: { type: ['string', 'null'] } }),
+    items: objectSchema({
+      number: { type: 'integer' },
+      heat: nullable(heatSchema),
+      calledAt: { type: ['string', 'null'] },
+      arrived: { type: 'boolean' },
+    }),
   },
   upNext: { type: 'array', items: heatSchema },
   heats: { type: 'array', items: heatSchema },

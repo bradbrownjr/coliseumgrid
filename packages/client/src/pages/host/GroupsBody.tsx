@@ -1,11 +1,12 @@
-import type { Heat, Heats, Player } from '@coliseumgrid/core';
+import type { Heat, HeatStation, Heats, Player } from '@coliseumgrid/core';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { useEffect, useState } from 'react';
 import { GROUP_RESULT_WORDS } from '../../api/errors.ts';
-import { recordHeat, startHeatTieBreak, undoHeat } from '../../api/heats.ts';
+import { markHeatArrived, recordHeat, startHeatTieBreak, undoHeat } from '../../api/heats.ts';
 import { useNow } from '../../components/useNow.ts';
 import { heatCutAfter, heatTieMessage } from '../../heatsWords.ts';
+import { arrivedWords, waitingAgainWords } from '../../noShow.ts';
 import { TieNotices } from './BracketLists.tsx';
 import { doneHeats, groupsSummary, heatOnStation, heatResultWords, heatTitle, phaseWords, savedWords, showStandings, showsPoints } from './groupWords.ts';
 import { GroupResults, GroupStandings, UpNextGroups } from './GroupLists.tsx';
@@ -63,6 +64,24 @@ export function GroupsBody({ heats, apply, reload, say }: GroupsBodyProps) {
     );
   };
 
+  // **They're here** ends the wait for this call of the group, on the host's cards and on the
+  // TV. The snackbar's Undo puts the wait back (docs/PLAN.md, "Waiting for a missing player").
+  const here = (station: HeatStation) => {
+    const heat = station.heat;
+    if (!heat) return;
+    const waitAgain = () =>
+      run(
+        () => markHeatArrived(heat.id, false),
+        (data) => data.heats,
+        () => say(waitingAgainWords(station.number)),
+      );
+    void run(
+      () => markHeatArrived(heat.id),
+      (data) => data.heats,
+      () => say(arrivedWords(station.number), () => void waitAgain()),
+    );
+  };
+
   const undoHeatResult = (heat: Heat) => {
     const result = heatResultWords(heat);
     if (heat.resultId !== null) void undo(heat.resultId, `Undid: ${heatTitle(heat, heats.heats)}${result ? `, ${result}` : ''}`);
@@ -93,6 +112,7 @@ export function GroupsBody({ heats, apply, reload, say }: GroupsBodyProps) {
             busy={busy}
             noShowMinutes={heats.noShowMinutes}
             onRecord={(heat) => setRecording({ heat, askMissing: false })}
+            onHere={here}
             onForfeit={(heat) => setRecording({ heat, askMissing: true })}
           />
           <UpNextGroups heats={heats.upNext} all={heats.heats} />

@@ -46,7 +46,7 @@ export function expectContractShape(bracket: Bracket): void {
   bracket.matches.forEach(match);
   bracket.upNext.forEach(match);
   for (const station of bracket.stations) {
-    expect(keys(station)).toEqual(['calledAt', 'match', 'number']);
+    expect(keys(station)).toEqual(['arrived', 'calledAt', 'match', 'number']);
     if (station.match) match(station.match);
   }
   for (const row of bracket.standings) {

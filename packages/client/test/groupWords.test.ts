@@ -183,7 +183,7 @@ describe('start words', () => {
 });
 
 describe('heatOnStation', () => {
-  const station = (number: number, held: Heat | null) => ({ number, heat: held, calledAt: held ? '2027-07-10T14:00:00.000Z' : null });
+  const station = (number: number, held: Heat | null) => ({ number, heat: held, calledAt: held ? '2027-07-10T14:00:00.000Z' : null, arrived: false });
   it('is true for a heat on any station', () => {
     const answer = heats({ stations: [station(1, heat(101)), station(2, heat(102))] });
     expect(heatOnStation(answer, 101)).toBe(true);
@@ -220,11 +220,11 @@ describe('words for what is running', () => {
     expect(gameCount(3)).toBe('3 games');
   });
   it('summarizes the groups', () => {
-    const answer = heats({ stations: [{ number: 1, heat: null, calledAt: null }, { number: 2, heat: null, calledAt: null }], races: 2 });
+    const answer = heats({ stations: [{ number: 1, heat: null, calledAt: null, arrived: false }, { number: 2, heat: null, calledAt: null, arrived: false }], races: 2 });
     expect(groupsSummary(answer)).toBe('Races and free-for-all, 2 stations. Each group plays 2 games. Points for 1st to 4th: 4, 3, 2, 1.');
   });
   it('leaves the points out when 2 to 4 players play only the final', () => {
-    const answer = heats({ rounds: 0, races: 1, stations: [{ number: 1, heat: null, calledAt: null }] });
+    const answer = heats({ rounds: 0, races: 1, stations: [{ number: 1, heat: null, calledAt: null, arrived: false }] });
     expect(groupsSummary(answer)).toBe('Races and free-for-all, 1 station. Each group plays 1 game.');
   });
   it('names the phase', () => {

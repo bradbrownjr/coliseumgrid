@@ -33,8 +33,9 @@ export function createBracketStore(db: Database): BracketStore {
   );
   const lateJoins = db.prepare('SELECT player_id, step FROM bracket_late_joins WHERE bracket_id = ? ORDER BY position');
   const tieBreaks = db.prepare(
-    'SELECT round, player_a, player_b, step FROM bracket_tie_breaks WHERE bracket_id = ? ORDER BY position',
+    'SELECT round, player_a, player_b, step, at FROM bracket_tie_breaks WHERE bracket_id = ? ORDER BY position',
   );
+  const arrivals = db.prepare('SELECT match_id, called_at FROM bracket_arrivals WHERE bracket_id = ? ORDER BY rowid');
   const removeForEvent = db.prepare('DELETE FROM brackets WHERE event_id = ? AND id <> ?');
   const removeAll = db.prepare('DELETE FROM brackets WHERE event_id = ?');
   const exists = db.prepare('SELECT 1 AS found FROM brackets WHERE id = ?');
@@ -45,13 +46,15 @@ export function createBracketStore(db: Database): BracketStore {
   const clearResults = db.prepare('DELETE FROM bracket_results WHERE bracket_id = ?');
   const clearLate = db.prepare('DELETE FROM bracket_late_joins WHERE bracket_id = ?');
   const clearTies = db.prepare('DELETE FROM bracket_tie_breaks WHERE bracket_id = ?');
+  const clearArrivals = db.prepare('DELETE FROM bracket_arrivals WHERE bracket_id = ?');
   const insertResult = db.prepare(
     'INSERT INTO bracket_results (id, bracket_id, match_id, winner_id, loser_id, at, forfeit, undone_step, undone_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
   );
   const insertLate = db.prepare('INSERT INTO bracket_late_joins (bracket_id, position, player_id, step) VALUES (?, ?, ?, ?)');
   const insertTie = db.prepare(
-    'INSERT INTO bracket_tie_breaks (bracket_id, position, round, player_a, player_b, step) VALUES (?, ?, ?, ?, ?, ?)',
+    'INSERT INTO bracket_tie_breaks (bracket_id, position, round, player_a, player_b, step, at) VALUES (?, ?, ?, ?, ?, ?, ?)',
   );
+  const insertArrival = db.prepare('INSERT INTO bracket_arrivals (bracket_id, match_id, called_at) VALUES (?, ?, ?)');
   const sequence = db.prepare('SELECT seq FROM sqlite_sequence WHERE name = ?');
   // json_each lists the seeding's entries; empty slots are JSON nulls and never equal an id.
   const holds = db.prepare(
@@ -94,7 +97,10 @@ export function createBracketStore(db: Database): BracketStore {
           round: r['round'] as number,
           players: [r['player_a'] as number, r['player_b'] as number] as [number, number],
           step: r['step'] as number,
+          // Left off a row stored before the column existed.
+          ...(r['at'] === null ? {} : { at: r['at'] as string }),
         })),
+        arrivals: arrivals.all(id).map((r) => ({ matchId: r['match_id'] as number, calledAt: r['called_at'] as string })),
       };
     },
     save(eventId, state) {
@@ -108,6 +114,7 @@ export function createBracketStore(db: Database): BracketStore {
           clearResults.run(settings.id);
           clearLate.run(settings.id);
           clearTies.run(settings.id);
+          clearArrivals.run(settings.id);
         } else {
           insertBracket.run(settings.id, eventId, settings.format, settings.bestOf, settings.stations, seeding, settings.createdAt);
         }
@@ -115,7 +122,8 @@ export function createBracketStore(db: Database): BracketStore {
           insertResult.run(r.id, settings.id, r.matchId, r.winnerId, r.loserId, r.at, r.forfeit ? 1 : 0, r.undone?.step ?? null, r.undone?.at ?? null);
         }
         state.lateJoins.forEach((j, position) => insertLate.run(settings.id, position, j.playerId, j.step));
-        state.tieBreaks.forEach((t, position) => insertTie.run(settings.id, position, t.round, t.players[0], t.players[1], t.step));
+        state.tieBreaks.forEach((t, position) => insertTie.run(settings.id, position, t.round, t.players[0], t.players[1], t.step, t.at ?? null));
+        state.arrivals.forEach((a) => insertArrival.run(settings.id, a.matchId, a.calledAt));
       });
     },
     remove: (eventId) => removeAll.run(eventId).changes > 0,

@@ -435,8 +435,8 @@ describe('the event', () => {
   });
 
   it('tidies the name: trims it and joins runs of spaces', async () => {
-    const res = await call('PUT', '/api/event', { cookie: host, payload: { name: '  Friday \t Night   Brawl ' } });
-    expect(res.json()).toEqual({ event: { name: 'Friday Night Brawl', game: null } });
+    const res = await call('PUT', '/api/event', { cookie: host, payload: { name: '  Friday \t Night   Bash ' } });
+    expect(res.json()).toEqual({ event: { name: 'Friday Night Bash', game: null } });
   });
 
   it.each([[''], ['   '], ['x'.repeat(61)], ['bad\u0000name'], ['zero​width'], ['x'.repeat(241)]])('refuses the name %j as bad-request', async (name) => {

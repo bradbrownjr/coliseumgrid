@@ -72,7 +72,16 @@ export function RecordDialog({ heat, races, heats, askMissing = false, onSave, o
                 color="primary"
                 selected={missingIds.has(player.id)}
                 onChange={() => toggle(player.id)}
-                sx={(theme) => ({ minHeight: theme.spacing(9), typography: 'h6', textTransform: 'none', overflowWrap: 'anywhere', justifyContent: 'flex-start', gap: 1 })}
+                // An unselected toggle is MUI's gray, which reads as switched off. These are the choices, so they take the text color; a selected one keeps the theme's primary.
+                sx={(theme) => ({
+                  minHeight: theme.spacing(9),
+                  typography: 'h6',
+                  textTransform: 'none',
+                  overflowWrap: 'anywhere',
+                  justifyContent: 'flex-start',
+                  gap: 1,
+                  color: 'text.primary',
+                })}
               >
                 {missingIds.has(player.id) && <PersonOffIcon aria-hidden />}
                 {missingIds.has(player.id) ? `${player.handle}: Missing` : player.handle}

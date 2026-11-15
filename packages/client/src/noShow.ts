@@ -11,12 +11,23 @@ export const FORFEIT_MARK = 'Forfeit';
 /** The host's prompt on a station card. */
 export const STILL_WAITING = 'Still waiting?';
 
+/** The prompt's button that says the players came: it ends the wait for this call of the match or group. */
+export const THEY_ARE_HERE = "They're here";
+
+/** The snackbar after **They're here**, which comes with Undo. */
+export const arrivedWords = (station: number): string => `Station ${station}: they're here`;
+
+/** The snackbar after that Undo. */
+export const waitingAgainWords = (station: number): string => `Station ${station}: waiting again`;
+
 /**
- * True once `noShowMinutes` have passed since the station was called. A missing or unreadable
- * call time never counts as over, so a bad clock can't put the prompt up.
+ * True once `noShowMinutes` have passed since the station was called, unless the host said the
+ * players are here (`arrived`, which belongs to this call only). A missing or unreadable call
+ * time never counts as over, so a bad clock can't put the prompt up. `now` is the server's time
+ * (`useNow`), since `calledAt` is the server's.
  */
-export function waitIsOver(calledAt: string | null, noShowMinutes: number, now: number): boolean {
-  if (calledAt === null) return false;
+export function waitIsOver(calledAt: string | null, noShowMinutes: number, now: number, arrived = false): boolean {
+  if (arrived || calledAt === null) return false;
   const called = Date.parse(calledAt);
   if (Number.isNaN(called)) return false;
   return now - called >= noShowMinutes * 60_000;

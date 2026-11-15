@@ -286,7 +286,7 @@ describe('refusals', () => {
   it('keeps only ids and times in the state', () => {
     const { state } = start(8, 1);
     const fields = (state: HeatState): string[] => Object.keys(state).sort();
-    expect(fields(state)).toEqual(['lateJoins', 'results', 'seeding', 'settings', 'tieBreaks']);
+    expect(fields(state)).toEqual(['arrivals', 'lateJoins', 'results', 'seeding', 'settings', 'tieBreaks']);
     expect(JSON.stringify(state)).not.toMatch(/Player/);
   });
 });

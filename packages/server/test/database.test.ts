@@ -129,7 +129,7 @@ describe('migration 3 (brackets)', () => {
     // undone_at and undone_step are migration 4's.
     expect(columns(db, 'bracket_results')).toEqual(['id', 'bracket_id', 'match_id', 'winner_id', 'loser_id', 'at', 'undone_at', 'undone_step', 'forfeit']);
     expect(columns(db, 'bracket_late_joins')).toEqual(['bracket_id', 'position', 'player_id', 'step']);
-    expect(columns(db, 'bracket_tie_breaks')).toEqual(['bracket_id', 'position', 'round', 'player_a', 'player_b', 'step']);
+    expect(columns(db, 'bracket_tie_breaks')).toEqual(['bracket_id', 'position', 'round', 'player_a', 'player_b', 'step', 'at']);
     expect(columns(db, 'event_players')).toEqual(['event_id', 'player_id']);
     for (const table of ['brackets', 'bracket_results', 'bracket_late_joins', 'bracket_tie_breaks', 'event_players']) {
       expect(dump(db, table), table).toEqual([]);
@@ -269,7 +269,7 @@ describe('migration 5 (heats)', () => {
     expect(columns(db, 'heat_runs')).toEqual(['id', 'event_id', 'stations', 'races', 'rounds', 'points', 'seeding', 'created_at']);
     expect(columns(db, 'heat_results')).toEqual(['id', 'run_id', 'heat_id', 'finish_order', 'at', 'undone_step', 'undone_at', 'missing']);
     expect(columns(db, 'heat_late_joins')).toEqual(['run_id', 'position', 'player_id', 'heat_id', 'step']);
-    expect(columns(db, 'heat_tie_breaks')).toEqual(['run_id', 'position', 'players', 'step']);
+    expect(columns(db, 'heat_tie_breaks')).toEqual(['run_id', 'position', 'players', 'step', 'at']);
     for (const table of ['heat_runs', 'heat_results', 'heat_late_joins', 'heat_tie_breaks']) expect(dump(db, table), table).toEqual([]);
     expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
     expect(db.prepare('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' });
@@ -484,7 +484,6 @@ describe('migration 7 (the setup wizard)', () => {
     const db = m6Database();
     const before = OLD_TABLES.map((t) => dump(db, t));
     migrate(db);
-    expect(version(db)).toBe(7);
     expect(version(db)).toBe(MIGRATIONS.length);
     expect(OLD_TABLES.map((t) => dump(db, t))).toEqual(before);
     expect(columns(db, 'events')).toEqual(['id', 'name', 'created_at', 'game', 'plan']);
@@ -519,6 +518,55 @@ describe('migration 7 (the setup wizard)', () => {
     migrate(db);
     expect(version(db)).toBe(MIGRATIONS.length);
     expect(db.prepare('SELECT name, game, plan FROM events').all()).toEqual([{ name: 'Friday', game: null, plan: null }]);
+  });
+});
+
+describe('migration 8 (tie-break start times and arrivals)', () => {
+  /** A database as M7 left it: schema version 7, with a bracket and heats that each have a tie-break made. */
+  function m7Database(): DatabaseSync {
+    const db = new DatabaseSync(':memory:');
+    db.exec('PRAGMA foreign_keys = ON');
+    for (const step of MIGRATIONS.slice(0, 7)) db.exec(step);
+    db.exec('PRAGMA user_version = 7');
+    db.exec(`
+      INSERT INTO events (name, created_at) VALUES ('Friday', 't1');
+      INSERT INTO brackets (event_id, format, best_of, stations, seeding, created_at) VALUES (1, 'round_robin', 1, 1, '[1,2,3]', 't2');
+      INSERT INTO bracket_tie_breaks (bracket_id, position, round, player_a, player_b, step) VALUES (1, 0, 1, 1, 2, 3);
+      INSERT INTO heat_runs (event_id, stations, races, rounds, points, seeding, created_at) VALUES (1, 1, 1, 1, '[4,3,2,1]', '[1,2,3,4,5]', 't3');
+      INSERT INTO heat_tie_breaks (run_id, position, players, step) VALUES (1, 0, '[1,2]', 5);
+    `);
+    return db;
+  }
+
+  it('adds the tie-break start time and the arrival tables to a version 7 database and keeps every old row', () => {
+    const db = m7Database();
+    const before = ['events', 'brackets', 'heat_runs'].map((t) => dump(db, t));
+    migrate(db);
+    expect(version(db)).toBe(MIGRATIONS.length);
+    expect(['events', 'brackets', 'heat_runs'].map((t) => dump(db, t))).toEqual(before);
+    expect(columns(db, 'bracket_arrivals')).toEqual(['bracket_id', 'match_id', 'called_at']);
+    expect(columns(db, 'heat_arrivals')).toEqual(['run_id', 'heat_id', 'called_at']);
+    expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+    expect(db.prepare('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' });
+  });
+
+  it('gives an old tie-break no start time, so it is called at the last result as before', () => {
+    const db = m7Database();
+    migrate(db);
+    expect(db.prepare('SELECT step, at FROM bracket_tie_breaks').all()).toEqual([{ step: 3, at: null }]);
+    expect(db.prepare('SELECT step, at FROM heat_tie_breaks').all()).toEqual([{ step: 5, at: null }]);
+  });
+
+  it('keeps one arrival for a call, and removes the arrivals with the bracket or the heats', () => {
+    const db = m7Database();
+    migrate(db);
+    db.exec("INSERT INTO bracket_arrivals (bracket_id, match_id, called_at) VALUES (1, 0, 'a'), (1, 0, 'b')");
+    expect(() => db.exec("INSERT INTO bracket_arrivals (bracket_id, match_id, called_at) VALUES (1, 0, 'a')")).toThrow(/UNIQUE|PRIMARY/);
+    db.exec("INSERT INTO heat_arrivals (run_id, heat_id, called_at) VALUES (1, 101, 'a')");
+    expect(() => db.exec("INSERT INTO heat_arrivals (run_id, heat_id, called_at) VALUES (1, 101, 'a')")).toThrow(/UNIQUE|PRIMARY/);
+    db.exec('DELETE FROM brackets; DELETE FROM heat_runs');
+    expect(dump(db, 'bracket_arrivals')).toEqual([]);
+    expect(dump(db, 'heat_arrivals')).toEqual([]);
   });
 });
 

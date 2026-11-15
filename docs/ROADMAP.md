@@ -103,12 +103,16 @@ Tasks:
   `POST /api/events` on the write chain, which drops the phone answer cache and broadcasts
   `event`, `players`, `bracket`, and `heats`; `GET` and `PUT /api/event/plan` with closed
   schemas; `forfeit` and `missing` carried through the result log, the replay, and the
-  answers; `noShowMinutes` in both answers; the calibration test.
+  answers; `noShowMinutes` in both answers; the calibration test. From the review:
+  migration 8 (a tie-break's start time, and the arrivals tables), `POST /api/bracket/arrived`
+  and `POST /api/heats/arrived`, `now` in every bracket and heats answer, and a `plan` live
+  message.
 - **Client.** The wizard on `/host` in setup mode, with the three steps, the dice, the
   template and format cards, the estimate and its warning, "More options", and step 3's
   live count; **New event** and **New competition** in play mode; the game name on the TV,
   the Sign-up tablet, and the phone page; "Still waiting?" and **Forfeit** on the station
-  cards; the TV call line; "Forfeit" marks in the bracket view and the results list;
+  cards, with **They're here** beside **Forfeit**; the TV call line, timed by the server's
+  clock; "Forfeit" marks in the bracket view and the results list;
   `StartCompetitionDialog` removed, with `BracketOptions`, `GroupOptions`, the stations
   select, and `PlayerPicker` reused.
 - **Review.** A review of the whole milestone against `PLAN.md` and `DESIGN.md` before it

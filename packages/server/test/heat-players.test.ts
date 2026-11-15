@@ -67,7 +67,7 @@ describe('merging players', () => {
     expect(res.statusCode).toBe(409);
     expect(res.json()).toEqual({ error: 'in-bracket' });
     expect((await host('GET', '/api/players')).json()).toEqual(before);
-    expect((await host('GET', '/api/heats')).json()).toEqual({ heats });
+    expect((await host('GET', '/api/heats')).json().heats).toEqual(heats);
   });
 
   it('refuses it for finished heats too, so the answer can always be made', async () => {

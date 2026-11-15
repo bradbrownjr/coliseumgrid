@@ -147,7 +147,7 @@ describe('stations and the queue', () => {
     expect(first?.match?.side).toBe('main');
     expect(first?.match?.round).toBe(1);
     expect(first?.calledAt).toBe(at(0));
-    expect(second).toEqual({ number: 2, match: null, calledAt: null });
+    expect(second).toEqual({ number: 2, match: null, calledAt: null, arrived: false });
     const held = run.bracket.matches.find((m) => m.round === 2 && m.status === 'ready');
     expect(held).toBeDefined();
     expect(run.bracket.upNext).toEqual([]);

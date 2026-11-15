@@ -54,10 +54,11 @@ export function canEstimate(format: PlanFormat, players: number): boolean {
 }
 
 /**
- * The most tie-break groups at the cut for the final. docs/PLAN.md says 0 or 1, but the 4, 3,
- * 2, 1 table ties often, and a tie of more than 4 players needs 2 or more groups and then a
- * second pass. Played out through the engine on 2026-11-14 (2016 runs, 5 to 32 players, 1 to 3
- * rounds): up to 1 group with 10 players or fewer, up to 3 from 11.
+ * The most tie-break groups at the cut for the final: up to 1, or up to 3 from 11 players
+ * (docs/PLAN.md, "Time estimate"). The 4, 3, 2, 1 table ties often, and a tie of more than 4
+ * players needs 2 or more groups and then a second pass. Played out through the engine on
+ * 2026-11-14 (2016 runs, 5 to 32 players, 1 to 3 rounds): up to 1 group with 10 players or
+ * fewer, up to 3 from 11.
  */
 const tieBreakGroups = (n: number): number => (n <= 10 ? 1 : 3);
 
@@ -169,7 +170,7 @@ function simulateWaves(rounds: readonly Round[], live: number): number {
  * elimination: with 12 players and 3 stations it says 4 and the engine needs 6, because
  * round 1 has 4 matches and the next has 4 more, and each takes two waves on 3 stations.
  * So elimination is played out round by round (`simulateWaves`), which matched the engine
- * within max(1, 10%) for 2 to 32 players on 1, 2, 3, 5, and 8 stations except one case.
+ * within max(1, 10%) for 2 to 32 players on 1, 2, 3, 4, and 8 stations except one case.
  * Everyone plays everyone has no rounds to wait for, so it keeps the formula.
  */
 function waveCount(plan: EventPlan, n: number, matches: Range): Range {

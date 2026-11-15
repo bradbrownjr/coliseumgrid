@@ -179,6 +179,8 @@ export type LiveMessage =
   | { type: 'players' }
   | { type: 'bracket' }
   | { type: 'heats' }
+  /** The event's plan changed (PUT /api/event/plan, POST /api/events). No payload: a host window reads the plan again. */
+  | { type: 'plan' }
   | { type: 'unpaired' };
 
 // Brackets API (docs/PLAN.md, "Brackets API"), from M4. A player is always `Player`, so no
@@ -227,11 +229,17 @@ export interface BracketMatch {
   resultId: number | null;
 }
 
-/** `calledAt` is an ISO 8601 time; the TV's timer counts up from it. */
+/**
+ * `calledAt` is an ISO 8601 time; the TV's timer counts up from it. `arrived` is true once the
+ * host tapped **They're here** for this call of the match (docs/PLAN.md, "Waiting for a missing
+ * player"): the prompt and the TV's call line are gone. A match called again after an undo is a
+ * new call, so it starts with `arrived` false.
+ */
 export interface BracketStation {
   number: number;
   match: BracketMatch | null;
   calledAt: string | null;
+  arrived: boolean;
 }
 
 /** Players who tie share a `place`. Places 1 to 3 are never shared once the bracket is finished. */
@@ -266,14 +274,23 @@ export interface Bracket {
   ties: TieNotice[];
 }
 
-/** GET /api/bracket */
+/**
+ * GET /api/bracket. `now` is the server's clock as an ISO 8601 time, sent with every answer
+ * that carries the bracket, so a screen with a clock of its own can time `calledAt` against the
+ * server's (docs/PLAN.md, "Waiting for a missing player").
+ */
 export interface BracketAnswer {
   bracket: Bracket | null;
+  now: string;
 }
 
-/** POST /api/bracket, POST /api/bracket/undo, POST /api/bracket/players, POST /api/bracket/tie-break */
+/**
+ * POST /api/bracket, POST /api/bracket/undo, POST /api/bracket/players, POST
+ * /api/bracket/tie-break, POST /api/bracket/arrived
+ */
 export interface BracketNowAnswer {
   bracket: Bracket;
+  now: string;
 }
 
 /** POST /api/bracket */
@@ -297,6 +314,16 @@ export interface BracketResultBody {
 export interface BracketResultAnswer {
   bracket: Bracket;
   resultId: number;
+  now: string;
+}
+
+/**
+ * POST /api/bracket/arrived: `arrived` true is **They're here** for the match's current call,
+ * false takes it back. The match has to be on a station (409 `not-on-station`).
+ */
+export interface BracketArrivedBody {
+  matchId: number;
+  arrived: boolean;
 }
 
 /** POST /api/bracket/undo */
@@ -344,11 +371,12 @@ export interface Heat {
   resultId: number | null;
 }
 
-/** `calledAt` is an ISO 8601 time; the TV's timer counts up from it. */
+/** `calledAt` and `arrived` are as for `BracketStation`. */
 export interface HeatStation {
   number: number;
   heat: Heat | null;
   calledAt: string | null;
+  arrived: boolean;
 }
 
 /** Players level on points share a `place`. Places 1 to 3 are never shared once the final is done. */
@@ -388,14 +416,16 @@ export interface Heats {
   ties: TieNotice[];
 }
 
-/** GET /api/heats */
+/** GET /api/heats. `now` is the server's clock, as for `BracketAnswer`. */
 export interface HeatsAnswer {
   heats: Heats | null;
+  now: string;
 }
 
-/** POST /api/heats, POST /api/heats/undo, POST /api/heats/players, POST /api/heats/tie-break */
+/** POST /api/heats, POST /api/heats/undo, POST /api/heats/players, POST /api/heats/tie-break, POST /api/heats/arrived */
 export interface HeatsNowAnswer {
   heats: Heats;
+  now: string;
 }
 
 /** POST /api/heats */
@@ -423,6 +453,13 @@ export interface HeatResultBody {
 export interface HeatResultAnswer {
   heats: Heats;
   resultId: number;
+  now: string;
+}
+
+/** POST /api/heats/arrived: as `BracketArrivedBody`, for the group on a station. */
+export interface HeatArrivedBody {
+  heatId: number;
+  arrived: boolean;
 }
 
 /** POST /api/heats/undo */

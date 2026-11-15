@@ -262,3 +262,35 @@ describe('buildQueue: heats of up to 4 players', () => {
     expect(state.upNext).toEqual([1000]);
   });
 });
+
+describe('buildQueue: a match made after the result that opened its step (readyAt)', () => {
+  // A tie-break is made when the host presses Play tie-break, which is after the last result.
+  const tie = (id: number, readyStep: number, extra: Partial<QueueMatch> = {}): QueueMatch =>
+    match(id, 1, id, [1, 2], { readyStep, ...extra });
+
+  it('is called at its own time when that is later than the result of its step', () => {
+    const matches = [match(1, 1, 1, [1, 2], { firstRound: true }), tie(1000, 1, { readyAt: T3 })];
+    const state = buildQueue({ stations: 1, createdAt: T0, matches, results: [{ matchId: 1, at: T1 }] });
+    expect(slots(state)).toEqual([[1, 1000, T3]]);
+  });
+
+  it('is called at the later result when the station only came free after it was made', () => {
+    const matches = [tie(1000, 0, { readyAt: T1 }), tie(1001, 0, { readyAt: T1 })];
+    // 1000 fills the station at creation (before its own time, so the later time wins), and 1001 waits for the result.
+    const state = buildQueue({ stations: 1, createdAt: T0, matches, results: [{ matchId: 1000, at: T2 }] });
+    expect(slots(state)).toEqual([[1, 1001, T2]]);
+  });
+
+  it('is called at the time of its step when it has no time of its own', () => {
+    const matches = [match(1, 1, 1, [1, 2], { firstRound: true }), tie(1000, 1)];
+    const state = buildQueue({ stations: 1, createdAt: T0, matches, results: [{ matchId: 1, at: T1 }] });
+    expect(slots(state)).toEqual([[1, 1000, T1]]);
+  });
+
+  it('is not used by a reopened entry, which is called at the time of its step', () => {
+    const matches = [tie(1000, 0, { readyAt: T1 }), tie(1000, 2, { reopened: true })];
+    const results = [{ matchId: 1000, at: T2 }, { matchId: null, at: T3 }];
+    const state = buildQueue({ stations: 1, createdAt: T0, matches, results });
+    expect(slots(state)).toEqual([[1, 1000, T3]]);
+  });
+});

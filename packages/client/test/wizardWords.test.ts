@@ -13,7 +13,9 @@ import {
   finishWords,
   hoursWords,
   minutesLabel,
+  newEventBlockedWords,
   planSummary,
+  samePlan,
   signedUpWords,
   templateLine,
   tooLongWords,
@@ -167,5 +169,27 @@ describe('step 3 words', () => {
     expect(planSummary(racing, 12)).toBe('Races and free-for-all, 2 rounds before the final, 1 game in each group, 1 station');
     expect(planSummary({ ...racing, rounds: 1, races: 3 }, 12)).toBe('Races and free-for-all, 1 round before the final, 3 games in each group, 1 station');
     expect(planSummary(racing, 4)).toBe('Races and free-for-all, only the final, 1 game in each group, 1 station');
+  });
+});
+
+describe('samePlan', () => {
+  it('compares every choice, the points by value', () => {
+    expect(samePlan(fighting, { ...fighting, points: [...fighting.points] })).toBe(true);
+    expect(samePlan(fighting, { ...fighting, stations: fighting.stations + 1 })).toBe(false);
+    expect(samePlan(fighting, { ...fighting, points: [4, 3, 2, 0] })).toBe(false);
+    expect(samePlan(fighting, planDefaults('racing'))).toBe(false);
+  });
+
+  it('is the same for two with no plan, and different for one with and one without', () => {
+    expect(samePlan(null, null)).toBe(true);
+    expect(samePlan(fighting, null)).toBe(false);
+    expect(samePlan(null, fighting)).toBe(false);
+  });
+});
+
+describe('New event while a competition is played', () => {
+  it('says what to do first, in a few words', () => {
+    expect(newEventBlockedWords('bracket')).toBe('Finish or delete the bracket first.');
+    expect(newEventBlockedWords('groups')).toBe('Finish or delete the groups first.');
   });
 });

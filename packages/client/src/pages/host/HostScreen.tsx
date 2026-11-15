@@ -40,6 +40,7 @@ import { PairingPanel } from './PairingPanel.tsx';
 import { PinDialog } from './PinDialog.tsx';
 import { PlayerActions } from './PlayerActions.tsx';
 import { SetupWizard, type WizardMode } from './SetupWizard.tsx';
+import { newEventBlockedWords } from './wizardWords.ts';
 import { useBracket } from './useBracket.ts';
 import { useHeats } from './useHeats.ts';
 
@@ -62,6 +63,8 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
   const [event, setEvent] = useState<EventInfo | null>(null);
   // Bumped on each player list load, so the wizard's step 3 reloads who signed up.
   const [playersVersion, setPlayersVersion] = useState(0);
+  // Bumped on each `plan` message, so a wizard open in this window reads the plan another window saved.
+  const [planVersion, setPlanVersion] = useState(0);
   // The wizard opened from play mode: New event, or New competition after a finish.
   const [wizard, setWizard] = useState<Exclude<WizardMode, 'setup'> | null>(null);
   // `id` restarts the snackbar's timer when a new message replaces one still showing. `undo`
@@ -111,6 +114,7 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
         void reloadHeats();
       }
       if (message.type === 'event') setEvent(message.event);
+      if (message.type === 'plan') setPlanVersion((before) => before + 1);
       if (message.type === 'bracket') void reloadBracket();
       if (message.type === 'heats') void reloadHeats();
     },
@@ -119,6 +123,8 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
       void loadEvent();
       void reloadBracket();
       void reloadHeats();
+      // A plan message sent while the socket was down is lost too.
+      setPlanVersion((before) => before + 1);
     },
     onEnded: onSignedOut,
   });
@@ -170,6 +176,10 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
   const loaded = bracket !== undefined && heats !== undefined;
   const setupMode = bracket === null && heats === null;
   const wizardMode: WizardMode | null = setupMode ? 'setup' : wizard;
+  // A bracket or groups still being played. New event waits for it to finish, and the wizard
+  // never hides its station cards.
+  const running = bracket ? !bracket.finished : heats ? !heats.finished : false;
+  const blockedWords = running ? newEventBlockedWords(bracket ? 'bracket' : 'groups') : null;
 
   const close = () => {
     resetting.current += 1;
@@ -221,7 +231,9 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
             mode={wizardMode}
             event={event}
             players={players ?? []}
+            playersLoaded={players !== null}
             playersVersion={playersVersion}
+            planVersion={planVersion}
             onCancel={setupMode ? undefined : () => setWizard(null)}
             onEventSaved={setEvent}
             onEventCreated={(created) => {
@@ -251,9 +263,23 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
             <Section
               title="Event"
               action={
-                <Button variant="outlined" size="large" startIcon={<EventIcon />} onClick={() => setWizard('new-event')}>
-                  New event
-                </Button>
+                <Stack sx={{ alignItems: { xs: 'flex-start', sm: 'flex-end' }, gap: 0.5 }}>
+                  <Button
+                    variant="outlined"
+                    size="large"
+                    startIcon={<EventIcon />}
+                    disabled={running}
+                    aria-describedby={blockedWords ? 'new-event-blocked' : undefined}
+                    onClick={() => setWizard('new-event')}
+                  >
+                    New event
+                  </Button>
+                  {blockedWords && (
+                    <Typography id="new-event-blocked" variant="body2" color="text.secondary">
+                      {blockedWords}
+                    </Typography>
+                  )}
+                </Stack>
               }
             >
               <EventName
@@ -272,7 +298,7 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
           <DeviceList onUnpaired={say} />
         </Section>
 
-        {!wizardMode && <CompetitionSection bracket={bracketState} heats={heatsState} say={say} onNewCompetition={() => setWizard('new-competition')} />}
+        {(!wizardMode || running) && <CompetitionSection bracket={bracketState} heats={heatsState} say={say} onNewCompetition={() => setWizard('new-competition')} />}
 
         <Box component="section">
         <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', mb: 3 }}>

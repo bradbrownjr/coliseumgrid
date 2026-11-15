@@ -80,6 +80,8 @@ interface StartStepProps {
   plan: EventPlan;
   players: Player[];
   pick: PlayerPick;
+  /** False until the players and the event's sign-ups are loaded: the count, summary, and estimate would show 0 players. */
+  countKnown: boolean;
   /** Why the pick can't start, or null; shown above Start. */
   problem: string | null;
   /** A line under the picker's count, such as the group sizes. */
@@ -88,23 +90,27 @@ interface StartStepProps {
 }
 
 /** Step 3, "Start": the live count, the summary, the estimate with the finish time, and the players. */
-export function StartStep({ plan, players, pick, problem, note, onPlan }: StartStepProps) {
+export function StartStep({ plan, players, pick, countKnown, problem, note, onPlan }: StartStepProps) {
   const [changing, setChanging] = useState(false);
   // The finish time moves with the clock while the laptop waits for sign-ups.
   const now = useNow(true);
   const count = pick.chosen.length;
   return (
     <Stack sx={{ gap: 3 }}>
-      <Stack sx={{ gap: 0.5 }}>
-        <Stack direction="row" sx={{ alignItems: 'center', gap: 1 }}>
-          <GroupIcon aria-hidden />
-          <Typography variant="h5" component="p" aria-live="polite">
-            {signedUpWords(pick.inEvent.length)}
-          </Typography>
-        </Stack>
-        <Typography color="text.secondary">{planSummary(plan, count)}</Typography>
-      </Stack>
-      <EstimatePanel plan={plan} players={count} now={now} onFix={onPlan} />
+      {countKnown && (
+        <>
+          <Stack sx={{ gap: 0.5 }}>
+            <Stack direction="row" sx={{ alignItems: 'center', gap: 1 }}>
+              <GroupIcon aria-hidden />
+              <Typography variant="h5" component="p" aria-live="polite">
+                {signedUpWords(pick.inEvent.length)}
+              </Typography>
+            </Stack>
+            <Typography color="text.secondary">{planSummary(plan, count)}</Typography>
+          </Stack>
+          <EstimatePanel plan={plan} players={count} now={now} onFix={onPlan} />
+        </>
+      )}
       <MoreOptions>
         {changing ? (
           <PlayerPicker players={players} pick={pick} problem={problem} note={note} />

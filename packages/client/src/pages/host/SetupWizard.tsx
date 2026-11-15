@@ -19,8 +19,9 @@ import { freshRandom } from '../../random.ts';
 import { startProblem } from './bracketWords.ts';
 import { eventNameFits, useSyncedField } from './EventFields.tsx';
 import { groupSizesWords, groupsProblem, parsePoints, pointsProblem } from './groupWords.ts';
+import { createPlanSaves } from './planSaves.ts';
 import { usePlayerPick } from './PlayerPicker.tsx';
-import { STEP_LABELS, estimatePlayersStart, withTemplate } from './wizardWords.ts';
+import { PLAYERS_LOADING_WORDS, STEP_LABELS, estimatePlayersStart, samePlan, withTemplate } from './wizardWords.ts';
 import { NameStep, PlanStep, StartStep } from './WizardSteps.tsx';
 
 /**
@@ -39,8 +40,12 @@ interface SetupWizardProps {
   mode: WizardMode;
   event: EventInfo | null;
   players: Player[];
+  /** False until the host screen has the player list, so step 3 doesn't count nobody. */
+  playersLoaded: boolean;
   /** Bumped on each `players` live message, so step 3's count follows sign-ups. */
   playersVersion: number;
+  /** Bumped on each `plan` live message: another window saved the plan, so read it again. */
+  planVersion: number;
   /** Back to play mode; left out in setup mode, where there is nothing to go back to. */
   onCancel?: (() => void) | undefined;
   onEventSaved: (event: EventInfo) => void;
@@ -56,8 +61,25 @@ interface SetupWizardProps {
  * choice is saved on the server as the event's plan, and a reload or a second window finds it.
  * The wizard opens at step 3 when the event already has a plan, since that is where it waits
  * during sign-up.
+ *
+ * The server's copy of the plan is the one that counts. Saves go out one after another
+ * (`createPlanSaves`), a save from another window is read when this one has no change of its
+ * own waiting to be saved, and **Start** waits for the saves and starts from the plan the
+ * server answered with.
  */
-export function SetupWizard({ mode, event, players, playersVersion, onCancel, onEventSaved, onEventCreated, onStartedBracket, onStartedGroups }: SetupWizardProps) {
+export function SetupWizard({
+  mode,
+  event,
+  players,
+  playersLoaded,
+  playersVersion,
+  planVersion,
+  onCancel,
+  onEventSaved,
+  onEventCreated,
+  onStartedBracket,
+  onStartedGroups,
+}: SetupWizardProps) {
   // undefined while loading; null when the event has no plan.
   const [saved, setSaved] = useState<EventPlan | null | undefined>(undefined);
   const [loadWords, setLoadWords] = useState<string | null>(null);
@@ -75,6 +97,15 @@ export function SetupWizard({ mode, event, players, playersVersion, onCancel, on
   const pick = usePlayerPick(players, () => setWords(null), playersVersion);
   // The mode the wizard opened in picks its first step once, when the plan arrives.
   const openedAs = useRef(mode);
+  // The plan the server holds, as it last answered. **Start** sends this one.
+  const held = useRef<EventPlan | null>(null);
+  // True from a change the host made until a save of it was answered, and while a typed value
+  // isn't a plan yet: a plan read from another window must not overwrite it.
+  const unsaved = useRef(false);
+  // Counts the host's changes, so a save that was answered after a newer change doesn't clear `unsaved`.
+  const changes = useRef(0);
+  const latest = useRef(plan);
+  latest.current = plan;
 
   const takePlan = useCallback((next: EventPlan) => {
     setPlan(next);
@@ -86,6 +117,7 @@ export function SetupWizard({ mode, event, players, playersVersion, onCancel, on
     const result = await getPlan();
     if (!result.ok) return setLoadWords(failureWords(result));
     const stored = result.data.plan;
+    held.current = stored;
     setSaved(stored);
     takePlan(stored ?? planDefaults('fighting'));
     const opened = openedAs.current;
@@ -96,16 +128,51 @@ export function SetupWizard({ mode, event, players, playersVersion, onCancel, on
     void load();
   }, [load]);
 
-  /** Saves the plan; true when the server took it. */
+  const [saves] = useState(() =>
+    createPlanSaves(
+      savePlan,
+      (answered) => {
+        held.current = answered;
+        setSaved(answered);
+      },
+      (failure) => setWords(failureWords(failure)),
+    ),
+  );
+
+  /** Saves the plan after the saves already on their way; true when the server took it. */
   const store = async (next: EventPlan): Promise<boolean> => {
-    const result = await savePlan(next);
-    if (!result.ok) {
-      setWords(failureWords(result));
-      return false;
-    }
-    setSaved(result.data.plan);
-    return true;
+    const mine = changes.current;
+    const took = await saves.save(next);
+    if (took && changes.current === mine) unsaved.current = false;
+    return took;
   };
+
+  /** A change the host made to the plan, shown at once and saved later. */
+  const edit = (next: EventPlan) => {
+    changes.current += 1;
+    unsaved.current = true;
+    takePlan(next);
+  };
+
+  // Another window saved the plan, or the step changed: read the plan again, unless this window
+  // has a change that isn't saved yet, which the read would overwrite.
+  const loaded = saved !== undefined;
+  const readAgain = useCallback(async () => {
+    if (unsaved.current || saves.pending() > 0) return;
+    const result = await getPlan();
+    if (!result.ok || unsaved.current || saves.pending() > 0) return;
+    held.current = result.data.plan;
+    setSaved(result.data.plan);
+    if (result.data.plan) takePlan(result.data.plan);
+  }, [takePlan]);
+  const readKey = useRef<string | null>(null);
+  useEffect(() => {
+    if (!loaded) return;
+    const before = readKey.current;
+    readKey.current = `${planVersion}:${step}`;
+    // The first time is `load`'s own read.
+    if (before !== null) void readAgain();
+  }, [planVersion, step, loaded, readAgain]);
 
   const run = async (work: () => Promise<void>) => {
     if (busy) return;
@@ -139,34 +206,45 @@ export function SetupWizard({ mode, event, players, playersVersion, onCancel, on
       if (await store(plan)) setStep(START_STEP);
     });
 
-  // A fix on step 3 applies at once, and is saved like any other change.
+  // A fix on step 3 applies at once, and is saved after any save still on its way, so two fixes
+  // in a row both reach the server and the last one stays.
   const fixOnStart = (next: EventPlan) => {
-    takePlan(next);
-    void run(async () => {
-      await store(next);
-    });
+    edit(next);
+    void store(next);
   };
 
   const typePoints = (typed: string[]) => {
     setPoints(typed);
+    changes.current += 1;
+    unsaved.current = true;
     const parsed = pointsProblem(typed) === null ? parsePoints(typed) : null;
     if (parsed) setPlan((before) => ({ ...before, points: parsed }));
   };
 
   const count = pick.chosen.length;
-  const problem = plan.format === 'heats' ? groupsProblem(count) : startProblem(plan.format, count);
+  // The count is known once the player list and the event's sign-ups are both loaded. Until then
+  // it would read 0 and show "Pick at least 2 players" over a Start that looks switched off.
+  const countKnown = playersLoaded && !pick.loading;
+  const problem = !countKnown ? null : plan.format === 'heats' ? groupsProblem(count) : startProblem(plan.format, count);
 
   const start = () =>
     run(async () => {
-      if (problem !== null) return;
+      if (problem !== null || !countKnown) return;
+      // Every change is saved, in order, before the start. One that wasn't taken (a refused save,
+      // or a typed value that is now a plan) is saved now, and the start stops if it still isn't.
+      await saves.settled();
+      if (!samePlan(latest.current, held.current) && !(await store(latest.current))) return;
+      // The competition starts from the plan the server holds, and keeps its own copy of the
+      // settings, so changing the plan later never changes it.
+      const settled = held.current;
+      if (!settled) return;
       const playerIds = pick.chosen.map((player) => player.id);
-      // The competition keeps its own copy of the settings, so changing the plan later never changes it.
-      if (plan.format === 'heats') {
-        const result = await startHeats({ stations: plan.stations, races: plan.races, rounds: plan.rounds, points: plan.points, playerIds });
+      if (settled.format === 'heats') {
+        const result = await startHeats({ stations: settled.stations, races: settled.races, rounds: settled.rounds, points: settled.points, playerIds });
         if (!result.ok) return setWords(failureWords(result));
         return onStartedGroups(result.data.heats);
       }
-      const result = await startBracket({ format: plan.format, bestOf: plan.bestOf, stations: plan.stations, playerIds });
+      const result = await startBracket({ format: settled.format, bestOf: settled.bestOf, stations: settled.stations, playerIds });
       if (!result.ok) return setWords(failureWords(result));
       onStartedBracket(result.data.bracket);
     });
@@ -206,20 +284,24 @@ export function SetupWizard({ mode, event, players, playersVersion, onCancel, on
             setName(value);
             setWords(null);
           }}
-          onGame={setGame}
+          onGame={(value) => {
+            setGame(value);
+            setWords(null);
+          }}
           onDice={() => setName(eventName(plan.template, freshRandom()))}
-          onTemplate={(template) => takePlan(withTemplate(plan, template, saved))}
+          onTemplate={(template) => edit(withTemplate(plan, template, saved))}
         />
       );
     }
     if (step === PLAN_STEP) {
-      return <PlanStep plan={plan} points={points} players={estimateCount} onPlayers={setEstimatePlayers} onPlan={takePlan} onPoints={typePoints} />;
+      return <PlanStep plan={plan} points={points} players={estimateCount} onPlayers={setEstimatePlayers} onPlan={edit} onPoints={typePoints} />;
     }
     return (
       <StartStep
         plan={plan}
         players={players}
         pick={pick}
+        countKnown={countKnown}
         problem={problem}
         note={plan.format === 'heats' ? groupSizesWords(count) : null}
         onPlan={fixOnStart}
@@ -254,6 +336,11 @@ export function SetupWizard({ mode, event, players, playersVersion, onCancel, on
             {problem}
           </Typography>
         )}
+        {step === START_STEP && !countKnown && saved !== undefined && (
+          <Typography role="status" color="text.secondary">
+            {PLAYERS_LOADING_WORDS}
+          </Typography>
+        )}
         {saved !== undefined && (
           <Stack direction="row" sx={{ gap: 2, flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center' }}>
             <Stack direction="row" sx={{ gap: 1 }}>
@@ -273,7 +360,7 @@ export function SetupWizard({ mode, event, players, playersVersion, onCancel, on
                 variant="contained"
                 size="large"
                 startIcon={<PlayArrowIcon />}
-                disabled={busy || pick.loading || problem !== null}
+                disabled={busy || !countKnown || problem !== null}
                 onClick={() => void start()}
                 sx={(theme) => ({ minHeight: theme.spacing(9), minWidth: theme.spacing(24), typography: 'h5', flexGrow: { xs: 1, sm: 0 } })}
               >

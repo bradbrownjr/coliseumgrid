@@ -34,6 +34,26 @@ describe('step 1', () => {
   });
 });
 
+describe('a refusal from the server on step 1', () => {
+  const helperTexts = (html: string) => [...html.matchAll(/<p class="[^"]*MuiFormHelperText[^"]*"[^>]*>(.*?)<\/p>/g)].map((m) => ({ error: /Mui-error/.test(m[0]), text: m[1] }));
+  const step = (name: string, game: string) =>
+    render(<NameStep newEvent={false} name={name} game={game} words="Something went wrong. Try again." template="fighting" onName={none} onGame={none} onDice={none} onTemplate={none} />);
+
+  it('shows under the game when the game is what the server cannot take', () => {
+    const [nameHelp, gameHelp] = helperTexts(step('Spring Bash', 'x'.repeat(61)));
+    expect(nameHelp).toEqual({ error: false, text: 'Shows on the TV. Up to 60 characters.' });
+    expect(gameHelp).toEqual({ error: true, text: 'Something went wrong. Try again.' });
+  });
+
+  it('shows under the name when the name is the problem, or when both are fine', () => {
+    for (const html of [step('x'.repeat(61), 'Racing game'), step('Spring Bash', 'Racing game')]) {
+      const [nameHelp, gameHelp] = helperTexts(html);
+      expect(nameHelp).toEqual({ error: true, text: 'Something went wrong. Try again.' });
+      expect(gameHelp).toEqual({ error: false, text: 'You can leave this empty.' });
+    }
+  });
+});
+
 describe('step 2', () => {
   it('has the three cards, the estimate line, and More options for the picked card', () => {
     const html = render(<PlanStep plan={fighting} points={['4', '3', '2', '1']} players={16} onPlayers={none} onPlan={none} onPoints={none} />);
@@ -92,27 +112,42 @@ describe('a station waiting for a missing player', () => {
   const match: BracketStation = {
     number: 2,
     calledAt,
+    arrived: false,
     match: { id: 7, side: 'main', round: 1, number: 1, status: 'playing', slots: [{ player: zap, bye: false }, { player: kai, bye: false }], winner: null, forfeit: false, resultId: null },
   };
   const group: HeatStation = {
     number: 1,
     calledAt,
+    arrived: false,
     heat: { id: 101, kind: 'round', round: 1, number: 1, status: 'playing', players: [zap, kai], order: null, missing: [], resultId: null },
   };
-  const bracketCard = (now: number) =>
-    render(<StationGrid stations={[match]} bestOf={1} now={now} busy={false} noShowMinutes={5} onWinner={none} onForfeit={none} />);
-  const groupCard = (now: number) =>
-    render(<GroupStations stations={[group]} heats={[group.heat!]} now={now} busy={false} noShowMinutes={10} onRecord={none} onForfeit={none} />);
+  const bracketCard = (now: number, station: BracketStation = match) =>
+    render(<StationGrid stations={[station]} bestOf={1} now={now} busy={false} noShowMinutes={5} onWinner={none} onHere={none} onForfeit={none} />);
+  const groupCard = (now: number, station: HeatStation = group) =>
+    render(<GroupStations stations={[station]} heats={[group.heat!]} now={now} busy={false} noShowMinutes={10} onRecord={none} onHere={none} onForfeit={none} />);
 
-  it('asks "Still waiting?" with Forfeit once the wait is over, on a match', () => {
+  it('asks "Still waiting?" with They\'re here and Forfeit once the wait is over, on a match', () => {
     expect(bracketCard(minutesIn(4))).not.toContain('Still waiting?');
     const html = bracketCard(minutesIn(5));
     expect(html).toContain('Still waiting?');
+    expect(html).toContain('They&#x27;re here');
     expect(html).toContain('Forfeit');
   });
 
   it('does the same on a group, with its own wait', () => {
     expect(groupCard(minutesIn(9))).not.toContain('Still waiting?');
-    expect(groupCard(minutesIn(10))).toContain('Still waiting?');
+    const html = groupCard(minutesIn(10));
+    expect(html).toContain('Still waiting?');
+    expect(html).toContain('They&#x27;re here');
+    expect(html).toContain('Forfeit');
+  });
+
+  it('puts the prompt away for a call the host said they are here for, however long the wait', () => {
+    expect(bracketCard(minutesIn(60), { ...match, arrived: true })).not.toContain('Still waiting?');
+    expect(groupCard(minutesIn(60), { ...group, arrived: true })).not.toContain('Still waiting?');
+    // The timer and the buttons for the result stay.
+    const html = bracketCard(minutesIn(60), { ...match, arrived: true });
+    expect(html).toContain('Zap<!-- --> won');
+    expect(html).toContain('role="timer"');
   });
 });

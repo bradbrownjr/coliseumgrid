@@ -303,6 +303,8 @@ export async function registerHostRoutes(app: FastifyInstance, options: HostRout
         hub.broadcast({ type: 'players' });
         hub.broadcast({ type: 'bracket' });
         hub.broadcast({ type: 'heats' });
+        // The new event starts with the plan the old one had, so a wizard open elsewhere reads it again.
+        hub.broadcast({ type: 'plan' });
         return reply.code(201).send({ event });
       });
     },
@@ -334,6 +336,8 @@ export async function registerHostRoutes(app: FastifyInstance, options: HostRout
       // The bracket and groups answers carry `noShowMinutes` from the plan.
       onEventChanged();
       if (created) hub.broadcast({ type: 'event', event });
+      // No payload, like the other messages: a host window with the wizard open reads the plan again.
+      hub.broadcast({ type: 'plan' });
       if (plan.noShowMinutes !== before) {
         hub.broadcast({ type: 'bracket' });
         hub.broadcast({ type: 'heats' });

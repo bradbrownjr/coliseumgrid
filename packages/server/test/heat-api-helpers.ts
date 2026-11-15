@@ -26,7 +26,7 @@ export function expectHeatsShape(heats: Heats): void {
   heats.heats.forEach(heat);
   heats.upNext.forEach(heat);
   for (const station of heats.stations) {
-    expect(keys(station)).toEqual(['calledAt', 'heat', 'number']);
+    expect(keys(station)).toEqual(['arrived', 'calledAt', 'heat', 'number']);
     if (station.heat) heat(station.heat);
   }
   for (const row of heats.standings) {

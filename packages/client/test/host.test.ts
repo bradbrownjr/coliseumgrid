@@ -103,9 +103,9 @@ describe('host requests', () => {
     answer(200, { event: { name: 'Spring Bash', game: null } });
     await saveEvent('Spring Bash', '');
     expect(lastRequest().body).toEqual({ name: 'Spring Bash', game: '' });
-    answer(200, { event: { name: 'Spring Bash', game: 'Kart racer' } });
-    await saveEvent('Spring Bash', 'Kart racer');
-    expect(lastRequest().body).toEqual({ name: 'Spring Bash', game: 'Kart racer' });
+    answer(200, { event: { name: 'Spring Bash', game: 'Racing game' } });
+    await saveEvent('Spring Bash', 'Racing game');
+    expect(lastRequest().body).toEqual({ name: 'Spring Bash', game: 'Racing game' });
   });
 
   it('makes a new event with POST /api/events, with no game when none was typed', async () => {
@@ -114,9 +114,9 @@ describe('host requests', () => {
     expect(lastRequest()).toMatchObject({ path: '/api/events', method: 'POST' });
     expect(lastRequest().body).toEqual({ name: 'Round two' });
     expect(result).toEqual({ ok: true, data: { event: { name: 'Round two', game: null } } });
-    answer(201, { event: { name: 'Round two', game: 'Kart racer' } });
-    await createEvent('Round two', 'Kart racer');
-    expect(lastRequest().body).toEqual({ name: 'Round two', game: 'Kart racer' });
+    answer(201, { event: { name: 'Round two', game: 'Racing game' } });
+    await createEvent('Round two', 'Racing game');
+    expect(lastRequest().body).toEqual({ name: 'Round two', game: 'Racing game' });
     answer(409, { error: 'bracket-running' });
     expect(await createEvent('Round two', '')).toEqual({ ok: false, error: 'bracket-running' });
   });

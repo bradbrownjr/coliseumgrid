@@ -170,7 +170,7 @@ describe('merging players', () => {
     expect(res.statusCode).toBe(409);
     expect(res.json()).toEqual({ error: 'in-bracket' });
     expect((await host('GET', '/api/players')).json()).toEqual(before);
-    expect((await host('GET', '/api/bracket')).json()).toEqual({ bracket });
+    expect((await host('GET', '/api/bracket')).json().bracket).toEqual(bracket);
   });
 
   it('refuses it for a finished bracket too, so the answer can always be made', async () => {

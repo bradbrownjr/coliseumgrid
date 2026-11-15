@@ -44,6 +44,7 @@ describe('who may call each route', () => {
     ['POST', '/api/heats/undo', { resultId: 1 }],
     ['POST', '/api/heats/players', { playerId: 1 }],
     ['POST', '/api/heats/tie-break'],
+    ['POST', '/api/heats/arrived', { heatId: 101, arrived: true }],
     ['DELETE', '/api/heats'],
   ];
 
@@ -101,14 +102,15 @@ describe('who may call each route', () => {
 
 describe('GET /api/heats', () => {
   it('answers { heats: null } before any are made', async () => {
-    for (const who of [host, display, signup]) expect((await who('GET', '/api/heats')).json()).toEqual({ heats: null });
+    for (const who of [host, display, signup]) expect((await who('GET', '/api/heats')).json()).toEqual({ heats: null, now: expect.any(String) });
   });
 
   it('gives a Display and a Sign-up device the same answer as the host, fields only', async () => {
     await make(10);
     const answers = await Promise.all([host, display, signup].map((who) => who('GET', '/api/heats')));
-    expect(answers[1]?.json()).toEqual(answers[0]?.json());
-    expect(answers[2]?.json()).toEqual(answers[0]?.json());
+    // `now` is the server's clock at each call, so only the heats are compared.
+    expect(answers[1]?.json().heats).toEqual(answers[0]?.json().heats);
+    expect(answers[2]?.json().heats).toEqual(answers[0]?.json().heats);
     expectHeatsShape(answers[0]?.json().heats);
   });
 
@@ -129,6 +131,7 @@ describe('GET /api/heats', () => {
       ['/api/heats/results', { heatId: heat.id, order: heat.players.map((p) => p.id), extra: 1 }],
       ['/api/heats/undo', { resultId: 1, extra: 1 }],
       ['/api/heats/players', { playerId: ids[5], extra: 1 }],
+      ['/api/heats/arrived', { heatId: heat.id, arrived: true, extra: 1 }],
     ] as const) {
       const res = await host('POST', url, body);
       expect(res.statusCode, url).toBe(400);
@@ -163,7 +166,7 @@ describe('POST /api/heats', () => {
     const res = await host('POST', '/api/heats', heatsBody(ids.slice(0, 10)));
     expect(res.statusCode).toBe(201);
     const { heats } = res.json();
-    expect(Object.keys(res.json())).toEqual(['heats']);
+    expect(Object.keys(res.json()).sort()).toEqual(['heats', 'now']);
     expectHeatsShape(heats);
     expect(heats).toMatchObject({ races: 2, rounds: 2, points: [4, 3, 2, 1], finished: false, lastResultId: null, round: 1, finalSize: 4, ties: [] });
     expect(heats.stations).toHaveLength(2);
@@ -298,7 +301,7 @@ describe('POST /api/heats/results', () => {
     const res = await host('POST', '/api/heats/results', { heatId: first.id, order });
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(Object.keys(body).sort()).toEqual(['heats', 'resultId']);
+    expect(Object.keys(body).sort()).toEqual(['heats', 'now', 'resultId']);
     expectHeatsShape(body.heats);
     expect(body.heats.lastResultId).toBe(body.resultId);
     const done = heatWith(body.heats, first.id);
@@ -374,7 +377,7 @@ describe('POST /api/heats/undo', () => {
     const second = (await recordListed(host, heatsOnStations(first.heats)[0] as Heat)).json();
     const res = await host('POST', '/api/heats/undo', { resultId: second.resultId });
     expect(res.statusCode).toBe(200);
-    expect(Object.keys(res.json())).toEqual(['heats']);
+    expect(Object.keys(res.json()).sort()).toEqual(['heats', 'now']);
     expect(res.json().heats).toEqual(first.heats);
     expect(await current()).toEqual(first.heats);
     expect(count('heat_results')).toBe(1);
@@ -456,7 +459,7 @@ describe('POST /api/heats/players', () => {
     expect(start.lateOpen).toBe(true);
     const res = await host('POST', '/api/heats/players', { playerId: ids[10] });
     expect(res.statusCode, res.body).toBe(200);
-    expect(Object.keys(res.json())).toEqual(['heats']);
+    expect(Object.keys(res.json()).sort()).toEqual(['heats', 'now']);
     expectHeatsShape(res.json().heats);
     expect(res.json().heats.lateOpen).toBe(false);
     expect(heatWith(res.json().heats, 103).players.map((p) => p.id)).toContain(ids[10]);
@@ -566,7 +569,7 @@ describe('heats survive a restart exactly', () => {
 
       const second = await buildApp({ db: openDatabase(file), hostPassword: HOST_PASSWORD });
       const again = caller(second, await signInHost(second));
-      expect((await again('GET', '/api/heats')).json()).toEqual({ heats });
+      expect((await again('GET', '/api/heats')).json().heats).toEqual(heats);
       await second.close();
     } finally {
       await rm(dir, { recursive: true, force: true });

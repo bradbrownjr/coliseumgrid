@@ -258,7 +258,7 @@ describe('final standings', () => {
 describe('the call line', () => {
   const calledAt = '2026-11-14T18:00:00.000Z';
   const now = (minutes: number) => Date.parse(calledAt) + minutes * 60_000;
-  const card = (slots: { player: Player | null; bye: boolean }[]) => ({ number: 2, note: null, slots, calledAt });
+  const card = (slots: { player: Player | null; bye: boolean }[], arrived = false) => ({ number: 2, note: null, slots, calledAt, arrived });
 
   it('calls every player once the wait is over', () => {
     const match = card([{ player: player(1, 'Zap'), bye: false }, { player: player(2, 'Kai'), bye: false }]);
@@ -270,5 +270,18 @@ describe('the call line', () => {
 
   it('shows nothing on an empty station', () => {
     expect(stationCallLine(card([]), 5, now(30))).toBeNull();
+  });
+
+  it('shows nothing once the host said they are here, for a match and for a group', () => {
+    const match = card([{ player: player(1, 'Zap'), bye: false }, { player: player(2, 'Kai'), bye: false }], true);
+    expect(stationCallLine(match, 5, now(30))).toBeNull();
+    const group = card(['Zap', 'Kai', 'Blaze'].map((handle, i) => ({ player: player(i + 1, handle), bye: false })), true);
+    expect(stationCallLine(group, 5, now(30))).toBeNull();
+  });
+
+  it('is taken from the station: the call line comes back for the same match when arrived is false again', () => {
+    const slots = [{ player: player(1, 'Zap'), bye: false }, { player: player(2, 'Kai'), bye: false }];
+    expect(stationCallLine(card(slots, false), 5, now(6))).toBe('Zap and Kai, come to station 2!');
+    expect(stationCallLine(card(slots, true), 5, now(6))).toBeNull();
   });
 });

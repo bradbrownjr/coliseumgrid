@@ -7,6 +7,7 @@
 
 import type {
   ApiError,
+  HeatArrivedBody,
   HeatPlayerBody,
   HeatResultAnswer,
   HeatResultBody,
@@ -28,6 +29,7 @@ import {
   heatsAnswer,
   joinHeatsLate,
   recordHeatResult,
+  setHeatArrived,
   startHeatTieBreak,
   undoHeatResult,
   type HeatEngineAnswer,
@@ -71,8 +73,12 @@ const resultBody = objectSchema(
 );
 const undoBody = objectSchema({ resultId: idSchema });
 const playerBody = objectSchema({ playerId: idSchema });
+const arrivedBody = objectSchema({ heatId: { type: 'integer', minimum: 0 }, arrived: { type: 'boolean' } });
 
-const nowAnswer = objectSchema({ heats: heatsSchema });
+// Every answer that carries the heats carries the server's clock too, read when the answer is
+// sent (see bracket-routes.ts), so a screen can time `calledAt` against it.
+const timeSchema = { type: 'string' } as const;
+const nowAnswer = objectSchema({ heats: heatsSchema, now: timeSchema });
 const badRequest = errorSchema(['bad-request']);
 const noHeats = errorSchema(['no-heats']);
 // A missing heat or player, or no heats at all.
@@ -109,19 +115,19 @@ export async function registerHeatRoutes(app: FastifyInstance, options: HeatRout
       competition.drop();
       saved?.();
       hub.broadcast({ type: 'heats' });
-      return { heats: answer.heats };
+      return { heats: answer.heats, now: iso(now()) };
     });
 
   app.get<{ Reply: HeatsAnswer | ApiError }>(
     '/api/heats',
     {
       onRequest: access.requireHostOrDevice,
-      schema: { response: { 200: objectSchema({ heats: nullableHeatsSchema }), 401: notSignedIn } },
+      schema: { response: { 200: objectSchema({ heats: nullableHeatsSchema, now: timeSchema }), 401: notSignedIn } },
     },
     async () => {
       // Both reads happen in one synchronous step, so they see one moment.
       const found = current();
-      return { heats: found ? heatsAnswer(found.state, competition.handles(), competition.noShowMinutes()) : null };
+      return { heats: found ? heatsAnswer(found.state, competition.handles(), competition.noShowMinutes()) : null, now: iso(now()) };
     },
   );
 
@@ -160,7 +166,7 @@ export async function registerHeatRoutes(app: FastifyInstance, options: HeatRout
         // A player the host picked from "Not signed up" is here now, so the event lists them.
         for (const playerId of playerIds) eventPlayers.add(playerId);
         hub.broadcast({ type: 'heats' });
-        return reply.code(201).send({ heats: answer.heats });
+        return reply.code(201).send({ heats: answer.heats, now: iso(now()) });
       }),
   );
 
@@ -171,7 +177,7 @@ export async function registerHeatRoutes(app: FastifyInstance, options: HeatRout
       schema: {
         body: resultBody,
         response: {
-          200: objectSchema({ heats: heatsSchema, resultId: { type: 'integer' } }),
+          200: objectSchema({ heats: heatsSchema, resultId: { type: 'integer' }, now: timeSchema }),
           400: badRequest,
           401: notSignedIn,
           404: notFound,
@@ -189,7 +195,7 @@ export async function registerHeatRoutes(app: FastifyInstance, options: HeatRout
       );
       if (!('heats' in answer)) return answer;
       // The result just recorded is the last one in the log.
-      return { heats: answer.heats, resultId: answer.heats.lastResultId as number };
+      return { heats: answer.heats, resultId: answer.heats.lastResultId as number, now: answer.now };
     },
   );
 
@@ -246,7 +252,23 @@ export async function registerHeatRoutes(app: FastifyInstance, options: HeatRout
       onRequest: access.requireHost,
       schema: { response: { 200: nowAnswer, 401: notSignedIn, 404: noHeats, 409: errorSchema(['no-tie']) } },
     },
-    async (_request, reply) => change(reply, (state, handles, noShow) => startHeatTieBreak(state, handles, noShow), { 'no-tie': 409 }),
+    // The stations the tie-break fills are called now, not at the time of the last result.
+    async (_request, reply) => change(reply, (state, handles, noShow) => startHeatTieBreak(state, handles, noShow, iso(now())), { 'no-tie': 409 }),
+  );
+
+  // **They're here** for a group (docs/PLAN.md, "Waiting for a missing player"): host only, and
+  // stored against the station's current call.
+  app.post<{ Body: HeatArrivedBody; Reply: HeatsNowAnswer | ApiError }>(
+    '/api/heats/arrived',
+    {
+      onRequest: access.requireHost,
+      schema: {
+        body: arrivedBody,
+        response: { 200: nowAnswer, 400: badRequest, 401: notSignedIn, 404: notFound, 409: errorSchema(['not-on-station']) },
+      },
+    },
+    async (request, reply) =>
+      change(reply, (state, handles, noShow) => setHeatArrived(state, request.body, handles, noShow), { 'not-found': 404, 'not-on-station': 409 }),
   );
 
   app.delete(

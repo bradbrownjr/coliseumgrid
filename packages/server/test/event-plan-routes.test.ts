@@ -222,6 +222,18 @@ describe('the plan\'s noShowMinutes in the bracket and groups answers', () => {
     expect(((await host('GET', '/api/heats')).json().heats as Heats).noShowMinutes).toBe(3);
   });
 
+  it('sends a payload-free plan message for every plan change, so a wizard open in another window reads it again', async () => {
+    const live = await listen(app, undefined, '127.0.0.1');
+    await host('PUT', '/api/event/plan', { plan: planDefaults('fighting') });
+    await host('PUT', '/api/event/plan', { plan: { ...planDefaults('fighting'), stations: 2 } });
+    // A refused plan is not a change.
+    expect((await host('PUT', '/api/event/plan', { plan: { ...planDefaults('fighting'), stations: 99 } })).statusCode).toBe(400);
+    await host('PUT', '/api/event', { name: 'Marker' });
+    await eventually(() => expect(live.messages.at(-1)).toMatchObject({ type: 'event', event: { name: 'Marker' } }));
+    expect(live.messages.filter((m) => m.type === 'plan')).toEqual([{ type: 'plan' }, { type: 'plan' }]);
+    live.terminate();
+  });
+
   it('tells the screens to reload the bracket and groups when the wait changes, and only then', async () => {
     const live = await listen(app, undefined, '127.0.0.1');
     await host('PUT', '/api/event/plan', { plan: planDefaults('fighting') });
@@ -325,8 +337,8 @@ describe('POST /api/events', () => {
     // The old event's bracket, its results, and who was in the event are as they were.
     expect(rows()).toEqual(finished);
     // The new event has no bracket, no groups, and no players.
-    expect((await host('GET', '/api/bracket')).json()).toEqual({ bracket: null });
-    expect((await host('GET', '/api/heats')).json()).toEqual({ heats: null });
+    expect((await host('GET', '/api/bracket')).json().bracket).toBeNull();
+    expect((await host('GET', '/api/heats')).json().heats).toBeNull();
     expect((await host('GET', '/api/event/players')).json()).toEqual({ playerIds: [] });
     // A returning player signs up again, and is then in the new event only.
     const res = await callers.signup('POST', '/api/signup/claim', { handle: 'Player1', pin: '1234' });
@@ -380,6 +392,7 @@ describe('POST /api/events', () => {
           { type: 'players' },
           { type: 'bracket' },
           { type: 'heats' },
+          { type: 'plan' },
         ]),
       );
     }

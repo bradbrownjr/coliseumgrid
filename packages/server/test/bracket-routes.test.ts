@@ -65,6 +65,7 @@ describe('who may call each route', () => {
     ['POST', '/api/bracket/undo', { resultId: 1 }],
     ['POST', '/api/bracket/players', { playerId: 1 }],
     ['POST', '/api/bracket/tie-break'],
+    ['POST', '/api/bracket/arrived', { matchId: 0, arrived: true }],
     ['DELETE', '/api/bracket'],
     ['GET', '/api/event/players'],
   ];
@@ -112,15 +113,16 @@ describe('GET /api/bracket', () => {
   it('answers { bracket: null } before one is made', async () => {
     for (const who of [host, display, signup]) {
       const res = await who('GET', '/api/bracket');
-      expect(res.json()).toEqual({ bracket: null });
+      expect(res.json()).toEqual({ bracket: null, now: expect.any(String) });
     }
   });
 
   it('gives a Display and a Sign-up device the same answer as the host, fields only', async () => {
     await make('double', 4);
     const answers = await Promise.all([host, display, signup].map((who) => who('GET', '/api/bracket')));
-    expect(answers[1]?.json()).toEqual(answers[0]?.json());
-    expect(answers[2]?.json()).toEqual(answers[0]?.json());
+    // `now` is the server's clock at each call, so only the bracket is compared.
+    expect(answers[1]?.json().bracket).toEqual(answers[0]?.json().bracket);
+    expect(answers[2]?.json().bracket).toEqual(answers[0]?.json().bracket);
     expectContractShape(answers[0]?.json().bracket);
   });
 
@@ -141,6 +143,7 @@ describe('GET /api/bracket', () => {
       ['/api/bracket/results', { matchId: match?.id, winnerId: match?.slots[0].player?.id, extra: 1 }],
       ['/api/bracket/undo', { resultId: 1, extra: 1 }],
       ['/api/bracket/players', { playerId: ids[5], extra: 1 }],
+      ['/api/bracket/arrived', { matchId: match?.id, arrived: true, extra: 1 }],
     ] as const) {
       const res = await host('POST', url, body);
       expect(res.statusCode, url).toBe(400);
@@ -176,7 +179,7 @@ describe('POST /api/bracket', () => {
     const res = await host('POST', '/api/bracket', { format, bestOf: 3, stations: 2, playerIds: ids.slice(0, 4) });
     expect(res.statusCode).toBe(201);
     const { bracket } = res.json();
-    expect(Object.keys(res.json())).toEqual(['bracket']);
+    expect(Object.keys(res.json()).sort()).toEqual(['bracket', 'now']);
     expectContractShape(bracket);
     expect(bracket).toMatchObject({ format, bestOf: 3, finished: false, lastResultId: null });
     expect(bracket.stations).toHaveLength(2);
@@ -290,7 +293,7 @@ describe('POST /api/bracket/results', () => {
     const res = await win(bracket, 0, 1);
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(Object.keys(body).sort()).toEqual(['bracket', 'resultId']);
+    expect(Object.keys(body).sort()).toEqual(['bracket', 'now', 'resultId']);
     expectContractShape(body.bracket);
     expect(body.bracket.lastResultId).toBe(body.resultId);
     const done = body.bracket.matches.find((m: { id: number }) => m.id === first?.id);
@@ -365,7 +368,7 @@ describe('POST /api/bracket/undo', () => {
     const second = (await win(first.bracket, 0, 1)).json();
     const res = await host('POST', '/api/bracket/undo', { resultId: second.resultId });
     expect(res.statusCode).toBe(200);
-    expect(Object.keys(res.json())).toEqual(['bracket']);
+    expect(Object.keys(res.json()).sort()).toEqual(['bracket', 'now']);
     expect(res.json().bracket).toEqual(first.bracket);
     expect(await current()).toEqual(first.bracket);
     expect(db.prepare('SELECT COUNT(*) AS n FROM bracket_results').get()).toEqual({ n: 1 });
@@ -425,7 +428,7 @@ describe('POST /api/bracket/players', () => {
     expect(start.lateOpen).toBe(true);
     const res = await host('POST', '/api/bracket/players', { playerId: ids[3] });
     expect(res.statusCode).toBe(200);
-    expect(Object.keys(res.json())).toEqual(['bracket']);
+    expect(Object.keys(res.json()).sort()).toEqual(['bracket', 'now']);
     expectContractShape(res.json().bracket);
     expect(res.json().bracket.lateOpen).toBe(false);
     const shown = res.json().bracket.matches.flatMap((m: Bracket['matches'][number]) => m.slots.map((s) => s.player?.id));
@@ -546,7 +549,7 @@ describe('a bracket survives a restart exactly', () => {
 
       const second = await buildApp({ db: openDatabase(file), hostPassword: HOST_PASSWORD });
       const again = caller(second, await signInHost(second));
-      expect((await again('GET', '/api/bracket')).json()).toEqual({ bracket });
+      expect((await again('GET', '/api/bracket')).json().bracket).toEqual(bracket);
       await second.close();
     } finally {
       await rm(dir, { recursive: true, force: true });

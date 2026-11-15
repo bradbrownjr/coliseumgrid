@@ -349,6 +349,8 @@ export interface StationCard {
   /** Empty while nothing is on the station. */
   slots: BracketSlot[];
   calledAt: string | null;
+  /** The host said the players are here, so there is no call line for this call. */
+  arrived: boolean;
 }
 
 const slotOf = (player: Player): BracketSlot => ({ player, bye: false });
@@ -356,11 +358,12 @@ const slotOf = (player: Player): BracketSlot => ({ player, bye: false });
 /**
  * The call line for a station whose wait for a missing player is over (docs/PLAN.md, "Waiting
  * for a missing player"): every player on it, since the TV can't know who is missing. Null
- * while the wait goes on or nothing is on the station; it clears once a result is recorded.
+ * while the wait goes on, nothing is on the station, or the host tapped **They're here**; it
+ * clears once a result is recorded. `nowMs` is the server's time (`useNow`).
  */
 export function stationCallLine(card: StationCard, noShowMinutes: number, nowMs: number): string | null {
   const players = card.slots.flatMap((slot) => (slot.player ? [slot.player] : []));
-  if (players.length === 0 || !waitIsOver(card.calledAt, noShowMinutes, nowMs)) return null;
+  if (players.length === 0 || !waitIsOver(card.calledAt, noShowMinutes, nowMs, card.arrived)) return null;
   return callWords(players, card.number);
 }
 
@@ -370,6 +373,7 @@ export const bracketStationCards = (stations: BracketStation[]): StationCard[] =
     note: station.match?.side === 'tie-break' ? 'tie-break' : null,
     slots: station.match?.slots ?? [],
     calledAt: station.calledAt,
+    arrived: station.arrived,
   }));
 
 export const heatStationCards = (stations: HeatStation[]): StationCard[] =>
@@ -378,6 +382,7 @@ export const heatStationCards = (stations: HeatStation[]): StationCard[] =>
     note: station.heat ? heatLabel(station.heat) : null,
     slots: station.heat?.players.map(slotOf) ?? [],
     calledAt: station.calledAt,
+    arrived: station.arrived,
   }));
 
 /** What a group is called on screen (docs/DOC-STYLE.md, "Tournament words on screen"). */

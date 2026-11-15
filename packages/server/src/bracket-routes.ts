@@ -7,6 +7,7 @@
 import type {
   ApiError,
   BracketAnswer,
+  BracketArrivedBody,
   BracketNowAnswer,
   BracketPlayerBody,
   BracketResultAnswer,
@@ -32,6 +33,7 @@ import {
   createBracket,
   joinLate,
   recordResult,
+  setArrived,
   startTieBreak,
   undoResult,
   type BracketState,
@@ -73,8 +75,12 @@ const newBracketBody = objectSchema({
 const resultBody = objectSchema({ matchId: { type: 'integer', minimum: 0 }, winnerId: idSchema }, { forfeit: { type: 'boolean' } });
 const undoBody = objectSchema({ resultId: idSchema });
 const playerBody = objectSchema({ playerId: idSchema });
+const arrivedBody = objectSchema({ matchId: { type: 'integer', minimum: 0 }, arrived: { type: 'boolean' } });
 
-const nowAnswer = objectSchema({ bracket: bracketSchema });
+// Every answer that carries the bracket carries the server's clock too, read when the answer is
+// sent (never kept with a cached answer), so a screen can time `calledAt` against it.
+const timeSchema = { type: 'string' } as const;
+const nowAnswer = objectSchema({ bracket: bracketSchema, now: timeSchema });
 const badRequest = errorSchema(['bad-request']);
 const noBracket = errorSchema(['no-bracket']);
 // A missing match or player, or no bracket at all.
@@ -120,20 +126,21 @@ export async function registerBracketRoutes(app: FastifyInstance, options: Brack
       if (!answer.ok) return refuse(reply, answer.error, statuses);
       const bracket = commit(found.eventId, answer);
       saved?.();
-      return { bracket };
+      return { bracket, now: iso(now()) };
     });
 
   app.get<{ Reply: BracketAnswer | ApiError }>(
     '/api/bracket',
     {
       onRequest: access.requireHostOrDevice,
-      schema: { response: { 200: objectSchema({ bracket: nullableBracketSchema }), 401: notSignedIn } },
+      schema: { response: { 200: objectSchema({ bracket: nullableBracketSchema, now: timeSchema }), 401: notSignedIn } },
     },
     async () => {
       // Both reads happen before the first await, so they see one moment.
       const found = current();
       const handles = handleLookup();
-      return { bracket: found ? await bracketAnswer(found.state, handles, competition.noShowMinutes()) : null };
+      const bracket = found ? await bracketAnswer(found.state, handles, competition.noShowMinutes()) : null;
+      return { bracket, now: iso(now()) };
     },
   );
 
@@ -172,7 +179,7 @@ export async function registerBracketRoutes(app: FastifyInstance, options: Brack
         // A player the host picked from "Not signed up" is here now, so the event lists them.
         for (const playerId of playerIds) eventPlayers.add(playerId);
         hub.broadcast({ type: 'bracket' });
-        return reply.code(201).send({ bracket: answer.bracket });
+        return reply.code(201).send({ bracket: answer.bracket, now: iso(now()) });
       }),
   );
 
@@ -183,7 +190,7 @@ export async function registerBracketRoutes(app: FastifyInstance, options: Brack
       schema: {
         body: resultBody,
         response: {
-          200: objectSchema({ bracket: bracketSchema, resultId: { type: 'integer' } }),
+          200: objectSchema({ bracket: bracketSchema, resultId: { type: 'integer' }, now: timeSchema }),
           400: badRequest,
           401: notSignedIn,
           404: notFound,
@@ -201,7 +208,7 @@ export async function registerBracketRoutes(app: FastifyInstance, options: Brack
       );
       if (!('bracket' in answer)) return answer;
       // The result just recorded is the last one in the log.
-      return { bracket: answer.bracket, resultId: answer.bracket.lastResultId as number };
+      return { bracket: answer.bracket, resultId: answer.bracket.lastResultId as number, now: answer.now };
     },
   );
 
@@ -259,7 +266,23 @@ export async function registerBracketRoutes(app: FastifyInstance, options: Brack
       onRequest: access.requireHost,
       schema: { response: { 200: nowAnswer, 401: notSignedIn, 404: noBracket, 409: errorSchema(['no-tie']) } },
     },
-    async (_request, reply) => change(reply, (state, handles, noShow) => startTieBreak(state, handles, noShow), { 'no-tie': 409 }),
+    // The stations the tie-break fills are called now, not at the time of the last result.
+    async (_request, reply) => change(reply, (state, handles, noShow) => startTieBreak(state, handles, noShow, iso(now())), { 'no-tie': 409 }),
+  );
+
+  // **They're here** (docs/PLAN.md, "Waiting for a missing player"): host only, so a phone, a
+  // device, or a stranger can't clear the prompt. It is stored against the station's current call.
+  app.post<{ Body: BracketArrivedBody; Reply: BracketNowAnswer | ApiError }>(
+    '/api/bracket/arrived',
+    {
+      onRequest: access.requireHost,
+      schema: {
+        body: arrivedBody,
+        response: { 200: nowAnswer, 400: badRequest, 401: notSignedIn, 404: notFound, 409: errorSchema(['not-on-station']) },
+      },
+    },
+    async (request, reply) =>
+      change(reply, (state, handles, noShow) => setArrived(state, request.body, handles, noShow), { 'not-found': 404, 'not-on-station': 409 }),
   );
 
   app.delete(

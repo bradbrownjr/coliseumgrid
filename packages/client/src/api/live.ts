@@ -35,7 +35,13 @@ export function parseLiveMessage(data: unknown): LiveMessage | null {
   }
   if (typeof json !== 'object' || json === null) return null;
   const message = json as { type?: unknown; event?: unknown };
-  if (message.type === 'players' || message.type === 'unpaired' || message.type === 'bracket' || message.type === 'heats') {
+  if (
+    message.type === 'players' ||
+    message.type === 'unpaired' ||
+    message.type === 'bracket' ||
+    message.type === 'heats' ||
+    message.type === 'plan'
+  ) {
     return { type: message.type };
   }
   if (message.type !== 'event') return null;

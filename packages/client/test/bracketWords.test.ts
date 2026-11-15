@@ -192,7 +192,7 @@ describe('bracket lists', () => {
       bracket({
         matches: [match(1, { slots: [slot(zap), slot(null)] })],
         upNext: [match(2, { slots: [slot(kai), slot(null)] })],
-        stations: [{ number: 1, match: match(3, { slots: [slot(blaze), slot(null)] }), calledAt: null }, { number: 2, match: null, calledAt: null }],
+        stations: [{ number: 1, match: match(3, { slots: [slot(blaze), slot(null)] }), calledAt: null, arrived: false }, { number: 2, match: null, calledAt: null, arrived: false }],
         standings: [{ place: 1, player: { id: 9, handle: 'Moe' }, wins: 1, losses: 0 }],
       }),
     );

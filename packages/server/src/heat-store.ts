@@ -32,7 +32,8 @@ export function createHeatStore(db: Database): HeatStore {
     'SELECT id, heat_id, finish_order, missing, at, undone_step, undone_at FROM heat_results WHERE run_id = ? ORDER BY id',
   );
   const lateJoins = db.prepare('SELECT player_id, heat_id, step FROM heat_late_joins WHERE run_id = ? ORDER BY position');
-  const tieBreaks = db.prepare('SELECT players, step FROM heat_tie_breaks WHERE run_id = ? ORDER BY position');
+  const tieBreaks = db.prepare('SELECT players, step, at FROM heat_tie_breaks WHERE run_id = ? ORDER BY position');
+  const arrivals = db.prepare('SELECT heat_id, called_at FROM heat_arrivals WHERE run_id = ? ORDER BY rowid');
   const removeForEvent = db.prepare('DELETE FROM heat_runs WHERE event_id = ? AND id <> ?');
   const removeAll = db.prepare('DELETE FROM heat_runs WHERE event_id = ?');
   const exists = db.prepare('SELECT 1 AS found FROM heat_runs WHERE id = ?');
@@ -43,11 +44,13 @@ export function createHeatStore(db: Database): HeatStore {
   const clearResults = db.prepare('DELETE FROM heat_results WHERE run_id = ?');
   const clearLate = db.prepare('DELETE FROM heat_late_joins WHERE run_id = ?');
   const clearTies = db.prepare('DELETE FROM heat_tie_breaks WHERE run_id = ?');
+  const clearArrivals = db.prepare('DELETE FROM heat_arrivals WHERE run_id = ?');
   const insertResult = db.prepare(
     'INSERT INTO heat_results (id, run_id, heat_id, finish_order, missing, at, undone_step, undone_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
   );
   const insertLate = db.prepare('INSERT INTO heat_late_joins (run_id, position, player_id, heat_id, step) VALUES (?, ?, ?, ?, ?)');
-  const insertTie = db.prepare('INSERT INTO heat_tie_breaks (run_id, position, players, step) VALUES (?, ?, ?, ?)');
+  const insertTie = db.prepare('INSERT INTO heat_tie_breaks (run_id, position, players, step, at) VALUES (?, ?, ?, ?, ?)');
+  const insertArrival = db.prepare('INSERT INTO heat_arrivals (run_id, heat_id, called_at) VALUES (?, ?, ?)');
   const sequence = db.prepare('SELECT seq FROM sqlite_sequence WHERE name = ?');
   // json_each lists the seeding's player ids. A late player is in their own table, and a
   // tie-break's players are all players of the run already.
@@ -94,7 +97,13 @@ export function createHeatStore(db: Database): HeatStore {
           ...(r['missing'] === null ? {} : { missing: JSON.parse(r['missing'] as string) as number[] }),
           ...(r['undone_step'] === null ? {} : { undone: { step: r['undone_step'] as number, at: r['undone_at'] as string } }),
         })),
-        tieBreaks: tieBreaks.all(id).map((r) => ({ players: JSON.parse(r['players'] as string) as number[], step: r['step'] as number })),
+        tieBreaks: tieBreaks.all(id).map((r) => ({
+          players: JSON.parse(r['players'] as string) as number[],
+          step: r['step'] as number,
+          // Left off a row stored before the column existed.
+          ...(r['at'] === null ? {} : { at: r['at'] as string }),
+        })),
+        arrivals: arrivals.all(id).map((r) => ({ heatId: r['heat_id'] as number, calledAt: r['called_at'] as string })),
       };
     },
     save(eventId, state) {
@@ -108,6 +117,7 @@ export function createHeatStore(db: Database): HeatStore {
           clearResults.run(settings.id);
           clearLate.run(settings.id);
           clearTies.run(settings.id);
+          clearArrivals.run(settings.id);
         } else {
           insertRun.run(
             settings.id,
@@ -133,7 +143,8 @@ export function createHeatStore(db: Database): HeatStore {
           );
         }
         state.lateJoins.forEach((j, position) => insertLate.run(settings.id, position, j.playerId, j.heatId, j.step));
-        state.tieBreaks.forEach((t, position) => insertTie.run(settings.id, position, JSON.stringify(t.players), t.step));
+        state.tieBreaks.forEach((t, position) => insertTie.run(settings.id, position, JSON.stringify(t.players), t.step, t.at ?? null));
+        state.arrivals.forEach((a) => insertArrival.run(settings.id, a.heatId, a.calledAt));
       });
     },
     remove: (eventId) => removeAll.run(eventId).changes > 0,
