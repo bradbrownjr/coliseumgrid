@@ -51,7 +51,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function attach(info: { deviceId?: number; phoneId?: number; sessionHash?: string; local?: boolean; stillAllowed?: () => boolean }): StalledSocket {
+function attach(info: { deviceId?: number; phoneId?: number; sessionHash?: string; local?: boolean; hostAllowed?: () => boolean; stillAllowed?: () => boolean }): StalledSocket {
   const socket = new StalledSocket();
   hub.attach(socket, { stillAllowed: () => true, ...info });
   return socket;
@@ -147,5 +147,32 @@ describe('a connection with more than one identity', () => {
     expect(both.sent).toEqual(['{"type":"players"}']);
     hub.unpair(1);
     expect(both.sent).toEqual(['{"type":"players"}', '{"type":"unpaired"}']);
+  });
+});
+
+describe('broadcastToHosts', () => {
+  it('reaches a connection that is the host now, and no other', () => {
+    const laptop = attach({ local: true, hostAllowed: () => true });
+    const session = attach({ sessionHash: 'abc', hostAllowed: () => true });
+    const device = attach({ deviceId: 1 });
+    const phone = attach({ phoneId: 1 });
+    hub.broadcastToHosts({ type: 'tags' });
+    expect(laptop.sent).toEqual(['{"type":"tags"}']);
+    expect(session.sent).toEqual(['{"type":"tags"}']);
+    expect(device.sent).toEqual([]);
+    expect(phone.sent).toEqual([]);
+  });
+
+  it('skips a connection whose host session ended, even while it stays open as a paired device', () => {
+    let valid = true;
+    const both = attach({ sessionHash: 'abc', deviceId: 1, hostAllowed: () => valid });
+    hub.broadcastToHosts({ type: 'tags' });
+    expect(both.sent).toHaveLength(1);
+    valid = false;
+    hub.broadcastToHosts({ type: 'tags' });
+    expect(both.sent).toHaveLength(1);
+    // Everything else still reaches it.
+    hub.broadcast({ type: 'players' });
+    expect(both.sent).toHaveLength(2);
   });
 });

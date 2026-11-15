@@ -371,6 +371,7 @@ export async function registerHostRoutes(app: FastifyInstance, options: HostRout
         ...(identity.device && { deviceId: identity.device.id }),
         ...(identity.phone && { phoneId: identity.phone.id }),
         ...(identity.hostSessionHash !== undefined && { sessionHash: identity.hostSessionHash }),
+        ...((identity.local || identity.hostSessionHash !== undefined) && { hostAllowed: () => access.hostStillAllowed(identity) }),
         stillAllowed: () => access.stillAllowed(identity),
       });
     },

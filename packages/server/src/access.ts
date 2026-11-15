@@ -74,6 +74,8 @@ export interface Access {
   setPhoneCookie(request: FastifyRequest, reply: FastifyReply, token: string): void;
   /** Clears the phone cookie, for a sign-out. */
   clearPhoneCookie(request: FastifyRequest, reply: FastifyReply): void;
+  /** Whether the identity is the host right now: the laptop itself, or a host session that hasn't ended or expired. */
+  hostStillAllowed(identity: Identity): boolean;
   /** Whether the identity still holds, for a connection that has been open a while. */
   stillAllowed(identity: Identity): boolean;
 }
@@ -156,6 +158,9 @@ export async function createAccess(options: AccessOptions): Promise<Access> {
 
   const secure = (request: FastifyRequest) => isHttps(request, trustedProxy);
 
+  const hostStillAllowed = (identity: Identity): boolean =>
+    identity.local || (identity.hostSessionHash !== undefined && hostStore.sessionValid(identity.hostSessionHash));
+
   return {
     identify,
     requireHost: guard((who) => who.host),
@@ -194,8 +199,9 @@ export async function createAccess(options: AccessOptions): Promise<Access> {
     clearPhoneCookie(request, reply) {
       reply.header('set-cookie', serializeCookie(PHONE_COOKIE, 'x', { maxAgeSeconds: 0, secure: secure(request) }));
     },
+    hostStillAllowed,
     stillAllowed(identity) {
-      const hostOk = identity.local || (identity.hostSessionHash !== undefined && hostStore.sessionValid(identity.hostSessionHash));
+      const hostOk = hostStillAllowed(identity);
       const deviceOk = identity.device !== undefined && devices.get(identity.device.id) !== undefined;
       const phoneOk = identity.phone !== undefined && phones.get(identity.phone.id) !== undefined;
       return hostOk || deviceOk || phoneOk;

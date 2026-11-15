@@ -46,6 +46,12 @@ export interface LiveConnectionInfo {
   sessionHash?: string;
   /** Set for the laptop itself (offline, from localhost), which is the host with no session. */
   local?: boolean;
+  /**
+   * Set for a connection that is the host: asked each time a host-only message is sent, so a
+   * connection whose host session expired but is still open as a paired device doesn't get one.
+   * Absent for a connection that is not the host.
+   */
+  hostAllowed?: () => boolean;
   /** Asked at each heartbeat. False closes the connection (the session expired, or the device is gone). */
   stillAllowed: () => boolean;
 }
@@ -55,8 +61,8 @@ export interface LiveHub {
   /** Sends the message to every connection. */
   broadcast(message: LiveMessage): void;
   /**
-   * Sends the message only to connections that signed in as the host (a session cookie, or the
-   * laptop itself). For news about the print queue, which a phone, a Display, or a Sign-up
+   * Sends the message only to connections that are the host right now (`hostAllowed`: a session
+   * that hasn't ended or expired, or the laptop itself). For news about the print queue, which a phone, a Display, or a Sign-up
    * device never gets (docs/PLAN.md, "Name tags API").
    */
   broadcastToHosts(message: LiveMessage): void;
@@ -164,7 +170,7 @@ export function createLiveHub(heartbeatMs: number = HEARTBEAT_MS): LiveHub {
     },
     broadcastToHosts(message) {
       for (const connection of connections) {
-        if (connection.local === true || connection.sessionHash !== undefined) sendJson(connection.socket, message);
+        if (connection.hostAllowed?.() === true) sendJson(connection.socket, message);
       }
     },
     unpair: (deviceId) =>

@@ -272,6 +272,27 @@ describe('host sessions', () => {
   });
 });
 
+describe('tags messages (the print queue)', () => {
+  it('stop reaching a paired device whose browser\'s host session expired, while it stays open', async () => {
+    const display = await pairDevice(app, host, 'display');
+    const tablet = await pairDevice(app, host, 'signup');
+    const signUp = (handle: string) => withCookie(app, tablet.cookie, { method: 'POST', url: '/api/signup', payload: { handle, pin: '1234' } });
+    const both = await connect(`${display.cookie}; ${host}`);
+    const tagMessages = () => both.messages.filter((m) => m.type === 'tags').length;
+
+    expect((await signUp('Zap')).statusCode).toBe(201);
+    await vi.waitFor(() => expect(tagMessages()).toBe(1));
+
+    // The session ends between heartbeats; the Display half of the browser is still allowed.
+    clock = START + HOST_SESSION_MS;
+    expect((await signUp('Bolt')).statusCode).toBe(201);
+    // The players message was sent after the tags message would have been.
+    await vi.waitFor(() => expect(both.messages.filter((m) => m.type === 'players')).toHaveLength(2));
+    expect(tagMessages()).toBe(1);
+    expect(both.closed).toBeUndefined();
+  });
+});
+
 describe('the heartbeat', () => {
   it('keeps a connection that answers pings', async () => {
     await app.close();
