@@ -239,6 +239,28 @@ export const MIGRATIONS: readonly string[] = [
     PRIMARY KEY (run_id, heat_id, called_at)
   );
   `,
+  // M8: name tags (docs/PLAN.md, section 7). The event's graphic is the file's random name in
+  // DATA_DIR/graphics (also its version), its type, and its size read from its header; all four
+  // are null for none and written together. A new event copies them, so a file can belong to
+  // several events, and the index finds whether any event still uses one.
+  // `tag_queue` holds at most one tag per player, deleted with the player. `pin` is the plain PIN
+  // (4 digits), kept only until the tag prints or for 12 hours (tag-queue.ts); `pin_stored_at` is
+  // when it was stored, both or neither. Like `event_players`, the queue belongs to the current
+  // event: a new event empties it, so it has no event column.
+  `
+  ALTER TABLE events ADD COLUMN graphic_file TEXT;
+  ALTER TABLE events ADD COLUMN graphic_type TEXT CHECK (graphic_type IN ('image/png', 'image/jpeg', 'image/webp'));
+  ALTER TABLE events ADD COLUMN graphic_width INTEGER;
+  ALTER TABLE events ADD COLUMN graphic_height INTEGER;
+  CREATE INDEX events_graphic_file ON events (graphic_file);
+  CREATE TABLE tag_queue (
+    player_id     INTEGER PRIMARY KEY REFERENCES players(id) ON DELETE CASCADE,
+    pin           TEXT CHECK (pin IS NULL OR (length(pin) = 4 AND pin NOT GLOB '*[^0-9]*')),
+    pin_stored_at TEXT,
+    queued_at     TEXT NOT NULL,
+    CHECK ((pin IS NULL) = (pin_stored_at IS NULL))
+  );
+  `,
 ];
 
 export function migrate(db: Database): void {
@@ -300,6 +322,11 @@ export function openDatabase(file: string): Database {
   // Write-ahead logging lets a read run during a write and survives a power cut mid-write
   // (https://sqlite.org/wal.html). It needs a file, so an in-memory database skips it.
   if (!inMemory) db.exec('PRAGMA journal_mode = WAL');
+  // Deleted content is overwritten with zeros instead of left in free space
+  // (https://sqlite.org/pragma.html#pragma_secure_delete), so a plain PIN that leaves the print
+  // queue is gone from the file's pages, not only from the table. tag-queue.ts also checkpoints
+  // the WAL after removing PINs, because the WAL keeps older copies of a page.
+  db.exec('PRAGMA secure_delete = ON');
   migrate(db);
   return db;
 }

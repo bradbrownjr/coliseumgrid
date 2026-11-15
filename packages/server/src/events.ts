@@ -1,8 +1,8 @@
 // The current event: the newest row of the `events` table. M2 created it, M3 let the host name
 // it, and M7 adds its game, its plan, and new events (docs/PLAN.md, "Devices and host API" and
-// "The setup wizard").
+// "The setup wizard"). M8 adds its graphic (docs/PLAN.md, "The event graphic").
 
-import { EVENT_NAME_MAX, isEventPlan, type EventInfo, type EventPlan } from '@coliseumgrid/core';
+import { EVENT_NAME_MAX, isEventPlan, type EventInfo, type EventPlan, type ImageType } from '@coliseumgrid/core';
 import { iso, type Clock } from './clock.ts';
 import type { Database } from './database.ts';
 
@@ -34,6 +34,14 @@ export function cleanGameName(raw: string): string | null {
   return cleanEventName(name);
 }
 
+/** A stored graphic: the file's random name in DATA_DIR/graphics, which is also its version. */
+export interface StoredGraphic {
+  file: string;
+  type: ImageType;
+  width: number;
+  height: number;
+}
+
 export interface Events {
   current(): EventInfo | null;
   /** The current event's row id, or null before one exists. */
@@ -57,6 +65,16 @@ export interface Events {
   plan(): EventPlan | null;
   /** Stores the plan on the current event, making one named DEFAULT_EVENT_NAME if there is none. */
   setPlan(plan: EventPlan): { created: boolean; event: EventInfo };
+  /** The current event's graphic, or null when it has none or there is no event. */
+  graphic(): StoredGraphic | null;
+  /**
+   * Gives the current event this graphic, or none, and returns the file it replaced (null when
+   * there was none or it is the same). A graphic makes an event named DEFAULT_EVENT_NAME if
+   * there is none; removing one never makes an event.
+   */
+  setGraphic(graphic: StoredGraphic | null): { created: boolean; event: EventInfo | null; replaced: string | null };
+  /** True if any event, current or past, still uses the file. */
+  graphicInUse(file: string): boolean;
 }
 
 /** A stored plan that isn't JSON, or doesn't pass `isEventPlan`, is as good as none, so a hand-edited database can't break the page. */
@@ -71,17 +89,40 @@ function readPlan(raw: unknown): EventPlan | null {
 }
 
 export function createEvents(db: Database, now: Clock): Events {
-  const newest = db.prepare('SELECT id, name, game, plan FROM events ORDER BY id DESC LIMIT 1');
+  const newest = db.prepare(
+    'SELECT id, name, game, plan, graphic_file, graphic_type, graphic_width, graphic_height FROM events ORDER BY id DESC LIMIT 1',
+  );
   const rename = db.prepare('UPDATE events SET name = ? WHERE id = ?');
   const renameAndGame = db.prepare('UPDATE events SET name = ?, game = ? WHERE id = ?');
   const insert = db.prepare('INSERT INTO events (name, game, plan, created_at) VALUES (?, ?, ?, ?)');
+  const insertWithGraphic = db.prepare(
+    'INSERT INTO events (name, game, plan, created_at, graphic_file, graphic_type, graphic_width, graphic_height) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+  );
   const storePlan = db.prepare('UPDATE events SET plan = ? WHERE id = ?');
+  const storeGraphic = db.prepare('UPDATE events SET graphic_file = ?, graphic_type = ?, graphic_width = ?, graphic_height = ? WHERE id = ?');
+  const fileInUse = db.prepare('SELECT 1 FROM events WHERE graphic_file = ? LIMIT 1');
 
   const idOf = (): number | null => {
     const row = newest.get();
     return row ? (row['id'] as number) : null;
   };
-  const infoOf = (row: Record<string, unknown>): EventInfo => ({ name: row['name'] as string, game: (row['game'] as string | null) ?? null });
+  const graphicOf = (row: Record<string, unknown>): StoredGraphic | null =>
+    typeof row['graphic_file'] === 'string'
+      ? {
+          file: row['graphic_file'],
+          type: row['graphic_type'] as ImageType,
+          width: row['graphic_width'] as number,
+          height: row['graphic_height'] as number,
+        }
+      : null;
+  const infoOf = (row: Record<string, unknown>): EventInfo => {
+    const graphic = graphicOf(row);
+    return {
+      name: row['name'] as string,
+      game: (row['game'] as string | null) ?? null,
+      graphic: graphic && { width: graphic.width, height: graphic.height, version: graphic.file },
+    };
+  };
   /** An empty game is stored as null. */
   const gameValue = (game: string | undefined): string | null => (game === undefined || game === '' ? null : game);
 
@@ -91,7 +132,7 @@ export function createEvents(db: Database, now: Clock): Events {
       const row = newest.get();
       if (row) return { id: row['id'] as number, event: infoOf(row), created: false };
       const result = insert.run(DEFAULT_EVENT_NAME, null, null, iso(now()));
-      return { id: Number(result.lastInsertRowid), event: { name: DEFAULT_EVENT_NAME, game: null }, created: true };
+      return { id: Number(result.lastInsertRowid), event: { name: DEFAULT_EVENT_NAME, game: null, graphic: null }, created: true };
     },
     current() {
       const row = newest.get();
@@ -101,19 +142,32 @@ export function createEvents(db: Database, now: Clock): Events {
       const row = newest.get();
       if (!row) {
         insert.run(name, gameValue(game), null, iso(now()));
-        return { name, game: gameValue(game) };
+        return { name, game: gameValue(game), graphic: null };
       }
+      const { graphic } = infoOf(row);
       if (game === undefined) {
         rename.run(name, row['id'] as number);
-        return { name, game: infoOf(row).game };
+        return { name, game: infoOf(row).game, graphic };
       }
       renameAndGame.run(name, gameValue(game), row['id'] as number);
-      return { name, game: gameValue(game) };
+      return { name, game: gameValue(game), graphic };
     },
     create(name, game) {
-      const plan = events.plan();
-      insert.run(name, gameValue(game), plan ? JSON.stringify(plan) : null, iso(now()));
-      return { name, game: gameValue(game) };
+      const row = newest.get();
+      const plan = row ? readPlan(row['plan']) : null;
+      // The graphic carries over, so a series of events keeps its picture (docs/PLAN.md, "The event graphic").
+      const graphic = row ? graphicOf(row) : null;
+      insertWithGraphic.run(
+        name,
+        gameValue(game),
+        plan ? JSON.stringify(plan) : null,
+        iso(now()),
+        graphic?.file ?? null,
+        graphic?.type ?? null,
+        graphic?.width ?? null,
+        graphic?.height ?? null,
+      );
+      return { name, game: gameValue(game), graphic: graphic && { width: graphic.width, height: graphic.height, version: graphic.file } };
     },
     plan() {
       const row = newest.get();
@@ -124,6 +178,19 @@ export function createEvents(db: Database, now: Clock): Events {
       storePlan.run(JSON.stringify(plan), id);
       return { created, event };
     },
+    graphic() {
+      const row = newest.get();
+      return row ? graphicOf(row) : null;
+    },
+    setGraphic(graphic) {
+      if (graphic === null && newest.get() === undefined) return { created: false, event: null, replaced: null };
+      const { id, created } = events.ensureCurrent();
+      const before = events.graphic();
+      storeGraphic.run(graphic?.file ?? null, graphic?.type ?? null, graphic?.width ?? null, graphic?.height ?? null, id);
+      const replaced = before !== null && before.file !== graphic?.file ? before.file : null;
+      return { created, event: events.current(), replaced };
+    },
+    graphicInUse: (file) => fileInUse.get(file) !== undefined,
   };
   return events;
 }

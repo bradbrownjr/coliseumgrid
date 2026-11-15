@@ -10,13 +10,15 @@ const version = (db: DatabaseSync) => (db.prepare('PRAGMA user_version').get() a
 const columns = (db: DatabaseSync, table: string) =>
   (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name);
 
-/** The columns migration 7 added to old tables. A database from before it has no values for them, so the older migration tests leave them out of a row dump. */
-const M7_COLUMNS = ['game', 'plan', 'forfeit', 'missing'];
+/** The columns migrations 7 and 9 added to old tables. A database from before them has no values for them, so the older migration tests leave them out of a row dump. */
+const ADDED_COLUMNS = ['game', 'plan', 'forfeit', 'missing', 'graphic_file', 'graphic_type', 'graphic_width', 'graphic_height'];
 const dump = (db: DatabaseSync, table: string) =>
   db
     .prepare(`SELECT * FROM ${table} ORDER BY 1, 2`)
     .all()
-    .map((row) => Object.fromEntries(Object.entries(row).filter(([key]) => !M7_COLUMNS.includes(key))));
+    .map((row) => Object.fromEntries(Object.entries(row).filter(([key]) => !ADDED_COLUMNS.includes(key))));
+
+const EVENT_COLUMNS = ['id', 'name', 'created_at', 'game', 'plan', 'graphic_file', 'graphic_type', 'graphic_width', 'graphic_height'];
 
 let dir: string | undefined;
 afterEach(async () => {
@@ -29,7 +31,7 @@ describe('migrations', () => {
     const db = openDatabase(':memory:');
     expect(version(db)).toBe(MIGRATIONS.length);
     expect(columns(db, 'players')).toEqual(['id', 'handle', 'handle_key', 'pin_hash', 'created_at']);
-    expect(columns(db, 'events')).toEqual(['id', 'name', 'created_at', 'game', 'plan']);
+    expect(columns(db, 'events')).toEqual(EVENT_COLUMNS);
   });
 
   it('add the host, pairing, and device tables, with no token or password stored in plain text', () => {
@@ -486,7 +488,7 @@ describe('migration 7 (the setup wizard)', () => {
     migrate(db);
     expect(version(db)).toBe(MIGRATIONS.length);
     expect(OLD_TABLES.map((t) => dump(db, t))).toEqual(before);
-    expect(columns(db, 'events')).toEqual(['id', 'name', 'created_at', 'game', 'plan']);
+    expect(columns(db, 'events')).toEqual(EVENT_COLUMNS);
     expect(columns(db, 'bracket_results')).toContain('forfeit');
     expect(columns(db, 'heat_results')).toContain('missing');
     expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
@@ -570,6 +572,60 @@ describe('migration 8 (tie-break start times and arrivals)', () => {
   });
 });
 
+describe('migration 9 (name tags)', () => {
+  /** A database as M7 left it: schema version 8, with a named event, a player, and a past event. */
+  function m8Database(): DatabaseSync {
+    const db = new DatabaseSync(':memory:');
+    db.exec('PRAGMA foreign_keys = ON');
+    for (const step of MIGRATIONS.slice(0, 8)) db.exec(step);
+    db.exec('PRAGMA user_version = 8');
+    db.exec(`
+      INSERT INTO players (handle, handle_key, pin_hash, created_at) VALUES ('Zap', 'zap', 'h1', 't1');
+      INSERT INTO events (name, game, plan, created_at) VALUES ('Friday', 'Racing game', NULL, 't2'), ('Saturday', NULL, NULL, 't3');
+      INSERT INTO event_players (event_id, player_id) VALUES (2, 1);
+    `);
+    return db;
+  }
+
+  it('adds the graphic columns and the print queue to a version 8 database and keeps every old row', () => {
+    const db = m8Database();
+    const before = ['players', 'events', 'event_players'].map((t) => dump(db, t));
+    migrate(db);
+    expect(version(db)).toBe(MIGRATIONS.length);
+    expect(['players', 'events', 'event_players'].map((t) => dump(db, t))).toEqual(before);
+    expect(columns(db, 'events')).toEqual(EVENT_COLUMNS);
+    expect(db.prepare('SELECT graphic_file, graphic_type, graphic_width, graphic_height FROM events').all()).toEqual([
+      { graphic_file: null, graphic_type: null, graphic_width: null, graphic_height: null },
+      { graphic_file: null, graphic_type: null, graphic_width: null, graphic_height: null },
+    ]);
+    expect(columns(db, 'tag_queue')).toEqual(['player_id', 'pin', 'pin_stored_at', 'queued_at']);
+    expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+    expect(db.prepare('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' });
+  });
+
+  it('takes only the three picture types', () => {
+    const db = m8Database();
+    migrate(db);
+    const store = db.prepare("UPDATE events SET graphic_file = 'f', graphic_type = ?, graphic_width = 16, graphic_height = 16 WHERE id = 2");
+    for (const type of ['image/png', 'image/jpeg', 'image/webp']) store.run(type);
+    expect(() => store.run('image/svg+xml')).toThrow(/CHECK/);
+  });
+
+  it('holds one tag per player, a PIN of 4 digits with its time or neither, and drops the tag with the player', () => {
+    const db = m8Database();
+    migrate(db);
+    const insert = db.prepare("INSERT INTO tag_queue (player_id, pin, pin_stored_at, queued_at) VALUES (1, ?, ?, 'q')");
+    for (const [pin, at] of [['482', 't'], ['48210', 't'], ['48a1', 't'], ['4821', null], [null, 't']] as const) {
+      expect(() => insert.run(pin, at), `${pin} ${at}`).toThrow(/CHECK/);
+    }
+    insert.run('0482', 't');
+    expect(() => insert.run(null, null)).toThrow(/UNIQUE|PRIMARY/);
+    expect(() => db.exec("INSERT INTO tag_queue (player_id, pin, pin_stored_at, queued_at) VALUES (99, NULL, NULL, 'q')")).toThrow(/FOREIGN KEY/);
+    db.exec('DELETE FROM event_players; DELETE FROM players');
+    expect(dump(db, 'tag_queue')).toEqual([]);
+  });
+});
+
 describe('openDatabase on a file', () => {
   it('creates the folder, uses WAL, and keeps data across a reopen', async () => {
     dir = await mkdtemp(join(tmpdir(), 'coliseumgrid-db-'));
@@ -577,6 +633,8 @@ describe('openDatabase on a file', () => {
     const db = openDatabase(file);
     expect(existsSync(file)).toBe(true);
     expect(db.prepare('PRAGMA journal_mode').get()).toEqual({ journal_mode: 'wal' });
+    // Deleted content is zeroed, so a printed tag's PIN leaves the file (tag-queue.ts).
+    expect(db.prepare('PRAGMA secure_delete').get()).toEqual({ secure_delete: 1 });
     db.prepare("INSERT INTO events (name, created_at) VALUES ('Friday', 't')").run();
     db.close();
 

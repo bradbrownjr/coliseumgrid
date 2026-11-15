@@ -39,6 +39,7 @@ import type { PinGuard } from './pin-guard.ts';
 import type { Phones } from './phones.ts';
 import type { Players } from './players.ts';
 import type { PushSubscriptions } from './push-subscriptions.ts';
+import type { TagQueue } from './tag-queue.ts';
 import { CLAIM_MAX_PER_IP, CLAIM_WINDOW_MS } from './rate-limit.ts';
 import { secureRandom } from './secure-random.ts';
 
@@ -64,6 +65,13 @@ export interface PlayerRoutesOptions {
   onPhonesSignedOut: (phoneIds: number[]) => void;
   /** Called after a rename or a merge, so the kept competition answer (it has handles) is dropped. */
   onCompetitionChanged: () => void;
+  /**
+   * The print queue. A sign-up, a claim, a host add, and a PIN reset queue the player's tag with
+   * the plain PIN they just saw (docs/PLAN.md, "The print queue").
+   */
+  tags: TagQueue;
+  /** Called after the queue changes, so host screens reload it. */
+  onTagsChanged: () => void;
   mode: Mode;
   /** See getClientKey. */
   trustedProxy?: string;
@@ -84,8 +92,21 @@ function refuse(reply: FastifyReply, reason: HandleRefusal): FastifyReply {
 }
 
 export async function registerPlayerRoutes(app: FastifyInstance, options: PlayerRoutesOptions): Promise<void> {
-  const { players, eventPlayers, inBracket, exclusive, access, onPlayersChanged, pinGuard, followCodes, phones, pushSubscriptions, trustedProxy } =
-    options;
+  const {
+    players,
+    eventPlayers,
+    inBracket,
+    exclusive,
+    access,
+    onPlayersChanged,
+    pinGuard,
+    followCodes,
+    phones,
+    pushSubscriptions,
+    tags,
+    onTagsChanged,
+    trustedProxy,
+  } = options;
   const online = options.mode === 'online';
 
   /** Clears the wrong-PIN count for a stored handle (its key is derived the same way as on sign-up). */
@@ -163,7 +184,10 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
       const player = players.create(check.handle, check.key, pinHash);
       if (!player) return fail(reply, 409, 'taken');
       eventPlayers.add(player.id);
+      // In the same tick as the write, so the queued PIN is the one just stored.
+      tags.queue(player.id, request.body.pin);
       onPlayersChanged();
+      onTagsChanged();
       // The PIN was just set, so a code for this player is safe to hand out.
       return reply.code(201).send({ player, followCode: followCodes.create(player.id, secureRandom) });
     },
@@ -208,6 +232,10 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
       // A returning player counts as here today. The host's list of players reloads only when
       // that changed something.
       if (eventPlayers.add(player.id)) onPlayersChanged();
+      // The guard checked that the PIN hash didn't change during its check, and nothing has
+      // awaited since, so the PIN queued here is the player's current one (pin-guard.ts).
+      tags.queue(player.id, request.body.pin);
+      onTagsChanged();
       // The PIN was just proven, so a code for this player is safe to hand out.
       return {
         player: { id: player.id, handle: player.handle },
@@ -257,7 +285,9 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
       const player = players.create(check.handle, check.key, pinHash);
       if (!player) return fail(reply, 409, 'taken');
       eventPlayers.add(player.id);
+      tags.queue(player.id, pin);
       onPlayersChanged();
+      onTagsChanged();
       return reply.code(201).send({ player, pin });
     },
   );
@@ -334,7 +364,11 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
         phones.moveFollows(id, intoId);
         // The player kept may now have more subscribed phones than the cap allows.
         pushSubscriptions.trimPlayer(intoId);
+        // The merged player's tag leaves the queue (the delete would cascade, but the host
+        // screens need to hear of it).
+        const hadTag = tags.remove(id);
         players.delete(id);
+        if (hadTag) onTagsChanged();
         // The merged handle no longer means this player, so its count goes with it.
         forget(merged.handle);
         options.onCompetitionChanged();
@@ -365,6 +399,9 @@ export async function registerPlayerRoutes(app: FastifyInstance, options: Player
       const pin = suggestPin(secureRandom);
       const pinHash = await hashPin(pin);
       if (!players.setPinHash(id, pinHash)) return fail(reply, 404, 'not-found');
+      // In the same tick as the new hash, so of two resets the queued PIN is the one stored last.
+      tags.queue(id, pin);
+      onTagsChanged();
       // A locked player is told to ask the host; the new PIN has to work right away.
       forget(player.handle);
       // The old PIN is what let a phone follow this player, so every phone that followed them

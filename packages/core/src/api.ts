@@ -38,7 +38,10 @@ export type ApiErrorCode =
   | 'no-heats'
   | 'not-following'
   | 'too-many-handles'
-  | 'push-off';
+  | 'push-off'
+  | 'bad-image'
+  | 'too-large'
+  | 'bad-type';
 
 export type ApiError =
   | { error: 'refused'; reason: HandleRefusal }
@@ -99,6 +102,18 @@ export interface EventInfo {
   name: string;
   /** What the event plays, as the host typed it (M7); null when left empty. Event data, never code. */
   game: string | null;
+  /** The event's picture for the tags and the TV (M8), or null for none. */
+  graphic: EventGraphic | null;
+}
+
+/**
+ * The event graphic's size in pixels, read from its header, and `version`, an opaque string
+ * that changes with each upload, so a page knows to load `GET /api/event/graphic` again.
+ */
+export interface EventGraphic {
+  width: number;
+  height: number;
+  version: string;
 }
 
 /** GET /api/host/session */
@@ -173,6 +188,38 @@ export interface PlanNowAnswer {
   plan: EventPlan;
 }
 
+// Name tags (docs/PLAN.md, "Name tags API"), from M8. Host only, except the graphic itself.
+
+/**
+ * A tag waiting to print. `pin` is the plain PIN, held only until the tag prints or for 12
+ * hours, whichever is first; null for a reprint or once it was wiped.
+ */
+export interface NameTag {
+  playerId: number;
+  handle: string;
+  pin: string | null;
+}
+
+/** GET /api/tags: sorted by handle. */
+export interface TagsAnswer {
+  tags: NameTag[];
+}
+
+/** POST /api/tags: a reprint of one player's tag. */
+export interface TagBody {
+  playerId: number;
+}
+
+/** POST /api/tags: 201, the queued reprint, with no PIN. */
+export interface TagAnswer {
+  tag: NameTag;
+}
+
+/** POST /api/tags/printed: those tags and their PINs are deleted. */
+export interface TagsPrintedBody {
+  playerIds: number[];
+}
+
 /** Messages the server sends on GET /api/live. */
 export type LiveMessage =
   | { type: 'event'; event: EventInfo | null }
@@ -181,6 +228,8 @@ export type LiveMessage =
   | { type: 'heats' }
   /** The event's plan changed (PUT /api/event/plan, POST /api/events). No payload: a host window reads the plan again. */
   | { type: 'plan' }
+  /** The print queue changed (M8). No payload, and only host screens get it: a host page reads GET /api/tags again. */
+  | { type: 'tags' }
   | { type: 'unpaired' };
 
 // Brackets API (docs/PLAN.md, "Brackets API"), from M4. A player is always `Player`, so no

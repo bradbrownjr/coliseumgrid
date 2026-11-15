@@ -4,7 +4,7 @@
 //   PORT                default 3000
 //   COLISEUMGRID_MODE   offline (default) or online
 //   CLIENT_DIST         the built client to serve; default packages/client/dist
-//   DATA_DIR            the folder for the database; default ./data (the image sets /data)
+//   DATA_DIR            the folder for the database and uploaded graphics; default ./data (the image sets /data)
 //   TRUSTED_PROXY       the reverse proxy's IP; only its X-Forwarded-For is read
 //   COLISEUMGRID_HOST_PASSWORD  the host password (8 to 128 characters); required online
 //   COLISEUMGRID_PUSH_SUBJECT   a mailto: or https: contact for the push services; push is off without it
@@ -32,6 +32,7 @@ const app = await buildApp({
   clientDist,
   logger: true,
   db,
+  dataDir: config.dataDir,
   mode: config.mode,
   ...(config.trustedProxy && { trustedProxy: config.trustedProxy }),
   ...(config.hostPassword && { hostPassword: config.hostPassword }),

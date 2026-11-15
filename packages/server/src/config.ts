@@ -17,7 +17,7 @@ export interface Config {
   mode: Mode;
   host: string;
   port: number;
-  /** The folder that holds the database (and later uploaded graphics), absolute. */
+  /** The folder that holds the database and the uploaded graphics (its `graphics` folder), absolute. */
   dataDir: string;
   /** The reverse proxy's address. Only a request from it may name a client in X-Forwarded-For (CLAUDE.md, rule 6). */
   trustedProxy?: string;

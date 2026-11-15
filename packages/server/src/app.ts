@@ -1,7 +1,8 @@
 // The Fastify app, built by a function so tests can use app.inject without a socket.
 
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
@@ -21,6 +22,7 @@ import { registerHeatRoutes } from './heat-routes.ts';
 import { createHeatStore } from './heat-store.ts';
 import { createHostStore } from './host-store.ts';
 import { createLiveHub } from './live.ts';
+import { registerNameTagRoutes } from './name-tag-routes.ts';
 import { startPhonePurge } from './phone-purge.ts';
 import { createPhones } from './phones.ts';
 import { registerPhoneRoutes } from './phone-routes.ts';
@@ -30,6 +32,8 @@ import { registerPlayerRoutes } from './players-routes.ts';
 import { createPush, type PushOptions } from './push-notify.ts';
 import { createPushSubscriptions } from './push-subscriptions.ts';
 import { createJoinLimits } from './rate-limit.ts';
+import { startTagPinWipe } from './tag-pin-wipe.ts';
+import { createTagQueue } from './tag-queue.ts';
 import { createWriteChain } from './write-chain.ts';
 
 export interface AppOptions {
@@ -39,6 +43,11 @@ export interface AppOptions {
   logger?: boolean;
   /** The database. The app closes it when the app closes. Defaults to a private in-memory one, which tests use. */
   db?: Database;
+  /**
+   * The data folder (DATA_DIR); uploaded graphics go in its `graphics` folder. Defaults to a
+   * private temporary folder that is deleted when the app closes, which tests use.
+   */
+  dataDir?: string;
   /** Online adds the rate limits on PIN guessing (docs/PLAN.md, section 8). Default offline. */
   mode?: Mode;
   /** The reverse proxy's address, the only peer whose X-Forwarded-For is read (CLAUDE.md, rule 6). */
@@ -89,10 +98,13 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
   const now = options.now ?? Date.now;
 
   const db = options.db ?? openDatabase(':memory:');
+  const tempDir = options.dataDir === undefined ? mkdtempSync(join(tmpdir(), 'coliseumgrid-')) : undefined;
+  const dataDir = options.dataDir ?? (tempDir as string);
   const hub = createLiveHub(options.liveHeartbeatMs);
   app.addHook('onClose', () => {
     hub.stop();
     db.close();
+    if (tempDir !== undefined) rmSync(tempDir, { recursive: true, force: true });
   });
 
   // Clients get a code, never Fastify's message text (docs/PLAN.md, "Players API").
@@ -161,6 +173,12 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
   const heatStore = createHeatStore(db);
   const competition = createCompetition(db, store, heatStore, players, events, options.onAnswerBuilt);
   const followCodes = createFollowCodes(db, now);
+  const tags = createTagQueue(db, now);
+  // The print queue's news goes to host screens only (docs/PLAN.md, "Name tags API").
+  const onTagsChanged = (): void => hub.broadcastToHosts({ type: 'tags' });
+  // Plain PINs queued 12 hours ago go at startup and hourly; the tags stay.
+  const stopPinWipe = startTagPinWipe(tags, onTagsChanged, (message) => app.log.warn(message));
+  app.addHook('onClose', () => stopPinWipe());
   const pushSubscriptions = createPushSubscriptions(db, now);
   const pinGuard = createPinGuard(mode, now, (handleKey) => players.getByKey(handleKey)?.pinHash);
   // Wrong pairing codes and wrong follow codes count against the same limits.
@@ -186,7 +204,9 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
     chain,
     now,
     joinLimits,
+    tags,
     onEventChanged: () => competition.drop(),
+    onTagsChanged,
     ...(options.trustedProxy && { trustedProxy: options.trustedProxy }),
   });
 
@@ -206,6 +226,8 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
     pushSubscriptions,
     onPhonesSignedOut: (phoneIds) => phoneIds.forEach((id) => hub.signOutPhone(id)),
     onCompetitionChanged: () => competition.drop(),
+    tags,
+    onTagsChanged,
     mode,
     ...(options.trustedProxy && { trustedProxy: options.trustedProxy }),
   });
@@ -223,6 +245,18 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
     joinLimits,
     push,
     ...(options.trustedProxy && { trustedProxy: options.trustedProxy }),
+  });
+
+  await registerNameTagRoutes(app, {
+    access,
+    events,
+    players,
+    tags,
+    hub,
+    chain,
+    graphicsDir: join(dataDir, 'graphics'),
+    onEventChanged: () => competition.drop(),
+    onTagsChanged,
   });
 
   await registerBracketRoutes(app, { access, events, eventPlayers, store, competition, hub, chain, now });

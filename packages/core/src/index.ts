@@ -36,7 +36,13 @@ export type {
   DevicesAnswer,
   EventAnswer,
   EventBody,
+  EventGraphic,
   EventInfo,
+  NameTag,
+  TagAnswer,
+  TagBody,
+  TagsAnswer,
+  TagsPrintedBody,
   NewEventAnswer,
   PlanAnswer,
   PlanBody,
@@ -195,3 +201,18 @@ export {
   type Range,
 } from './estimate.ts';
 export { EVENT_NAME_MAX, allEventNames, eventName } from './event-names.ts';
+export { IMAGE_TYPES, imageInfo, type ImageInfo, type ImageRefusal, type ImageType } from './image-info.ts';
+export {
+  GRAPHIC_BYTES_MAX,
+  GRAPHIC_SIZE_MAX,
+  GRAPHIC_SIZE_MIN,
+  LABEL_CUSTOM_ID,
+  LABEL_CUSTOM_MAX_MM,
+  LABEL_CUSTOM_MIN_MM,
+  LABEL_PRESETS,
+  LABEL_PRESET_DEFAULT,
+  LABEL_SAFE_EDGE_MM,
+  isCustomLabelSize,
+  type LabelPreset,
+  type LabelPresetId,
+} from './name-tags.ts';

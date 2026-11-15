@@ -49,7 +49,7 @@ A bad value stops it with a message.
 | `PORT` | `3000` | The port to listen on, a whole number from 0 to 65535. |
 | `COLISEUMGRID_MODE` | `offline` | `offline` or `online` (see `PLAN.md` section 8). Online turns on the rate limits on `POST /api/signup/claim`, turns off the `localhost` host sign-in and the first-run password setup, and needs `COLISEUMGRID_HOST_PASSWORD`. |
 | `COLISEUMGRID_HOST_PASSWORD` | none | The host password, 8 to 128 characters, taken as typed (spaces count). When set, it is the password and first-run setup is off. **Required online**: the server stops at startup without it. Offline without it, the first visit from the laptop itself (`localhost`) sets the password, once, and it is stored hashed (scrypt, like PINs). The server never prints or returns it. Changing it between starts ends every host session at startup (see "Host and device sessions"). The Unraid template has it as a masked variable. |
-| `DATA_DIR` | `data` | The folder that holds the database file `coliseumgrid.db`. Absolute, or relative to the working directory (the server turns it into an absolute path at startup). The server creates it if it is missing. The Docker image sets `/data`. |
+| `DATA_DIR` | `data` | The folder that holds the database file `coliseumgrid.db` and the uploaded event graphics (its `graphics` folder). Absolute, or relative to the working directory (the server turns it into an absolute path at startup). The server creates it if it is missing. The Docker image sets `/data`. |
 | `TRUSTED_PROXY` | none | The reverse proxy's IP address. Only a request whose direct peer is this address may name the client in `X-Forwarded-For`, and only the last entry is used (`CLAUDE.md`, rule 6). Without it, the client is the socket address. Set it online, behind the proxy; without it every player shares the proxy's address and its rate limit, and the server prints a warning at startup. |
 | `COLISEUMGRID_PUSH_SUBJECT` | none | The contact the push services see in the VAPID token (RFC 8292): a `mailto:` address or an `https:` URL, never `localhost` (`mailto:you@example.com`). A bad value stops the server at startup. Online without it, push is off and the server warns at startup; phones get the page alert only. Offline it is read and checked but has no effect, because push runs only in online mode, over HTTPS. |
 | `CLIENT_DIST` | `packages/client/dist` | The folder of built client files to serve: absolute, or relative to the working directory. The default is found from the server package's location, so it works from any working directory. Read in `src/main.ts`, not by `loadConfig`. Without an `index.html` there, the server answers only `/api`. |
@@ -397,12 +397,52 @@ The rules are in `PLAN.md`, sections 3, 5, and 6. These are the facts a change h
   outside the repo. Build the image, run it on a spare port with a fresh data folder, run the
   script against that address, then remove the container and its folder. The script isn't committed.
 
+### Name tags
+
+The rules are in `PLAN.md` section 7. These are the facts a change has to keep.
+
+- **Migration 9.** `events` gains `graphic_file`, `graphic_type`, `graphic_width`, and
+  `graphic_height`, all null for no graphic and written together (`Events.setGraphic`). The file
+  name is a `newToken()` (`tokens.ts`), so it is random, made by the server, and also the
+  graphic's `version` and ETag. `tag_queue` holds one row per player (deleted with the player):
+  `pin`, the plain 4-digit PIN or null, `pin_stored_at`, both or neither, and `queued_at`. It
+  has no event column: a new event empties it, as it starts with no players.
+- **Where a tag is queued.** `players-routes.ts` calls `tags.queue` on sign-up, claim, host
+  add, and PIN reset, in the same tick as the write that stored the PIN, with no `await`
+  between. The claim relies on `pin-guard.ts` having checked that the hash didn't change during
+  its check, so keep the claim's queue call before any `await`. A reprint (`POST /api/tags`)
+  queues no PIN and keeps a PIN already queued, with its time, so the newest PIN prints and its
+  12 hours count from when it was seen.
+- **A PIN leaves the file.** `openDatabase` turns on `PRAGMA secure_delete`, which zeroes
+  deleted content, and `tag-queue.ts` runs `PRAGMA wal_checkpoint(TRUNCATE)` after any change
+  that removes a PIN (printed, wiped, cleared, merged away), because the WAL keeps older copies
+  of a page. `tag-pins.test.ts` reads the file and its WAL and fails without either step.
+- **The 12-hour wipe.** `tag-pin-wipe.ts` runs `wipeOldPins` at startup and hourly, like
+  `phone-purge.ts`, with a timer that is `unref`'d and stopped when the app closes. It reads the
+  app's clock (`now`), so tests move time by hand.
+- **Host screens only.** The queue's live message goes through `hub.broadcastToHosts`, which
+  sends only to connections that signed in as the host (a session, or the laptop). Every queue
+  change calls `onTagsChanged`; a change to the event (the graphic) is an ordinary `event`
+  broadcast and drops the phone answer cache, because a phone's answer has the event.
+- **The upload.** `name-tag-routes.ts` registers `PUT /api/event/graphic` in its own plugin
+  scope, which has the raw body parser for the three image types (2 MB limit) and an error
+  handler that turns 413 and 415 into `too-large` and `bad-type`. Other routes keep app.ts's
+  handler and still refuse an image body. `imageInfo` (`packages/core/src/image-info.ts`) reads
+  the type and size and walks the file's structure to its end, so a cut-off file is refused.
+  The file is written before the database changes and deleted again if the change fails; a
+  replaced file is deleted after it once no event uses it (a new event copies the graphic).
+- **The data folder.** `buildApp` takes `dataDir`; the graphics go in its `graphics` folder,
+  made on the first upload. Without it, `buildApp` makes a temporary folder and deletes it on
+  close, which the tests use.
+- **Label sizes.** `packages/core/src/name-tags.ts` holds the presets, the 3 mm safe edge, the
+  custom size limits, and the graphic limits, so the print page and the server share them.
+
 ## Layout
 
 | Path | What it holds |
 |---|---|
-| `packages/core` | `@coliseumgrid/core`: rules shared by the browser and the server (see `PLAN.md` section 9): the seeded random source, handles and the vulgarity filter, PINs, join codes, bracket seeding, the station queue, tie ranking, heats (`heats.ts`), the event plan (`event-plan.ts`), the time estimate (`estimate.ts`), the name dice word lists (`event-names.ts`), and the API types. |
-| `packages/server` | `@coliseumgrid/server`: `src/app.ts` builds the Fastify app (`buildApp`), `src/config.ts` reads the settings, `src/main.ts` starts it, `src/database.ts` holds the schema, `src/players-routes.ts` the players API, `src/pin-hash.ts` PIN and password hashing (scrypt), `src/client-ip.ts` and `src/rate-limit.ts` the client address and the guessing limits, `src/access.ts`, `src/host-routes.ts`, `src/devices.ts`, `src/host-store.ts`, `src/events.ts` (events, their game and plan), and `src/live.ts` host sign-in, pairing, the event and plan routes, and live updates. The bracket files are `src/bracket-engine.ts` (a bracket's state and each change to it), `src/bracket-library.ts` (the only file that calls brackets-manager), `src/bracket-store.ts` (its tables), `src/bracket-routes.ts` (the bracket API), `src/write-chain.ts` (one write at a time), and `src/event-players.ts` (who is in the event). Arrivals ("They're here") are in `bracket_arrivals` and `heat_arrivals`, saved by the two stores. The group files are `src/heat-engine.ts` (a group's state and each change to it), `src/heat-store.ts` (its tables), `src/heat-routes.ts` (the groups API), and `src/competition.ts` (one competition per event, for brackets and groups, and the kept answer the phones read). The phone files are `src/phone-routes.ts`, `src/phones.ts`, `src/follow-codes.ts`, `src/pin-guard.ts` (the one PIN check), `src/push-notify.ts`, `src/push-subscriptions.ts`, `src/web-push.ts` (the sender on `node:crypto`), and `src/vapid-keys.ts`. |
+| `packages/core` | `@coliseumgrid/core`: rules shared by the browser and the server (see `PLAN.md` section 9): the seeded random source, handles and the vulgarity filter, PINs, join codes, bracket seeding, the station queue, tie ranking, heats (`heats.ts`), the event plan (`event-plan.ts`), the time estimate (`estimate.ts`), the name dice word lists (`event-names.ts`), the label sizes and graphic limits (`name-tags.ts`), the image header reader (`image-info.ts`), and the API types. `test/fixtures/` holds the image files the core and server tests read, with a README saying how each was made. |
+| `packages/server` | `@coliseumgrid/server`: `src/app.ts` builds the Fastify app (`buildApp`), `src/config.ts` reads the settings, `src/main.ts` starts it, `src/database.ts` holds the schema, `src/players-routes.ts` the players API, `src/pin-hash.ts` PIN and password hashing (scrypt), `src/client-ip.ts` and `src/rate-limit.ts` the client address and the guessing limits, `src/access.ts`, `src/host-routes.ts`, `src/devices.ts`, `src/host-store.ts`, `src/events.ts` (events, their game and plan), and `src/live.ts` host sign-in, pairing, the event and plan routes, and live updates. The bracket files are `src/bracket-engine.ts` (a bracket's state and each change to it), `src/bracket-library.ts` (the only file that calls brackets-manager), `src/bracket-store.ts` (its tables), `src/bracket-routes.ts` (the bracket API), `src/write-chain.ts` (one write at a time), and `src/event-players.ts` (who is in the event). Arrivals ("They're here") are in `bracket_arrivals` and `heat_arrivals`, saved by the two stores. The group files are `src/heat-engine.ts` (a group's state and each change to it), `src/heat-store.ts` (its tables), `src/heat-routes.ts` (the groups API), and `src/competition.ts` (one competition per event, for brackets and groups, and the kept answer the phones read). The phone files are `src/phone-routes.ts`, `src/phones.ts`, `src/follow-codes.ts`, `src/pin-guard.ts` (the one PIN check), `src/push-notify.ts`, `src/push-subscriptions.ts`, `src/web-push.ts` (the sender on `node:crypto`), and `src/vapid-keys.ts`. The name tag files are `src/name-tag-routes.ts` (the graphic and tags routes), `src/tag-queue.ts` (the print queue), and `src/tag-pin-wipe.ts` (the 12-hour PIN wipe); the graphic's columns are in `src/events.ts`. |
 | `packages/client` | `@coliseumgrid/client`: Vite, React, and MUI. `src/theme/` holds the palette and the theme, `src/pages/` the Host (`/host`), Sign-up (`/signup`), and Display (`/display`) screens, `src/components/` shared pieces (`useNow.ts` is the timer hook, counting in the server's time), `src/api/` the calls (`bracket.ts` for brackets, `heats.ts` for groups, `clock.ts` the offset between this device's clock and the server's, read from the `now` in each answer), `src/pages/host/SetupWizard.tsx` the setup wizard (its steps are in `WizardSteps.tsx`, its words and small calculations in `wizardWords.ts`), `src/pages/host/planSaves.ts` the queue that saves the wizard's plan one change after another, `src/noShow.ts` when a station's wait is over and the call line, `src/random.ts` the page's random source for the name dice, `src/pages/host/` and `src/pages/display/` the bracket and group pieces of the Host and the TV, `src/heatsWords.ts` and `src/handles.ts` the words and handle lists both screens read, `test/` the Vitest tests. `src/pages/phone/` the player page at `/follow` (cards, alerts, the push control and its client), `src/worker/` the push service worker (checked by `tsconfig.worker.json`), `public/icons/` the Home Screen icons, `vite.push-assets.ts` the plugin that builds the worker and the manifest. `/` is the join screen and `/host` is the host's entry; an unknown path goes to `/`. |
 | `tools/` | Scripts run by hand or in CI, type-checked by `tools/tsconfig.json`. `make-icons.ts` makes the Home Screen icons (see "Phones and push"). |
 | `docs/` | The docs listed in `DOC-STYLE.md`, "Where things go". |
@@ -495,7 +535,7 @@ The image starts in online mode, which stops at startup without a host password,
 `-e COLISEUMGRID_HOST_PASSWORD=...` (at least 8 characters). The image sets
 `COLISEUMGRID_MODE=online`, `PORT=3000`, and
 `CLIENT_DIST=/app/packages/client/dist`. It also sets `DATA_DIR=/data`, which holds the
-database (and later uploaded graphics), so mount a volume there.
+database and the uploaded graphics, so mount a volume there.
 
 `.github/workflows/docker.yml` is the Docker check. It builds the image, runs it, waits for
 `/api/health` to return `{"status":"ok"}`, and fetches `/` to confirm it is the client's
@@ -521,7 +561,7 @@ no corepack. Keep that version in step with `packageManager` in `package.json`.
 
 ## Tests
 
-- The server suite takes about 105 s (measured 2026-11-15 on the dev box, 1228 tests passing, after M7; the slowest file is `phone.test.ts`, about 95 s). Each PIN and the host
+- The server suite takes about 115 s (measured 2026-11-15 on the dev box, 1298 tests passing, with M8's server work; the slowest file is still `phone.test.ts`, about 70 s run alone). Each PIN and the host
   password is hashed at the production scrypt cost (`pin-hash.ts`), and
   `packages/server/vitest.config.ts` allows 30 s per test. A test that signs in several times
   needs that room.
@@ -532,6 +572,14 @@ no corepack. Keep that version in step with `packageManager` in `package.json`.
 - `core` has two Vitest projects (`packages/core/vitest.config.ts`): `node` runs every test, and
   `browser` runs `vulgarity.test.ts` and `handle.test.ts` in headless Chromium through
   `@vitest/browser-playwright`, so the filter is proven in the build the client ships.
+- **Name tag tests.** `packages/core/test/image-info.test.ts` reads each fixture in
+  `packages/core/test/fixtures/` (PNG; baseline and progressive JPEG; lossy, lossless, and
+  extended WebP), cuts each off at every byte, and patches headers by hand to break each rule.
+  The server's `graphic.test.ts` uploads the same files; `name-tags.test.ts` covers the queue
+  routes, who may call them, and the host-only live message; `tag-pins.test.ts` covers the
+  12-hour wipe and checks the database file. A 4-digit PIN alone could appear anywhere in a
+  file, so that check searches for the PIN followed by its `pin_stored_at` time, which is how
+  SQLite lays out the row, and first finds it there while the tag is queued.
 - Playwright for screens, printing, and the offline check. A PDF or print layout isn't
   verified until its pages have been rasterized and looked at (the MEPN lesson: an earlier
   check there confirmed only that a download fired, and two broken exports shipped).

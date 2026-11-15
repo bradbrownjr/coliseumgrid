@@ -40,6 +40,7 @@ import { HOST_PASSWORD_MAX, HOST_PASSWORD_MIN } from './config.ts';
 import type { Devices } from './devices.ts';
 import { cleanEventName, cleanGameName, type Events } from './events.ts';
 import type { LiveHub } from './live.ts';
+import type { TagQueue } from './tag-queue.ts';
 import { ALL_CALLERS, FailureLimiter, GUESS_WINDOW_MS, SIGN_IN_MAX_WRONG_PER_IP, type JoinLimits } from './rate-limit.ts';
 import { secureRandom } from './secure-random.ts';
 import { hashToken, newToken } from './tokens.ts';
@@ -57,6 +58,10 @@ export interface HostRoutesOptions {
   now: Clock;
   /** Called after the event changes, so the kept phone answer is dropped. */
   onEventChanged: () => void;
+  /** The print queue, which a new event empties. */
+  tags: TagQueue;
+  /** Called after the queue changes, so host screens reload it. */
+  onTagsChanged: () => void;
   /** The wrong-code limits, shared with the follow codes. */
   joinLimits: JoinLimits;
   /** See getClientKey. */
@@ -87,7 +92,7 @@ const badRequest = errorSchema(['bad-request']);
 const tooManyTries = errorSchema(['too-many-tries']);
 
 export async function registerHostRoutes(app: FastifyInstance, options: HostRoutesOptions): Promise<void> {
-  const { access, devices, events, competition, hub, chain, now, joinLimits, onEventChanged, trustedProxy } = options;
+  const { access, devices, events, competition, hub, chain, now, joinLimits, onEventChanged, tags, onTagsChanged, trustedProxy } = options;
 
   // Wrong passwords and wrong codes per client IP, in both modes (CLAUDE.md, rule 7). An
   // attempt is reserved before the slow check and cleared when it is right, so requests
@@ -296,7 +301,10 @@ export async function registerHostRoutes(app: FastifyInstance, options: HostRout
         // A finished competition doesn't block a new event; one still being played does.
         const oldId = events.currentId();
         if (oldId !== null && (await competition.running(oldId, competition.handles()))) return fail(reply, 409, 'bracket-running');
+        // The new event keeps the graphic (events.create) and starts with an empty print queue,
+        // as it starts with no players (docs/PLAN.md, "The print queue").
         const event = events.create(name, game);
+        const tagsCleared = tags.clear() > 0;
         // Before the screens are told, so a phone that reloads at once gets the new answer.
         onEventChanged();
         hub.broadcast({ type: 'event', event });
@@ -305,6 +313,7 @@ export async function registerHostRoutes(app: FastifyInstance, options: HostRout
         hub.broadcast({ type: 'heats' });
         // The new event starts with the plan the old one had, so a wizard open elsewhere reads it again.
         hub.broadcast({ type: 'plan' });
+        if (tagsCleared) onTagsChanged();
         return reply.code(201).send({ event });
       });
     },

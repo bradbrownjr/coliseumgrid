@@ -55,6 +55,12 @@ export interface LiveHub {
   /** Sends the message to every connection. */
   broadcast(message: LiveMessage): void;
   /**
+   * Sends the message only to connections that signed in as the host (a session cookie, or the
+   * laptop itself). For news about the print queue, which a phone, a Display, or a Sign-up
+   * device never gets (docs/PLAN.md, "Name tags API").
+   */
+  broadcastToHosts(message: LiveMessage): void;
+  /**
    * Tells the device's connections they are unpaired, then closes them. A connection that is
    * also the host or a phone only loses the device and stays open.
    */
@@ -155,6 +161,11 @@ export function createLiveHub(heartbeatMs: number = HEARTBEAT_MS): LiveHub {
     },
     broadcast(message) {
       for (const { socket } of connections) sendJson(socket, message);
+    },
+    broadcastToHosts(message) {
+      for (const connection of connections) {
+        if (connection.local === true || connection.sessionHash !== undefined) sendJson(connection.socket, message);
+      }
     },
     unpair: (deviceId) =>
       endIdentity(

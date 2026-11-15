@@ -79,7 +79,7 @@ describe('who may call each route', () => {
   it('lets a phone, a Display, and a Sign-up device read the event and its game, and a stranger not', async () => {
     await host('PUT', '/api/event', { name: 'Friday', game: 'Race Night' });
     for (const who of [phone.api, callers.display, callers.signup, host]) {
-      expect((await who('GET', '/api/event')).json()).toEqual({ event: { name: 'Friday', game: 'Race Night' } });
+      expect((await who('GET', '/api/event')).json()).toEqual({ event: { name: 'Friday', game: 'Race Night', graphic: null } });
     }
     expect((await callers.nobody('GET', '/api/event')).statusCode).toBe(401);
   });
@@ -89,16 +89,16 @@ describe('PUT /api/event with a game', () => {
   it('stores it, answers it, and tells the screens with the event message', async () => {
     const live = await listen(app, undefined, '127.0.0.1');
     const res = await host('PUT', '/api/event', { name: 'Friday', game: 'Race  Night ' });
-    expect(res.json()).toEqual({ event: { name: 'Friday', game: 'Race Night' } });
+    expect(res.json()).toEqual({ event: { name: 'Friday', game: 'Race Night', graphic: null } });
     expect(db.prepare('SELECT name, game FROM events').all()).toEqual([{ name: 'Friday', game: 'Race Night' }]);
-    await eventually(() => expect(live.messages).toContainEqual({ type: 'event', event: { name: 'Friday', game: 'Race Night' } }));
+    await eventually(() => expect(live.messages).toContainEqual({ type: 'event', event: { name: 'Friday', game: 'Race Night', graphic: null } }));
     live.terminate();
   });
 
   it('keeps the stored game when `game` is left out, and clears it with an empty string', async () => {
     await host('PUT', '/api/event', { name: 'Friday', game: 'Race Night' });
-    expect((await host('PUT', '/api/event', { name: 'Friday night' })).json()).toEqual({ event: { name: 'Friday night', game: 'Race Night' } });
-    expect((await host('PUT', '/api/event', { name: 'Friday night', game: '' })).json()).toEqual({ event: { name: 'Friday night', game: null } });
+    expect((await host('PUT', '/api/event', { name: 'Friday night' })).json()).toEqual({ event: { name: 'Friday night', game: 'Race Night', graphic: null } });
+    expect((await host('PUT', '/api/event', { name: 'Friday night', game: '' })).json()).toEqual({ event: { name: 'Friday night', game: null, graphic: null } });
     expect(db.prepare('SELECT game FROM events').all()).toEqual([{ game: null }]);
     // Spaces alone are empty too.
     await host('PUT', '/api/event', { name: 'Friday night', game: 'Again' });
@@ -106,7 +106,7 @@ describe('PUT /api/event with a game', () => {
   });
 
   it('names the first event with the game when there is none yet', async () => {
-    expect((await host('PUT', '/api/event', { name: 'First', game: 'Tag' })).json()).toEqual({ event: { name: 'First', game: 'Tag' } });
+    expect((await host('PUT', '/api/event', { name: 'First', game: 'Tag' })).json()).toEqual({ event: { name: 'First', game: 'Tag', graphic: null } });
   });
 
   it.each([
@@ -120,7 +120,7 @@ describe('PUT /api/event with a game', () => {
     const res = await host('PUT', '/api/event', payload);
     expect(res.statusCode).toBe(400);
     expect(res.json()).toEqual({ error: 'bad-request' });
-    expect(await eventOf()).toEqual({ name: 'Kept', game: 'Kept game' });
+    expect(await eventOf()).toEqual({ name: 'Kept', game: 'Kept game', graphic: null });
   });
 });
 
@@ -140,8 +140,8 @@ describe('GET and PUT /api/event/plan', () => {
   it('makes the event when there is none, as ColiseumGrid, and tells the screens', async () => {
     const live = await listen(app, undefined, '127.0.0.1');
     expect((await host('PUT', '/api/event/plan', { plan: planDefaults('other') })).statusCode).toBe(200);
-    expect(await eventOf()).toEqual({ name: 'ColiseumGrid', game: null });
-    await eventually(() => expect(live.messages).toContainEqual({ type: 'event', event: { name: 'ColiseumGrid', game: null } }));
+    expect(await eventOf()).toEqual({ name: 'ColiseumGrid', game: null, graphic: null });
+    await eventually(() => expect(live.messages).toContainEqual({ type: 'event', event: { name: 'ColiseumGrid', game: null, graphic: null } }));
     live.terminate();
   });
 
@@ -253,8 +253,8 @@ describe('POST /api/events', () => {
     await host('PUT', '/api/event', { name: 'Friday', game: 'Race Night' });
     const res = await host('POST', '/api/events', { name: '  Saturday   Cup ' });
     expect(res.statusCode, res.body).toBe(201);
-    expect(res.json()).toEqual({ event: { name: 'Saturday Cup', game: null } });
-    expect(await eventOf()).toEqual({ name: 'Saturday Cup', game: null });
+    expect(res.json()).toEqual({ event: { name: 'Saturday Cup', game: null, graphic: null } });
+    expect(await eventOf()).toEqual({ name: 'Saturday Cup', game: null, graphic: null });
     expect(db.prepare('SELECT name, game FROM events ORDER BY id').all()).toEqual([
       { name: 'Friday', game: 'Race Night' },
       { name: 'Saturday Cup', game: null },
@@ -262,8 +262,8 @@ describe('POST /api/events', () => {
   });
 
   it('takes a game, cleaned like the event name, and stores an empty one as none', async () => {
-    expect((await host('POST', '/api/events', { name: 'A', game: ' Tag  Time ' })).json().event).toEqual({ name: 'A', game: 'Tag Time' });
-    expect((await host('POST', '/api/events', { name: 'B', game: '' })).json().event).toEqual({ name: 'B', game: null });
+    expect((await host('POST', '/api/events', { name: 'A', game: ' Tag  Time ' })).json().event).toEqual({ name: 'A', game: 'Tag Time', graphic: null });
+    expect((await host('POST', '/api/events', { name: 'B', game: '' })).json().event).toEqual({ name: 'B', game: null, graphic: null });
   });
 
   it('works with no event yet, and copies the current plan and not the game', async () => {
@@ -274,7 +274,7 @@ describe('POST /api/events', () => {
     await host('PUT', '/api/event/plan', { plan });
     await host('POST', '/api/events', { name: 'Second' });
     expect(await planOf()).toEqual(plan);
-    expect(await eventOf()).toEqual({ name: 'Second', game: null });
+    expect(await eventOf()).toEqual({ name: 'Second', game: null, graphic: null });
     // The old event keeps its own plan and game.
     expect(db.prepare('SELECT game, plan FROM events ORDER BY id').all()).toEqual([
       { game: 'Race Night', plan: JSON.stringify(plan) },
@@ -363,7 +363,7 @@ describe('POST /api/events', () => {
     expect(res.statusCode).toBe(409);
     expect(res.json()).toEqual({ error: 'bracket-running' });
     expect(count('events')).toBe(1);
-    expect(await eventOf()).toEqual({ name: 'Friday', game: null });
+    expect(await eventOf()).toEqual({ name: 'Friday', game: null, graphic: null });
   });
 
   it('is allowed once the competition is finished, whichever kind it was', async () => {
@@ -388,7 +388,7 @@ describe('POST /api/events', () => {
     for (const connection of [live, phoneLive]) {
       await eventually(() =>
         expect(connection.messages).toEqual([
-          { type: 'event', event: { name: 'Saturday', game: 'Tag' } },
+          { type: 'event', event: { name: 'Saturday', game: 'Tag', graphic: null } },
           { type: 'players' },
           { type: 'bracket' },
           { type: 'heats' },
@@ -447,9 +447,9 @@ describe('the events store', () => {
     const events = createEvents(openDatabase(':memory:'), () => 0);
     expect(events.plan()).toBeNull();
     events.setName('One', 'Tag');
-    expect(events.current()).toEqual({ name: 'One', game: 'Tag' });
+    expect(events.current()).toEqual({ name: 'One', game: 'Tag', graphic: null });
     events.setPlan(planDefaults('fighting'));
-    expect(events.create('Two')).toEqual({ name: 'Two', game: null });
+    expect(events.create('Two')).toEqual({ name: 'Two', game: null, graphic: null });
     expect(events.plan()).toEqual(planDefaults('fighting'));
   });
 });

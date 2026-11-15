@@ -5,6 +5,7 @@
 // (the `onAnswerBuilt` option): reads reuse the answer, and the path makes the next read build
 // a new one.
 
+import { readFileSync } from 'node:fs';
 import { planDefaults, type Bracket, type Heats, type PhoneAnswer } from '@coliseumgrid/core';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -160,11 +161,20 @@ describe('the kept answer is dropped on', () => {
   it('a new event, which the phone then reads by its name and game', async () => {
     await host('PUT', '/api/event', { name: 'Friday' });
     const after = await dropsOn(() => host('POST', '/api/events', { name: 'Saturday', game: 'Tag' }));
-    expect(after.event).toEqual({ name: 'Saturday', game: 'Tag' });
+    expect(after.event).toEqual({ name: 'Saturday', game: 'Tag', graphic: null });
   });
 
   it('a plan change', async () => {
     await dropsOn(() => host('PUT', '/api/event/plan', { plan: planDefaults('fighting') }));
+  });
+
+  it('a graphic upload and its removal, which the phone reads in the event', async () => {
+    const png = readFileSync(new URL('../../core/test/fixtures/graphic.png', import.meta.url));
+    const upload = () => app.inject({ method: 'PUT', url: '/api/event/graphic', remoteAddress: '127.0.0.1', payload: png, headers: { 'content-type': 'image/png' } });
+    const after = await dropsOn(upload);
+    expect(after.event?.graphic).toEqual({ width: 48, height: 32, version: expect.any(String) });
+    const removed = await dropsOn(() => host('DELETE', '/api/event/graphic'));
+    expect(removed.event?.graphic).toBeNull();
   });
 });
 

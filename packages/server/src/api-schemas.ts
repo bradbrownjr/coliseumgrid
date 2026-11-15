@@ -68,8 +68,15 @@ export const playerSchema = objectSchema({ id: { type: 'integer' }, handle: { ty
 
 const nullable = (schema: object) => ({ anyOf: [{ type: 'null' }, schema] }) as const;
 
-/** An event leaves the server as its name and game, and nothing else (CLAUDE.md, rule 1). */
-export const eventInfoSchema = objectSchema({ name: { type: 'string' }, game: { type: ['string', 'null'] } });
+/** The event graphic's size and version (M8); the file itself is GET /api/event/graphic. */
+const eventGraphicSchema = objectSchema({ width: { type: 'integer' }, height: { type: 'integer' }, version: { type: 'string' } });
+
+/** An event leaves the server as its name, game, and graphic, and nothing else (CLAUDE.md, rule 1). */
+export const eventInfoSchema = objectSchema({
+  name: { type: 'string' },
+  game: { type: ['string', 'null'] },
+  graphic: nullable(eventGraphicSchema),
+});
 export const nullableEventSchema = nullable(eventInfoSchema);
 
 /**
