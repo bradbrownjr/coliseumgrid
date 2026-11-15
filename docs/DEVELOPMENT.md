@@ -313,13 +313,97 @@ The rules are in `PLAN.md`, section 5 and "Heats API". These are the facts a cha
   transaction, so the database equals the state exactly. A run's settings never change once
   made. Its tables come from migration 5; never edit that entry.
 
+### Setup wizard, estimate, and no-shows
+
+The rules are in `PLAN.md`, sections 3, 5, and 6. These are the facts a change has to keep.
+
+- **Migrations 7 and 8.** Migration 7 adds `events.game` (the typed game name, null for
+  none), `events.plan` (the plan as JSON), `bracket_results.forfeit` (0 or 1), and
+  `heat_results.missing` (a JSON list of player ids, null for none). Migration 8 adds `at` to
+  `bracket_tie_breaks` and `heat_tie_breaks` (when the host pressed **Play tie-break**; null on
+  a row from before, which is called at the last result's time as it was), and the tables
+  `bracket_arrivals` and `heat_arrivals`. Every column has a default, so older rows migrate
+  as they were.
+- **The plan is checked at the edge.** `EventPlan` and `isEventPlan` are in
+  `packages/core/src/event-plan.ts`. `PUT /api/event/plan` answers 400 `bad-request` unless
+  `isEventPlan` accepts the body, and its schema is closed. The stored JSON is read back
+  through `isEventPlan` (`readPlan` in `events.ts`), so a plan that is unreadable is as good
+  as none. Add a plan field in three places together: the interface and `PLAN_KEYS`, the
+  checks in `isEventPlan`, and `planSchema` in `api-schemas.ts`.
+- **A competition keeps its own settings.** The wizard sends the settings when it starts a
+  bracket or groups, so changing the plan never changes one that is running. The one plan
+  value a running competition reads is `noShowMinutes`, which the answers carry.
+- **The `plan` live message has no payload.** `PUT /api/event/plan` and `POST /api/events`
+  broadcast `{ type: 'plan' }`. `HostScreen` counts it in `planVersion`, and `SetupWizard`
+  reads the plan again when that changes or the step changes. It skips the read while it
+  holds a change that isn't saved or a save is in flight (`readAgain`), so a second host
+  window never overwrites typing. `planSaves.ts` sends the saves one after another, so the
+  server ends with the last change made, and **Start** waits for `settled()` and starts from
+  the plan the server answered with.
+- **Server time.** Every bracket and heats answer (`GET`, and each change) has `now` beside it,
+  read when the answer is sent and never kept with the cached answer. A station's `calledAt`
+  is the server's time, so the screens count from the server's clock: `api/clock.ts` keeps the
+  offset from each answer (`withServerClock`, in `api/bracket.ts` and `api/heats.ts`), and
+  `useNow` counts in server time. Don't read `Date.now()` for anything compared to `calledAt`.
+- **Arrivals are not results.** **They're here** (`POST /api/bracket/arrived` and
+  `/api/heats/arrived`, host only) stores the match or heat and the `calledAt` of the call it
+  was tapped for. A match called again has a new `calledAt`, so its wait starts over. Arrivals
+  are not in the result log, so no step, standing, or undo reads them, and undo exactness is
+  unaffected. The answer's `arrived` is true only for the station's current call.
+  `arrivalsKept` drops the arrivals of tie-break matches an undo removed, because a new
+  tie-break reuses their ids.
+- **A tie-break has its own time.** `startTieBreak` and `startHeatTieBreak` take the time of
+  the press, stored in the tie-break's `at`. `buildQueue` receives it as `QueueMatch.readyAt`,
+  and a station it fills is called at `readyAt` or at the step's time, whichever is later. A
+  tie-break is called when **Play tie-break** is pressed, not when the last result went in.
+- **`noShowMinutes` is a trailing parameter.** The answer functions (`bracketAnswer`,
+  `recordResult`, `undoResult`, `joinLate`, `setArrived`, `heatsAnswer`, and the heat
+  equivalents) take it last, defaulting to `NO_SHOW_DEFAULT`. The routes pass
+  `competition.noShowMinutes()`, which reads the event's plan. A new answer function takes it
+  the same way, so the answer says when the wait is over.
+- **Forfeits and missing players are in the log.** A bracket result has `forfeit`, and a heat
+  result has `missing`; both ride the result log and the replay, so undo restores the answer
+  exactly (`bracket-forfeit.test.ts`, `heat-missing.test.ts`). `order` and `missing` together
+  must be the heat's players, and `scoreHeats` gives a missing player 0 points. Only ids are
+  stored (`CLAUDE.md`, rule 1).
+- **New events.** `POST /api/events` runs on the write chain, refuses with 409 `bracket-running`
+  while a competition is running, copies the current plan (not the game), and drops the phone
+  answer cache before it broadcasts `event`, `players`, `bracket`, `heats`, and `plan`. The old
+  event's bracket stays in the database.
+- **The estimate.** `estimatePlan` in `estimate.ts` is pure and numeric; the client words it
+  (`wizardWords.ts`). Elimination waves come from `simulateWaves`, which plays the engine's real
+  round sizes out on the live stations; the `PLAN.md` formula undercounts with several
+  stations. `suggestFixes` re-runs the estimate for each change and keeps the two that save the
+  most.
+- **The calibration test.** `packages/server/test/estimate-calibration.test.ts` plays each
+  format through the real engines in batches (every match or group on a station at one moment)
+  for 12 sizes, 5 station counts, and 3 seeds, and counts the batches. They must fall within
+  `[low - tol, high + tol]`, with `tol = max(1, ceil(10% of high))`. The tolerance is the
+  plan's; don't widen it to make a case pass. Round robin runs are capped at 12 players. The
+  estimate counts one tie-break round of 3 matches, so a round robin run with more tie-break
+  matches is left out of the check and counted instead; that count must stay under 15% of the
+  round robin runs. Each case allows 600 s.
+- **The name dice.** `event-names.ts` holds the word lists for each template and
+  `eventName(template, random)`, which takes a seeded source (the page seeds one from
+  `crypto.getRandomValues`, `random.ts`). `event-names.test.ts` runs every name the lists can
+  make (`allEventNames`) through `isVulgar`, as written and with the spaces removed; checks
+  that none is over 60 characters or has anything but printable ASCII; and checks that no word
+  repeats, compounds included ("Stormstorm"). The lists must hold no game title or game
+  company (`CLAUDE.md`, "Always and never"). A test can't check that, because it would have to
+  hold the names, so a reviewer reads the lists and reads each new pairing, since two ordinary
+  words can read as a title.
+- **Checking the whole flow in a browser.** The sandbox blocks loopback, so M7 was checked
+  against a throwaway container on the Unraid server, driven by a Playwright script kept
+  outside the repo. Build the image, run it on a spare port with a fresh data folder, run the
+  script against that address, then remove the container and its folder. The script isn't committed.
+
 ## Layout
 
 | Path | What it holds |
 |---|---|
-| `packages/core` | `@coliseumgrid/core`: rules shared by the browser and the server (see `PLAN.md` section 9): the seeded random source, handles and the vulgarity filter, PINs, join codes, bracket seeding, the station queue, tie ranking, heats (`heats.ts`), and the API types. |
-| `packages/server` | `@coliseumgrid/server`: `src/app.ts` builds the Fastify app (`buildApp`), `src/config.ts` reads the settings, `src/main.ts` starts it, `src/database.ts` holds the schema, `src/players-routes.ts` the players API, `src/pin-hash.ts` PIN and password hashing (scrypt), `src/client-ip.ts` and `src/rate-limit.ts` the client address and the guessing limits, `src/access.ts`, `src/host-routes.ts`, `src/devices.ts`, `src/host-store.ts`, `src/events.ts`, and `src/live.ts` host sign-in, pairing, and live updates. The bracket files are `src/bracket-engine.ts` (a bracket's state and each change to it), `src/bracket-library.ts` (the only file that calls brackets-manager), `src/bracket-store.ts` (its tables), `src/bracket-routes.ts` (the bracket API), `src/write-chain.ts` (one write at a time), and `src/event-players.ts` (who is in the event). The group files are `src/heat-engine.ts` (a group's state and each change to it), `src/heat-store.ts` (its tables), `src/heat-routes.ts` (the groups API), and `src/competition.ts` (one competition per event, for brackets and groups, and the kept answer the phones read). The phone files are `src/phone-routes.ts`, `src/phones.ts`, `src/follow-codes.ts`, `src/pin-guard.ts` (the one PIN check), `src/push-notify.ts`, `src/push-subscriptions.ts`, `src/web-push.ts` (the sender on `node:crypto`), and `src/vapid-keys.ts`. |
-| `packages/client` | `@coliseumgrid/client`: Vite, React, and MUI. `src/theme/` holds the palette and the theme, `src/pages/` the Host (`/host`), Sign-up (`/signup`), and Display (`/display`) screens, `src/components/` shared pieces (`useNow.ts` is the timer hook, counting in the server's time), `src/api/` the calls (`bracket.ts` for brackets, `heats.ts` for groups, `clock.ts` the offset between this device's clock and the server's, read from the `now` in each answer), `src/pages/host/planSaves.ts` the queue that saves the wizard's plan one change after another, `src/pages/host/` and `src/pages/display/` the bracket and group pieces of the Host and the TV, `src/heatsWords.ts` and `src/handles.ts` the words and handle lists both screens read, `test/` the Vitest tests. `src/pages/phone/` the player page at `/follow` (cards, alerts, the push control and its client), `src/worker/` the push service worker (checked by `tsconfig.worker.json`), `public/icons/` the Home Screen icons, `vite.push-assets.ts` the plugin that builds the worker and the manifest. `/` is the join screen and `/host` is the host's entry; an unknown path goes to `/`. |
+| `packages/core` | `@coliseumgrid/core`: rules shared by the browser and the server (see `PLAN.md` section 9): the seeded random source, handles and the vulgarity filter, PINs, join codes, bracket seeding, the station queue, tie ranking, heats (`heats.ts`), the event plan (`event-plan.ts`), the time estimate (`estimate.ts`), the name dice word lists (`event-names.ts`), and the API types. |
+| `packages/server` | `@coliseumgrid/server`: `src/app.ts` builds the Fastify app (`buildApp`), `src/config.ts` reads the settings, `src/main.ts` starts it, `src/database.ts` holds the schema, `src/players-routes.ts` the players API, `src/pin-hash.ts` PIN and password hashing (scrypt), `src/client-ip.ts` and `src/rate-limit.ts` the client address and the guessing limits, `src/access.ts`, `src/host-routes.ts`, `src/devices.ts`, `src/host-store.ts`, `src/events.ts` (events, their game and plan), and `src/live.ts` host sign-in, pairing, the event and plan routes, and live updates. The bracket files are `src/bracket-engine.ts` (a bracket's state and each change to it), `src/bracket-library.ts` (the only file that calls brackets-manager), `src/bracket-store.ts` (its tables), `src/bracket-routes.ts` (the bracket API), `src/write-chain.ts` (one write at a time), and `src/event-players.ts` (who is in the event). Arrivals ("They're here") are in `bracket_arrivals` and `heat_arrivals`, saved by the two stores. The group files are `src/heat-engine.ts` (a group's state and each change to it), `src/heat-store.ts` (its tables), `src/heat-routes.ts` (the groups API), and `src/competition.ts` (one competition per event, for brackets and groups, and the kept answer the phones read). The phone files are `src/phone-routes.ts`, `src/phones.ts`, `src/follow-codes.ts`, `src/pin-guard.ts` (the one PIN check), `src/push-notify.ts`, `src/push-subscriptions.ts`, `src/web-push.ts` (the sender on `node:crypto`), and `src/vapid-keys.ts`. |
+| `packages/client` | `@coliseumgrid/client`: Vite, React, and MUI. `src/theme/` holds the palette and the theme, `src/pages/` the Host (`/host`), Sign-up (`/signup`), and Display (`/display`) screens, `src/components/` shared pieces (`useNow.ts` is the timer hook, counting in the server's time), `src/api/` the calls (`bracket.ts` for brackets, `heats.ts` for groups, `clock.ts` the offset between this device's clock and the server's, read from the `now` in each answer), `src/pages/host/SetupWizard.tsx` the setup wizard (its steps are in `WizardSteps.tsx`, its words and small calculations in `wizardWords.ts`), `src/pages/host/planSaves.ts` the queue that saves the wizard's plan one change after another, `src/noShow.ts` when a station's wait is over and the call line, `src/random.ts` the page's random source for the name dice, `src/pages/host/` and `src/pages/display/` the bracket and group pieces of the Host and the TV, `src/heatsWords.ts` and `src/handles.ts` the words and handle lists both screens read, `test/` the Vitest tests. `src/pages/phone/` the player page at `/follow` (cards, alerts, the push control and its client), `src/worker/` the push service worker (checked by `tsconfig.worker.json`), `public/icons/` the Home Screen icons, `vite.push-assets.ts` the plugin that builds the worker and the manifest. `/` is the join screen and `/host` is the host's entry; an unknown path goes to `/`. |
 | `tools/` | Scripts run by hand or in CI, type-checked by `tools/tsconfig.json`. `make-icons.ts` makes the Home Screen icons (see "Phones and push"). |
 | `docs/` | The docs listed in `DOC-STYLE.md`, "Where things go". |
 
@@ -437,7 +521,7 @@ no corepack. Keep that version in step with `packageManager` in `package.json`.
 
 ## Tests
 
-- The server suite takes about 65 s (measured 2026-11-14 on the dev box, 750 tests passing). Each PIN and the host
+- The server suite takes about 105 s (measured 2026-11-15 on the dev box, 1228 tests passing, after M7; the calibration test is the slowest). Each PIN and the host
   password is hashed at the production scrypt cost (`pin-hash.ts`), and
   `packages/server/vitest.config.ts` allows 30 s per test. A test that signs in several times
   needs that room.

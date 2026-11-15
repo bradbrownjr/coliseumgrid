@@ -4,7 +4,7 @@ Tests that need a person or real hardware. Brad runs them as time allows; what o
 becomes a roadmap item. A test is removed once it's reported.
 
 Each test names the milestone that makes it possible. The tests marked "after M3", "after
-M4", or "after M5", and "Phones, over plain HTTP", can be run on the Unraid server
+M4", "after M5", "after M7", and "Phones, over plain HTTP", can be run on the Unraid server
 (`http://10.6.26.2:8390`).
 
 ## Planned
@@ -201,6 +201,54 @@ approval first (`PLAN.md`, "HTTPS on a venue network").
 - Turn alerts on for 11 phones that follow one player (or a browser profile each). Does the
   oldest stop getting alerts, and do the other 10 keep getting them? Does the host stay
   responsive when a result goes in with all 11 subscribed?
+
+### Setup wizard and no-shows (after M7)
+
+Why: the server's tests and the browser checks use made-up players. These use a real kid, a
+real TV, and real time, on the Unraid server (`http://10.6.26.2:8390`, offline mode). Run them
+after the M7 deploy.
+
+- Hand a kid the host laptop with nothing explained and ask them to set up an event and start
+  it with the wizard. Write down every question they ask and where they paused. Each one is a
+  wording or layout item.
+- Tap the dice on step 1 for each template (Fighting game, Racing game, Other). Are the names
+  fun? Does any feel off, rude, or like a real game or show? Note each one.
+- Pick a template and type a game name. After **Start**, does the name show under the event
+  name on the TV, on the Sign-up tablet, and on the player's phone page?
+- Read the estimate on step 2 for 8 players on 2 stations. Then run a practice
+  session with kids. Time each game and each changeover between games with a stopwatch, and
+  compare the real finish with the estimate. Record the real minutes per game and per
+  changeover for each template, so the defaults (5, 4, and 5 minutes, and 4 minutes of
+  changeover) can be changed to match.
+- Choose a plan that is too long for the hours picked. Does the warning show, with up to two
+  fixes? Does each fix button change the plan and clear the warning once it fits?
+- After a competition finishes, tap **New event** and name it. Do the players list and the
+  TV start empty? Does the old event's bracket stay as it was? Does a returning kid sign up
+  again with the same handle and PIN?
+- While a bracket is running, try **New event**. Can you start one, and does the screen say why not?
+- After a finish, tap **New competition**. Do the same players stay, and does the wizard
+  start from the plan the event had?
+- Start a bracket and call a match to a station. Leave one of its players away. After the wait
+  (use 3 minutes), does the station card ask "Still waiting?" Does the TV show the call line
+  naming both players? Tap **They're here**: do the prompt and the TV line go away, and does
+  Undo in the snackbar bring the wait back? Call the match again after an undo of a result:
+  does it start a new wait?
+- Let the wait pass again and tap **Forfeit**. Pick who is missing. Is the other player the
+  winner, is the match marked "Forfeit" in the bracket and the results list, and does Undo
+  put the match back on its station?
+- Start groups and let one player not come. Tap **Forfeit** on the group, mark them missing,
+  and put the others in order. Does the missing player get 0 points, and does the group count
+  for the others? Make a final with a missing player: are places 1 to 3 each given to one
+  player?
+- Make a tie that needs a tie-break. Does the tie-break go on a station only after **Play
+  tie-break** is pressed, and does its wait start from that press, not from the last result?
+- Open `/host` in a second window. Change the plan in one window (for example the number of
+  stations on step 3). Does the other window show the change within a second or two, and
+  does typing in a window with unsaved changes stay as typed?
+- Set a device clock (the TV or the tablet) a few minutes wrong. Does the timer on the TV still
+  count from the time the station was called?
+- Look at every wizard step at the sizes the hardware has: the laptop, a tablet, and a phone.
+  Can a 12-year-old reach **Start** without scrolling past anything they need?
 
 ### Label printer (after M8)
 
