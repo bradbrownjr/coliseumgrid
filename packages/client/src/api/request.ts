@@ -21,6 +21,10 @@ export function onNotSignedIn(listener: () => void): () => void {
   };
 }
 
+/**
+ * `body` is sent as JSON, or as it is when it is a `Blob` (a picked file): the event graphic is
+ * the one raw upload, and its type goes in `Content-Type` (docs/PLAN.md, "The event graphic").
+ */
 export async function call<T>(method: string, path: string, body?: object): Promise<Result<T>> {
   let response: Response;
   try {
@@ -29,7 +33,9 @@ export async function call<T>(method: string, path: string, body?: object): Prom
       // Sign-in and pairing live in cookies (docs/PLAN.md, "Devices and host API"). Same-origin
       // is the default; it is written out because nothing here works without it.
       credentials: 'same-origin',
-      ...(body && { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
+      ...(body instanceof Blob
+        ? { headers: { 'content-type': body.type }, body }
+        : body && { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
     });
   } catch {
     return { ok: false, error: 'failed' };

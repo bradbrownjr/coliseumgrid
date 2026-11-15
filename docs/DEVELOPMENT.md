@@ -436,6 +436,39 @@ The rules are in `PLAN.md` section 7. These are the facts a change has to keep.
   close, which the tests use.
 - **Label sizes.** `packages/core/src/name-tags.ts` holds the presets, the 3 mm safe edge, the
   custom size limits, and the graphic limits, so the print page and the server share them.
+- **The client's name tag files.** `pages/host/NameTagsPanel.tsx` is the Name tags panel (the
+  label size, the two print buttons, the picture, and the "Did all 5 tags print?" dialog);
+  `labelSetting.ts` keeps the chosen size in `localStorage`, every use wrapped in try/catch;
+  `nameTagWords.ts` has the panel's words. `PrintSheet.tsx` is the print view and `TagFace` one
+  page of it; `printLayout.ts` holds the print numbers and the fit. `api/tags.ts` has the calls
+  (`call` sends a `Blob` as it is, with its own type, for the upload), and
+  `components/EventPicture.tsx` shows the graphic on the host panel and the TV.
+- **The print view.** `PrintSheet` is a portal into `<body>`, mounted only while a job runs.
+  On screen it is `visibility: hidden`; `printCss` sets `@page { size; margin: 0 }` and, under
+  `@media print`, hides every other child of `<body>` (the app, its dialogs, its snackbar). A
+  page is the label's size with `break-after: page`; the tag inside is drawn wide and, on a page
+  taller than wide, turned a quarter turn clockwise (`rotate(90deg)` from the top left,
+  moved right by the page width). Content sits 3 mm inside the edge (`LABEL_SAFE_EDGE_MM`).
+- **Print units are the exception to the theme.** `printLayout.ts` is the one file that uses
+  millimetres, points, and the color names `black` and `white`, because paper has a physical
+  size and a one-color printer has no theme (`DESIGN.md`, "Name tags"). Everything else in the
+  client keeps to the theme.
+- **Fitting the handle.** Millimetres and points are absolute in a browser, so the handle is
+  measured on screen in the hidden sheet and prints the same. `PrintSheet` loads the handle's
+  font face first (`document.fonts.load`), then `fitPoints` finds the largest size, in half
+  points from 72 down, whose `offsetWidth` fits 97% of the row (`FIT_SLACK`: print lays text out
+  a hair differently from the screen). A handle that needs under 28 points keeps shrinking to
+  12 instead of crossing the edge; 16 ordinary characters fit at 28, but 16 capital M and W do
+  not. The result is in each handle's `data-pt` attribute, which the print check reads.
+- **The print flow.** A job is `queue` (the tags loaded now) or `test`. When the sheet reports
+  ready, the panel calls `window.print()` once, and the `afterprint` event ends the job. A
+  queue job then asks "Did all 5 tags print?"; **Yes** posts exactly the ids that were printed,
+  not the queue as it is by then. The test tag asks nothing and never touches the queue.
+- **Checking a print.** `window.print()` can't run headless, so a script replaces it with a
+  counter, waits for it, calls `page.pdf({ preferCSSPageSize: true, printBackground: true })`,
+  fires `afterprint` by hand, and then reads the PDF page sizes with `pdfinfo` and looks at
+  `pdftoppm -png -r 150` pages. Chrome rounds a page to whole points, so sizes agree to about
+  0.2 mm, inside the 0.5 mm the roadmap allows.
 
 ## Layout
 
@@ -566,7 +599,7 @@ no corepack. Keep that version in step with `packageManager` in `package.json`.
   `packages/server/vitest.config.ts` allows 30 s per test. A test that signs in several times
   needs that room.
 - Vitest for `core`, `server`, and `client`. Client tests need no DOM: they build the theme and
-  call its overrides. Server tests build the app with `buildApp` and call
+  call its overrides, and render a component with `renderToString`. Server tests build the app with `buildApp` and call
   `app.inject`, so they open no port. Formats are tested with seeded randomness and fixed
   results, across every player count the roadmap names.
 - `core` has two Vitest projects (`packages/core/vitest.config.ts`): `node` runs every test, and
@@ -580,6 +613,11 @@ no corepack. Keep that version in step with `packageManager` in `package.json`.
   12-hour wipe and checks the database file. A 4-digit PIN alone could appear anywhere in a
   file, so that check searches for the PIN followed by its `pin_stored_at` time, which is how
   SQLite lays out the row, and first finds it there while the tag is queued.
+- **Client name tag tests.** `printLayout.test.ts` covers the geometry, the graphic box, the type
+  sizes, `fitPoints` (with stand-in measurers, since there is no DOM), and the print rules;
+  `labelSetting.test.ts` the saved size and blocked storage; `nameTags.test.tsx` the words, a
+  tag page, the panel, **Print tag**, and the calls. The browser-only parts (the font loading
+  and the real fit) are checked by printing to PDF against a production build.
 - Playwright for screens, printing, and the offline check. A PDF or print layout isn't
   verified until its pages have been rasterized and looked at (the MEPN lesson: an earlier
   check there confirmed only that a download fired, and two broken exports shipped).

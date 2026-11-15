@@ -33,6 +33,10 @@ const API_CODES: Record<ApiErrorCode, true> = {
   'not-following': true,
   'too-many-handles': true,
   'push-off': true,
+  'bad-image': true,
+  'bad-size': true,
+  'too-large': true,
+  'bad-type': true,
 };
 const REFUSALS: Record<HandleRefusal, true> = {
   'too-short': true,
@@ -129,6 +133,15 @@ describe('words for the phone codes', () => {
   it('sends a phone to the Sign-up screen for a new follow code, not the host', () => {
     expect(failureWords({ error: 'wrong-code' }, FOLLOW_CODE_WORDS)).toBe("That code doesn't work. Get a new one from the Sign-up screen.");
     expect(failureWords({ error: 'wrong-code' })).toBe("That code doesn't work. Ask the host for a new one.");
+  });
+});
+
+describe('words for the event picture', () => {
+  it('says what to do next, with the limits from core', () => {
+    expect(failureWords({ error: 'bad-type' })).toBe('Use a PNG, JPEG, or WebP picture.');
+    expect(failureWords({ error: 'too-large' })).toBe('That picture is over 2 MB.');
+    expect(failureWords({ error: 'bad-size' })).toBe('That picture is too small or too big. Use one from 16 to 4000 pixels on each side.');
+    expect(failureWords({ error: 'bad-image' })).toBe("That file isn't a picture we can read. Use a PNG, JPEG, or WebP picture.");
   });
 });
 

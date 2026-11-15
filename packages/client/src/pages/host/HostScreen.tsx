@@ -26,6 +26,7 @@ import { addLateHeatPlayer } from '../../api/heats.ts';
 import { failureWords } from '../../api/errors.ts';
 import { getEvent, getHostSession, signOutHost } from '../../api/host.ts';
 import { addPlayer, listPlayers, renamePlayer, resetPin } from '../../api/players.ts';
+import { queueTag } from '../../api/tags.ts';
 import { ColorModePicker } from '../../components/ColorModePicker.tsx';
 import { Logo } from '../../components/Logo.tsx';
 import { useLive } from '../../components/useLive.ts';
@@ -36,6 +37,8 @@ import { EventName } from './EventName.tsx';
 import { playersInHeats } from './groupWords.ts';
 import { HandleDialog } from './HandleDialog.tsx';
 import { MergeDialog } from './MergeDialog.tsx';
+import { NameTagsPanel } from './NameTagsPanel.tsx';
+import { NAME_TAGS_TITLE, REPRINT_ADDED } from './nameTagWords.ts';
 import { PairingPanel } from './PairingPanel.tsx';
 import { PinDialog } from './PinDialog.tsx';
 import { PlayerActions } from './PlayerActions.tsx';
@@ -65,6 +68,8 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
   const [playersVersion, setPlayersVersion] = useState(0);
   // Bumped on each `plan` message, so a wizard open in this window reads the plan another window saved.
   const [planVersion, setPlanVersion] = useState(0);
+  // Bumped on each `tags` message, so the Name tags panel reads the print list again.
+  const [tagsVersion, setTagsVersion] = useState(0);
   // The wizard opened from play mode: New event, or New competition after a finish.
   const [wizard, setWizard] = useState<Exclude<WizardMode, 'setup'> | null>(null);
   // `id` restarts the snackbar's timer when a new message replaces one still showing. `undo`
@@ -115,6 +120,7 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
       }
       if (message.type === 'event') setEvent(message.event);
       if (message.type === 'plan') setPlanVersion((before) => before + 1);
+      if (message.type === 'tags') setTagsVersion((before) => before + 1);
       if (message.type === 'bracket') void reloadBracket();
       if (message.type === 'heats') void reloadHeats();
     },
@@ -125,6 +131,7 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
       void reloadHeats();
       // A plan message sent while the socket was down is lost too.
       setPlanVersion((before) => before + 1);
+      setTagsVersion((before) => before + 1);
     },
     onEnded: onSignedOut,
   });
@@ -142,6 +149,11 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
   const say = (message: string, undo?: () => void) => {
     setNotice((before) => ({ id: (before?.id ?? 0) + 1, message, undo }));
     setNoticeOpen(true);
+  };
+
+  const reprint = async (player: Player) => {
+    const result = await queueTag(player.id);
+    say(result.ok ? REPRINT_ADDED : failureWords(result));
   };
 
   const addToCompetition = async (player: Player) => {
@@ -298,6 +310,10 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
           <DeviceList onUnpaired={say} />
         </Section>
 
+        <Section title={NAME_TAGS_TITLE}>
+          <NameTagsPanel event={event} tagsVersion={tagsVersion} onEventChanged={setEvent} />
+        </Section>
+
         {(!wizardMode || running) && <CompetitionSection bracket={bracketState} heats={heatsState} say={say} onNewCompetition={() => setWizard('new-competition')} />}
 
         <Box component="section">
@@ -354,6 +370,7 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
                         onRename={() => setDialog({ kind: 'rename', player })}
                         onResetPin={() => void reset(player)}
                         onMerge={() => setDialog({ kind: 'merge', player })}
+                        onPrintTag={() => void reprint(player)}
                         addLate={alreadyIn && !alreadyIn.has(player.id) ? { label: lateLabel, run: () => void addToCompetition(player) } : undefined}
                         addBusy={addBusy}
                       />

@@ -1,4 +1,4 @@
-import type { Bracket, EventInfo, Heats } from '@coliseumgrid/core';
+import type { Bracket, EventGraphic, EventInfo, Heats } from '@coliseumgrid/core';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -6,6 +6,7 @@ import { getBracket } from '../api/bracket.ts';
 import { getHeats } from '../api/heats.ts';
 import { getEvent } from '../api/host.ts';
 import { AccessGate, useGoToJoin } from '../components/AccessGate.tsx';
+import { EventPicture } from '../components/EventPicture.tsx';
 import { Logo } from '../components/Logo.tsx';
 import { useLive } from '../components/useLive.ts';
 import { BracketSections } from './display/BracketSections.tsx';
@@ -18,6 +19,17 @@ import { UpNextPanel } from './display/UpNextPanel.tsx';
 import { bracketLines, bracketStationCards, bracketUpNext, stationLayout } from './display/model.ts';
 import { useScreen } from './display/useScreen.ts';
 import { WaitingPanels } from './display/WaitingPanels.tsx';
+
+/**
+ * The event's graphic beside its name (docs/DESIGN.md, "Name tags"). It is one line of the name's
+ * type tall: `em` follows the heading's font size and `lineHeight`, so the picture is never
+ * taller than a line of the name, whatever size the heading is at. A wide picture is held to a
+ * share of the row so the name keeps room. On a phone the name drops under the picture when
+ * both don't fit one row (the heading wraps), instead of breaking inside a word.
+ */
+function TitlePicture({ graphic }: { graphic: EventGraphic }) {
+  return <EventPicture graphic={graphic} sx={{ flex: 'none', height: '1.1em', width: 'auto', maxWidth: '40%' }} />;
+}
 
 /**
  * The TV is always dark. The `mode-dark` class matches the theme's colorSchemeSelector, so
@@ -101,6 +113,7 @@ function DisplayFrame() {
   const name = event?.name ?? 'ColiseumGrid';
   // The host typed it, or there is none (docs/DESIGN.md, "Display").
   const game = event?.game ?? null;
+  const graphic = event?.graphic ?? null;
 
   if (bracket === null && heats === null) {
     return (
@@ -120,8 +133,9 @@ function DisplayFrame() {
         <Logo size={16} />
         {/* The theme's largest heading, scaled by its breakpoints. */}
         <Box component="header">
-          <Typography variant="h1" component="h1" sx={{ overflowWrap: 'anywhere' }}>
-            {name}
+          <Typography variant="h1" component="h1" sx={{ overflowWrap: 'anywhere', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', columnGap: 3 }}>
+            {graphic && <TitlePicture graphic={graphic} />}
+            <span>{name}</span>
           </Typography>
           {game && (
             <Typography variant="h3" component="p" color="text.secondary" sx={{ overflowWrap: 'anywhere', mt: 1 }}>
@@ -152,8 +166,12 @@ function DisplayFrame() {
       <Box component="header" sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
         <Logo size={6} />
         <Box sx={{ minWidth: 0 }}>
-          <Typography component="h1" sx={{ typography: { xs: 'h4', xl: 'h3' }, overflowWrap: 'anywhere', lineHeight: 1.1 }}>
-            {name}
+          <Typography
+            component="h1"
+            sx={{ typography: { xs: 'h4', xl: 'h3' }, overflowWrap: 'anywhere', lineHeight: 1.1, display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 2 }}
+          >
+            {graphic && <TitlePicture graphic={graphic} />}
+            <span>{name}</span>
           </Typography>
           {game && (
             <Typography component="p" color="text.secondary" sx={{ typography: { xs: 'h6', xl: 'h5' }, overflowWrap: 'anywhere', lineHeight: 1.2 }}>

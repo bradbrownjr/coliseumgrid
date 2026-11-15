@@ -2,7 +2,7 @@
 // sends codes, never sentences; this is where a code becomes text a 12-year-old can follow
 // (docs/DOC-STYLE.md). A refusal says what to do next, not why in detail.
 
-import { BRACKET_PLAYERS_MAX, HANDLE_MAX, HANDLE_MIN, PHONE_FOLLOWS_MAX, PIN_LENGTH, type ApiErrorCode, type HandleRefusal } from '@coliseumgrid/core';
+import { BRACKET_PLAYERS_MAX, GRAPHIC_BYTES_MAX, GRAPHIC_SIZE_MAX, GRAPHIC_SIZE_MIN, HANDLE_MAX, HANDLE_MIN, PHONE_FOLLOWS_MAX, PIN_LENGTH, type ApiErrorCode, type HandleRefusal } from '@coliseumgrid/core';
 
 /** The API's codes, plus one for a request that never got a usable answer. */
 export type ClientErrorCode = ApiErrorCode | 'failed';
@@ -52,6 +52,11 @@ export const ERROR_WORDS: Record<ClientErrorCode, string> = {
   'not-following': 'Sign in to follow a player.',
   'too-many-handles': `This phone follows ${PHONE_FOLLOWS_MAX} players. Stop following one to add another.`,
   'push-off': "Lock screen alerts aren't on here.",
+  // The event picture (docs/DESIGN.md, "Name tags").
+  'bad-type': 'Use a PNG, JPEG, or WebP picture.',
+  'bad-image': "That file isn't a picture we can read. Use a PNG, JPEG, or WebP picture.",
+  'bad-size': `That picture is too small or too big. Use one from ${GRAPHIC_SIZE_MIN} to ${GRAPHIC_SIZE_MAX} pixels on each side.`,
+  'too-large': `That picture is over ${GRAPHIC_BYTES_MAX / (1024 * 1024)} MB.`,
   failed: 'Something went wrong. Try again.',
 };
 

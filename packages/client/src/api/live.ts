@@ -1,7 +1,7 @@
 // The pure parts of the live connection (docs/PLAN.md, "Live messages"). The hook that opens the
 // WebSocket is components/useLive.ts.
 
-import type { LiveMessage } from '@coliseumgrid/core';
+import type { EventGraphic, LiveMessage } from '@coliseumgrid/core';
 
 /** The first wait after a drop, and the longest wait between tries. */
 export const RECONNECT_MIN_MS = 1000;
@@ -40,15 +40,27 @@ export function parseLiveMessage(data: unknown): LiveMessage | null {
     message.type === 'unpaired' ||
     message.type === 'bracket' ||
     message.type === 'heats' ||
-    message.type === 'plan'
+    message.type === 'plan' ||
+    message.type === 'tags'
   ) {
     return { type: message.type };
   }
   if (message.type !== 'event') return null;
   if (message.event === null) return { type: 'event', event: null };
-  const event = message.event as { name?: unknown; game?: unknown } | undefined;
+  const event = message.event as { name?: unknown; game?: unknown; graphic?: unknown } | undefined;
   if (typeof event === 'object' && event !== null && typeof event.name === 'string') {
-    return { type: 'event', event: { name: event.name, game: typeof event.game === 'string' ? event.game : null } };
+    return {
+      type: 'event',
+      event: { name: event.name, game: typeof event.game === 'string' ? event.game : null, graphic: parseGraphic(event.graphic) },
+    };
   }
   return null;
+}
+
+/** The graphic's three fields, or null for none or anything that isn't them. */
+function parseGraphic(value: unknown): EventGraphic | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const { width, height, version } = value as { width?: unknown; height?: unknown; version?: unknown };
+  if (typeof width !== 'number' || typeof height !== 'number' || typeof version !== 'string') return null;
+  return { width, height, version };
 }

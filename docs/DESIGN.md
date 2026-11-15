@@ -413,6 +413,20 @@ iOS fills a transparent icon with black. `tools/make-icons.ts` makes them.
   tooltip and accessible name. It adds the tag to the print list and says so in a snackbar:
   "Added to the print list. Reprints have no PIN."
 - A refused picture says why in words: "Use a PNG, JPEG, or WebP picture.", "That picture is
-  over 2 MB.", or "That picture is too small or too big. Use one from 16 to 4000 pixels on each
-  side."
+  over 2 MB.", "That picture is too small or too big. Use one from 16 to 4000 pixels on each
+  side.", or, for a file that isn't a picture at all, "That file isn't a picture we can read.
+  Use a PNG, JPEG, or WebP picture."
+- **Print units are the one exception to "theme tokens only".** Paper has a physical size, so
+  the print page is laid out in millimetres and points and in the color names black and white,
+  all kept in `packages/client/src/pages/host/printLayout.ts`, derived from the label presets
+  and the safe edge in `packages/core/src/name-tags.ts`. No other screen uses them.
+- **The tag's layout.** The handle runs across the top on one line, the largest thing on the
+  tag. Under it, left to right: the graphic (up to a third of the width, in its own
+  proportions), the event name with the game under it, and the PIN, small, in the bottom
+  corner. A handle that doesn't fit at 28 points keeps shrinking (to 12) instead of crossing
+  the safe edge.
+- **The label size select** lists the presets with the label they were measured from, such as
+  "62 x 100 mm (Brother DK-11202)", and "Custom size", which adds **Width (mm)** and **Height
+  (mm)**. A size outside 25 to 150 mm says "Use 25 to 150 mm on each side." and turns both print
+  buttons off. The size is kept in this browser.
 - The Display screen shows the graphic beside the event name, no taller than the name's line.

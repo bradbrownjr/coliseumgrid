@@ -1,5 +1,6 @@
 import type { Player } from '@coliseumgrid/core';
 import EditIcon from '@mui/icons-material/Edit';
+import PrintIcon from '@mui/icons-material/Print';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import MergeIcon from '@mui/icons-material/MergeType';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
@@ -11,6 +12,7 @@ import ListItemText from '@mui/material/ListItemText';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
+import Tooltip from '@mui/material/Tooltip';
 import { useTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useState } from 'react';
@@ -21,6 +23,8 @@ interface PlayerActionsProps {
   onRename: () => void;
   onResetPin: () => void;
   onMerge: () => void;
+  /** Adds the player's tag to the print list (a reprint, so it has no PIN). */
+  onPrintTag: () => void;
   /** Given only while the bracket or the groups can take a late player and this player isn't in. */
   addLate?: { label: string; run: () => void } | undefined;
   /** A late add is on its way, so the button waits for it. */
@@ -28,12 +32,12 @@ interface PlayerActionsProps {
 }
 
 /**
- * The things a host does to a player: three always, and "Add to bracket" or "Add to group" while a
+ * The things a host does to a player: three always (and the **Print tag** icon, which sits beside them at every width), and "Add to bracket" or "Add to group" while a
  * late player can join. They are buttons from the sm breakpoint up and one menu button below it, where the
  * buttons don't fit a row (docs/DESIGN.md, "Phone width"). One list of actions feeds both, so
  * they can't drift apart.
  */
-export function PlayerActions({ player, canMerge, onRename, onResetPin, onMerge, addLate, addBusy = false }: PlayerActionsProps) {
+export function PlayerActions({ player, canMerge, onRename, onResetPin, onMerge, onPrintTag, addLate, addBusy = false }: PlayerActionsProps) {
   const theme = useTheme();
   const roomForButtons = useMediaQuery(theme.breakpoints.up('sm'));
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
@@ -45,9 +49,18 @@ export function PlayerActions({ player, canMerge, onRename, onResetPin, onMerge,
     ...(addLate ? [{ label: addLate.label, icon: <PersonAddIcon />, run: addLate.run, disabled: addBusy }] : []),
   ];
 
+  const printTag = (
+    <Tooltip title="Print tag">
+      <IconButton aria-label="Print tag" onClick={onPrintTag}>
+        <PrintIcon />
+      </IconButton>
+    </Tooltip>
+  );
+
   if (roomForButtons) {
     return (
-      <Stack direction="row" sx={{ gap: 1, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+      <Stack direction="row" sx={{ gap: 1, justifyContent: 'flex-end', flexWrap: 'wrap', alignItems: 'center' }}>
+        {printTag}
         {actions.map(({ label, icon, run, disabled }) => (
           <Button key={label} variant="outlined" startIcon={icon} disabled={disabled} onClick={run}>
             {label}
@@ -58,7 +71,8 @@ export function PlayerActions({ player, canMerge, onRename, onResetPin, onMerge,
   }
 
   return (
-    <>
+    <Stack direction="row" sx={{ justifyContent: 'flex-end', alignItems: 'center' }}>
+      {printTag}
       <IconButton aria-label={`Actions for ${player.handle}`} aria-haspopup="menu" onClick={(event) => setAnchor(event.currentTarget)}>
         <MoreVertIcon />
       </IconButton>
@@ -77,6 +91,6 @@ export function PlayerActions({ player, canMerge, onRename, onResetPin, onMerge,
           </MenuItem>
         ))}
       </Menu>
-    </>
+    </Stack>
   );
 }
