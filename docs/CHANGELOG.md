@@ -8,6 +8,25 @@ use **New Features**, **Improvements**, and **Bug Fixes**, in that order.
 
 ---
 
+# November 15, 2026
+
+## Milestones
+
+* **M7 Setup wizard.** The host sets up an event in three steps on `/host`: a name (with a
+  dice button for a catchy one) and an optional game name, a template (Fighting game, Racing
+  game, or Another game) and a format card, then the stations and **Start**. Step 2 shows how
+  long the event will take, from 5 minutes a game, 4 a race, and 4 for each changeover, worked
+  round by round so several stations don't make it look shorter than it is. A calibration
+  test plays the real engines and checks the estimate against them. A plan longer than the
+  hours picked (3 by default) gets a warning with up to two fixes. **New event** starts a
+  fresh event that players sign up for again and keeps the old bracket as it was. When a
+  called player hasn't come after the wait (5 minutes by default), the station card asks
+  "Still waiting?" with **They're here** and **Forfeit**, and the TV shows a call line, timed
+  by the server's clock; nothing happens on its own. A bracket forfeit and a missing group
+  player (0 points) can each be undone exactly. The game name shows on the TV, the Sign-up
+  tablet, and the phone page. Game titles and company names are kept out of the repo, and
+  the name dice can't make them. Hand tests are in `PLAYTEST.md`.
+
 # November 13, 2026
 
 ## Milestones

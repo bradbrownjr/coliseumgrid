@@ -1,6 +1,6 @@
 # Roadmap
 
-*Last updated: 2026-11-14*
+*Last updated: 2026-11-15*
 
 ## At a glance
 
@@ -12,8 +12,7 @@ in [`PLAN.md`](PLAN.md).
 | Item | What it delivers | Stage |
 |---|---|---|
 | [M6 Player view](#m6-player-view) | Players follow their own matches and standings on their phones, with an alert when they're up next. | Next |
-| [M7 Setup wizard](#m7-setup-wizard) | The three-step setup, the time estimate, new events, and a prompt when a player doesn't come. | Planned |
-| [M8 Name tags](#m8-name-tags) | Event graphics and printed name tags. | Planned |
+| [M8 Name tags](#m8-name-tags) | Event graphics and printed name tags. | Next |
 | [M9 Packaging](#m9-packaging) | The offline bundle for Windows and Fedora, and the Docker image for online use. | Planned |
 | [M10 Player stats](#m10-player-stats) | Each handle's results across events. | Planned |
 | [Later](#later) | Teams, Swiss, pools, season standings, and a public results page. | Later |
@@ -82,69 +81,6 @@ M6 stays open after the code lands, until Brad's play-test over HTTPS on a real 
 firewall or DNS change that test needs is Brad's to approve first (`PLAN.md`, "HTTPS on a
 venue network"). Open item for the play-test: the push service hosts for Firefox and Google
 are unverified (`PLAN.md`, "Player view").
-
-## M7 Setup wizard
-
-The three-step setup, the time estimate, new events, and a prompt when a player doesn't
-come (Brad, 2026-11-14). Design: `PLAN.md` section 3 ("Devices and host API"), section 5
-("Time estimate"), and section 6 ("The setup wizard" and "Waiting for a missing player"),
-approved 2026-11-14.
-
-Tasks:
-
-- **Core.** `EventPlan`, the template defaults, and `isEventPlan`; `estimate.ts` (matches,
-  waves, minutes, the finish time, and the fixes), pure and tested for 2 to 32 players in
-  every format; `event-names.ts` with the word lists and a function that takes a template and
-  a seeded `RandomSource`; a check that `order` and `missing` together are a heat's players,
-  and `scoreHeats` giving a missing player 0 points; the new fields in `api.ts`
-  (`forfeit`, `missing`, `noShowMinutes`, `game`).
-- **Server.** Migration 7 (`events.game`, `events.plan`, `bracket_results.forfeit`,
-  `heat_results.missing`); the event with its game and plan, and `cleanGameName`;
-  `POST /api/events` on the write chain, which drops the phone answer cache and broadcasts
-  `event`, `players`, `bracket`, and `heats`; `GET` and `PUT /api/event/plan` with closed
-  schemas; `forfeit` and `missing` carried through the result log, the replay, and the
-  answers; `noShowMinutes` in both answers; the calibration test. From the review:
-  migration 8 (a tie-break's start time, and the arrivals tables), `POST /api/bracket/arrived`
-  and `POST /api/heats/arrived`, `now` in every bracket and heats answer, and a `plan` live
-  message.
-- **Client.** The wizard on `/host` in setup mode, with the three steps, the dice, the
-  template and format cards, the estimate and its warning, "More options", and step 3's
-  live count; **New event** and **New competition** in play mode; the game name on the TV,
-  the Sign-up tablet, and the phone page; "Still waiting?" and **Forfeit** on the station
-  cards, with **They're here** beside **Forfeit**; the TV call line, timed by the server's
-  clock; "Forfeit" marks in the bracket view and the results list;
-  `StartCompetitionDialog` removed, with `BracketOptions`, `GroupOptions`, the stations
-  select, and `PlayerPicker` reused.
-- **Review.** A review of the whole milestone against `PLAN.md` and `DESIGN.md` before it
-  is called finished (`CLAUDE.md`, "Always and never": the main session checks what comes
-  back).
-- **Docs finish.** `DEVELOPMENT.md` (layout, migration 7, tests), `PLAYTEST.md`, and the
-  changelog entry once Brad has checked the milestone.
-
-Acceptance checks:
-
-- An event can be created and started with three choices (a template, a card, and **Start**)
-  and no typing beyond its name. A Playwright test does this against a production build, in
-  offline mode, with a fresh data folder, then checks the TV shows the name and the game.
-- The estimate tests pass for 2 to 32 players in every format, and the calibration test
-  passes: the estimated waves match the real engine played out in batches, within max(1, 10%)
-  (`PLAN.md`, "Time estimate").
-- Every name the dice can make passes `isVulgar` and is 60 characters or fewer.
-- A bracket forfeit and a group with a missing player can each be undone, and the answer
-  after the undo equals the answer before the result, for a newest undo and an older one.
-- A new event keeps the old event's bracket untouched, shows no players until they sign up
-  again, and is refused with 409 `bracket-running` while a competition is running.
-- Every new answer lists its fields, every new body has a closed schema, and a phone, a
-  Sign-up device, and a signed-out caller are refused the plan routes and `POST /api/events`.
-- No game title or game company name is in the repo outside a citation's own title or URL.
-  The agent runs a case-insensitive `git grep` for the titles and companies named in the
-  citations and every one it knows, and every hit is inside a citation. The pattern isn't
-  committed, because it would hold the names.
-- Screenshots of each step at 1366x768, 1024x768, 768x1024, 412 wide, and 320 wide, in light
-  and dark, looked at by the agent (`CLAUDE.md`: a screen isn't verified until it is seen
-  rendered).
-
-**Docs:** `PLAN.md` sections 3, 5, and 6, `DESIGN.md`, `DEVELOPMENT.md`, `PLAYTEST.md`.
 
 ## M8 Name tags
 
