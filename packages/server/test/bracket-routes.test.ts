@@ -270,7 +270,7 @@ describe('POST /api/bracket', () => {
   it('puts the bracket in the current event, naming one if the host has not', async () => {
     expect((await host('GET', '/api/event')).json()).toEqual({ event: null });
     await make('single', 2, 1);
-    expect((await host('GET', '/api/event')).json()).toEqual({ event: { name: 'ColiseumGrid' } });
+    expect((await host('GET', '/api/event')).json()).toEqual({ event: { name: 'ColiseumGrid', game: null } });
     const row = db.prepare('SELECT e.name FROM brackets b JOIN events e ON e.id = b.event_id').get();
     expect(row).toEqual({ name: 'ColiseumGrid' });
   });
@@ -278,7 +278,7 @@ describe('POST /api/bracket', () => {
   it('keeps the event the host named', async () => {
     await host('PUT', '/api/event', { name: 'Friday night' });
     await make('single', 2, 1);
-    expect((await host('GET', '/api/event')).json()).toEqual({ event: { name: 'Friday night' } });
+    expect((await host('GET', '/api/event')).json()).toEqual({ event: { name: 'Friday night', game: null } });
     expect(db.prepare('SELECT COUNT(*) AS n FROM events').get()).toEqual({ n: 1 });
   });
 });

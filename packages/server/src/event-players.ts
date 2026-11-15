@@ -2,6 +2,7 @@
 // Players are kept across events and attendance isn't tracked, so the start dialog needs this
 // list to pre-check the players who are here.
 
+import type { EventInfo } from '@coliseumgrid/core';
 import type { Database } from './database.ts';
 import type { Events } from './events.ts';
 
@@ -21,7 +22,7 @@ export interface EventPlayers {
 export function createEventPlayers(
   db: Database,
   events: Events,
-  onEventCreated: (event: { name: string }) => void,
+  onEventCreated: (event: EventInfo) => void,
 ): EventPlayers {
   const insert = db.prepare('INSERT OR IGNORE INTO event_players (event_id, player_id) VALUES (?, ?)');
   const list = db.prepare('SELECT player_id FROM event_players WHERE event_id = ? ORDER BY player_id');

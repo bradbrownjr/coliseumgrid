@@ -36,6 +36,7 @@ function match(side: MatchSide, round: number, number: number, status: MatchStat
       { player: status === 'waiting' ? null : player(number * 2), bye: false },
     ],
     winner: status === 'done' ? 0 : null,
+    forfeit: false,
     resultId: null,
     ...extra,
   };
@@ -44,7 +45,7 @@ const round = (side: MatchSide, n: number, count: number, status: MatchStatus) =
   Array.from({ length: count }, (_, i) => match(side, n, i + 1, status));
 
 function bracket(format: Bracket['format'], matches: BracketMatch[]): Bracket {
-  return { id: 1, format, bestOf: 1, finished: false, lateOpen: false, lastResultId: null, stations: [], upNext: [], matches, standings: [], ties: [] };
+  return { id: 1, format, bestOf: 1, finished: false, lateOpen: false, lastResultId: null, noShowMinutes: 5, stations: [], upNext: [], matches, standings: [], ties: [] };
 }
 
 describe('which rounds to show', () => {

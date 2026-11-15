@@ -40,7 +40,7 @@ describe('event_players', () => {
   it('names an event when heats are made before the host has named one', async () => {
     expect((await host('GET', '/api/event')).json()).toEqual({ event: null });
     await makeHeats(host, ids.slice(0, 5));
-    expect((await host('GET', '/api/event')).json()).toEqual({ event: { name: 'ColiseumGrid' } });
+    expect((await host('GET', '/api/event')).json()).toEqual({ event: { name: 'ColiseumGrid', game: null } });
     expect(await inEvent()).toEqual(ids.slice(0, 5));
   });
 

@@ -56,8 +56,14 @@ export const randomPick = (random: RandomSource): Pick => (heat) => shuffle(heat
 export const listedPick: Pick = (heat) => heat.players.map((p) => p.id);
 
 /** Records a finishing order for a heat on a station. */
-export function play(run: HeatRun, heat: Heat, order: number[]): HeatRun {
-  return expectOk(recordHeatResult(run.state, { id: nextResultId(run.state), heatId: heat.id, order, at: at(logLength(run.state) + 1) }, handles));
+export function play(run: HeatRun, heat: Heat, order: number[], missing: number[] = []): HeatRun {
+  return expectOk(
+    recordHeatResult(
+      run.state,
+      { id: nextResultId(run.state), heatId: heat.id, order, ...(missing.length > 0 && { missing }), at: at(logLength(run.state) + 1) },
+      handles,
+    ),
+  );
 }
 
 /** The heats on stations now. */
@@ -117,4 +123,29 @@ export function expectFinished(heats: Heats, n: number, label: string): void {
   for (const row of heats.standings) expect(row.heatsPlayed, `${label}: ${row.player.handle}`).toBe(heats.rounds);
   expect(heats.heats.every((h) => h.status === 'done'), label).toBe(true);
   expect(heats.stations.every((s) => s.heat === null) && heats.upNext.length === 0, label).toBe(true);
+}
+
+/**
+ * Plays out heats quickly, as `playOutInBatches` does for a bracket: records a result for every
+ * heat on a station, then rebuilds once, and counts each such set as one wave (batch). A
+ * tie-break made along the way starts a wave of its own. Returns the batches played.
+ */
+export function playOutCountingBatches(run: HeatRun, random: RandomSource, pick: Pick): HeatRun & { batches: number } {
+  let { state, heats } = run;
+  let batches = 0;
+  for (;;) {
+    const live = onStations(heats);
+    if (live.length === 0) {
+      if (!heats.ties.some((t) => !t.started)) return { state, heats, batches };
+      ({ state, heats } = expectOk(startHeatTieBreak(state, handles)));
+      continue;
+    }
+    batches += 1;
+    const results = [...state.results];
+    for (const heat of live) {
+      results.push({ id: nextResultId({ ...state, results }), heatId: heat.id, order: pick(heat), at: at(results.length + 1) });
+    }
+    state = { ...state, results };
+    heats = heatsAnswer(state, handles);
+  }
 }

@@ -40,9 +40,9 @@ export function parseLiveMessage(data: unknown): LiveMessage | null {
   }
   if (message.type !== 'event') return null;
   if (message.event === null) return { type: 'event', event: null };
-  const event = message.event as { name?: unknown } | undefined;
+  const event = message.event as { name?: unknown; game?: unknown } | undefined;
   if (typeof event === 'object' && event !== null && typeof event.name === 'string') {
-    return { type: 'event', event: { name: event.name } };
+    return { type: 'event', event: { name: event.name, game: typeof event.game === 'string' ? event.game : null } };
   }
   return null;
 }

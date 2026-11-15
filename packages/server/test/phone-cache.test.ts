@@ -5,7 +5,7 @@
 // (the `onAnswerBuilt` option): reads reuse the answer, and the path makes the next read build
 // a new one.
 
-import type { Bracket, Heats, PhoneAnswer } from '@coliseumgrid/core';
+import { planDefaults, type Bracket, type Heats, type PhoneAnswer } from '@coliseumgrid/core';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.ts';
@@ -147,6 +147,16 @@ describe('the kept answer is dropped on', () => {
 
   it('an event change', async () => {
     await dropsOn(() => host('PUT', '/api/event', { name: 'Friday' }));
+  });
+
+  it('a new event, which the phone then reads by its name and game', async () => {
+    await host('PUT', '/api/event', { name: 'Friday' });
+    const after = await dropsOn(() => host('POST', '/api/events', { name: 'Saturday', game: 'Tag' }));
+    expect(after.event).toEqual({ name: 'Saturday', game: 'Tag' });
+  });
+
+  it('a plan change', async () => {
+    await dropsOn(() => host('PUT', '/api/event/plan', { plan: planDefaults('fighting') }));
   });
 });
 

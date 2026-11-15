@@ -10,6 +10,14 @@ const version = (db: DatabaseSync) => (db.prepare('PRAGMA user_version').get() a
 const columns = (db: DatabaseSync, table: string) =>
   (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name);
 
+/** The columns migration 7 added to old tables. A database from before it has no values for them, so the older migration tests leave them out of a row dump. */
+const M7_COLUMNS = ['game', 'plan', 'forfeit', 'missing'];
+const dump = (db: DatabaseSync, table: string) =>
+  db
+    .prepare(`SELECT * FROM ${table} ORDER BY 1, 2`)
+    .all()
+    .map((row) => Object.fromEntries(Object.entries(row).filter(([key]) => !M7_COLUMNS.includes(key))));
+
 let dir: string | undefined;
 afterEach(async () => {
   if (dir) await rm(dir, { recursive: true, force: true });
@@ -21,7 +29,7 @@ describe('migrations', () => {
     const db = openDatabase(':memory:');
     expect(version(db)).toBe(MIGRATIONS.length);
     expect(columns(db, 'players')).toEqual(['id', 'handle', 'handle_key', 'pin_hash', 'created_at']);
-    expect(columns(db, 'events')).toEqual(['id', 'name', 'created_at']);
+    expect(columns(db, 'events')).toEqual(['id', 'name', 'created_at', 'game', 'plan']);
   });
 
   it('add the host, pairing, and device tables, with no token or password stored in plain text', () => {
@@ -109,7 +117,6 @@ describe('migration 3 (brackets)', () => {
     return db;
   }
 
-  const dump = (db: DatabaseSync, table: string) => db.prepare(`SELECT * FROM ${table} ORDER BY 1, 2`).all();
   const OLD_TABLES = ['players', 'events', 'host_settings', 'host_sessions', 'pairing_codes', 'devices'];
 
   it('adds the bracket tables to a database that has M2 and M3 data, and keeps every old row', () => {
@@ -120,7 +127,7 @@ describe('migration 3 (brackets)', () => {
     expect(OLD_TABLES.map((t) => dump(db, t))).toEqual(before);
     expect(columns(db, 'brackets')).toEqual(['id', 'event_id', 'format', 'best_of', 'stations', 'seeding', 'created_at']);
     // undone_at and undone_step are migration 4's.
-    expect(columns(db, 'bracket_results')).toEqual(['id', 'bracket_id', 'match_id', 'winner_id', 'loser_id', 'at', 'undone_at', 'undone_step']);
+    expect(columns(db, 'bracket_results')).toEqual(['id', 'bracket_id', 'match_id', 'winner_id', 'loser_id', 'at', 'undone_at', 'undone_step', 'forfeit']);
     expect(columns(db, 'bracket_late_joins')).toEqual(['bracket_id', 'position', 'player_id', 'step']);
     expect(columns(db, 'bracket_tie_breaks')).toEqual(['bracket_id', 'position', 'round', 'player_a', 'player_b', 'step']);
     expect(columns(db, 'event_players')).toEqual(['event_id', 'player_id']);
@@ -251,7 +258,6 @@ describe('migration 5 (heats)', () => {
     return db;
   }
 
-  const dump = (db: DatabaseSync, table: string) => db.prepare(`SELECT * FROM ${table} ORDER BY 1, 2`).all();
   const OLD_TABLES = ['players', 'events', 'host_settings', 'devices', 'event_players', 'brackets', 'bracket_results'];
 
   it('adds the heat tables to a database that has M2 to M4 data, and keeps every old row', () => {
@@ -261,7 +267,7 @@ describe('migration 5 (heats)', () => {
     expect(version(db)).toBe(MIGRATIONS.length);
     expect(OLD_TABLES.map((t) => dump(db, t))).toEqual(before);
     expect(columns(db, 'heat_runs')).toEqual(['id', 'event_id', 'stations', 'races', 'rounds', 'points', 'seeding', 'created_at']);
-    expect(columns(db, 'heat_results')).toEqual(['id', 'run_id', 'heat_id', 'finish_order', 'at', 'undone_step', 'undone_at']);
+    expect(columns(db, 'heat_results')).toEqual(['id', 'run_id', 'heat_id', 'finish_order', 'at', 'undone_step', 'undone_at', 'missing']);
     expect(columns(db, 'heat_late_joins')).toEqual(['run_id', 'position', 'player_id', 'heat_id', 'step']);
     expect(columns(db, 'heat_tie_breaks')).toEqual(['run_id', 'position', 'players', 'step']);
     for (const table of ['heat_runs', 'heat_results', 'heat_late_joins', 'heat_tie_breaks']) expect(dump(db, table), table).toEqual([]);
@@ -275,7 +281,7 @@ describe('migration 5 (heats)', () => {
     db.exec("INSERT INTO heat_runs (event_id, stations, races, rounds, points, seeding, created_at) VALUES (1, 2, 2, 2, '[4,3,2,1]', '[1,2,3,4,5]', 't')");
     db.exec("INSERT INTO heat_results (run_id, heat_id, finish_order, at) VALUES (1, 101, '[1,2,3]', 't')");
     expect(db.prepare('SELECT COUNT(*) AS n FROM brackets').get()).toEqual({ n: 1 });
-    expect(columns(db, 'bracket_results')).toEqual(['id', 'bracket_id', 'match_id', 'winner_id', 'loser_id', 'at', 'undone_at', 'undone_step']);
+    expect(columns(db, 'bracket_results')).toEqual(['id', 'bracket_id', 'match_id', 'winner_id', 'loser_id', 'at', 'undone_at', 'undone_step', 'forfeit']);
   });
 
   it('also upgrades a database that is still at M2', () => {
@@ -393,7 +399,6 @@ describe('migration 6 (phones)', () => {
     return db;
   }
 
-  const dump = (db: DatabaseSync, table: string) => db.prepare(`SELECT * FROM ${table} ORDER BY 1, 2`).all();
   const OLD_TABLES = [
     'players', 'events', 'host_settings', 'devices', 'event_players', 'brackets', 'bracket_results', 'heat_runs', 'heat_results',
   ];
@@ -452,6 +457,68 @@ describe('migration 6 (phones)', () => {
     expect(() => db.exec("INSERT INTO push_subscriptions (phone_id, endpoint, p256dh, auth, created_at) VALUES (1, 'e2', 'p', 'a', 't')")).toThrow(/UNIQUE|PRIMARY/);
     expect(() => db.exec("INSERT INTO push_subscriptions (phone_id, endpoint, p256dh, auth, created_at) VALUES (2, 'e1', 'p', 'a', 't')")).toThrow(/UNIQUE/);
     expect(() => db.exec("INSERT INTO phone_follows (phone_id, player_id, created_at) VALUES (1, 99, 't')")).toThrow(/FOREIGN/);
+  });
+});
+
+describe('migration 7 (the setup wizard)', () => {
+  /** A database as M6 left it: schema version 6, with an event, a played bracket, and played heats, one result of each undone. */
+  function m6Database(): DatabaseSync {
+    const db = new DatabaseSync(':memory:');
+    for (const step of MIGRATIONS.slice(0, 6)) db.exec(step);
+    db.exec('PRAGMA user_version = 6');
+    db.exec(`
+      INSERT INTO players (handle, handle_key, pin_hash, created_at) VALUES ('Zap', 'zap', 'h1', 't1'), ('Bolt', 'bolt', 'h2', 't2');
+      INSERT INTO events (name, created_at) VALUES ('Friday', 't3');
+      INSERT INTO event_players (event_id, player_id) VALUES (1, 1), (1, 2);
+      INSERT INTO brackets (event_id, format, best_of, stations, seeding, created_at) VALUES (1, 'single', 1, 1, '[1,2]', 't4');
+      INSERT INTO bracket_results (bracket_id, match_id, winner_id, loser_id, at) VALUES (1, 0, 1, 2, 't5');
+      INSERT INTO heat_runs (event_id, stations, races, rounds, points, seeding, created_at) VALUES (1, 1, 1, 1, '[4,3,2,1]', '[1,2]', 't6');
+      INSERT INTO heat_results (run_id, heat_id, finish_order, at) VALUES (1, 2000, '[2,1]', 't7');
+    `);
+    return db;
+  }
+
+  const OLD_TABLES = ['players', 'events', 'event_players', 'brackets', 'bracket_results', 'heat_runs', 'heat_results'];
+
+  it('adds the game, plan, forfeit, and missing columns to a version 6 database and keeps every old row', () => {
+    const db = m6Database();
+    const before = OLD_TABLES.map((t) => dump(db, t));
+    migrate(db);
+    expect(version(db)).toBe(7);
+    expect(version(db)).toBe(MIGRATIONS.length);
+    expect(OLD_TABLES.map((t) => dump(db, t))).toEqual(before);
+    expect(columns(db, 'events')).toEqual(['id', 'name', 'created_at', 'game', 'plan']);
+    expect(columns(db, 'bracket_results')).toContain('forfeit');
+    expect(columns(db, 'heat_results')).toContain('missing');
+    expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+    expect(db.prepare('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' });
+  });
+
+  it('gives old rows no game, no plan, no forfeit, and no missing players', () => {
+    const db = m6Database();
+    migrate(db);
+    expect(db.prepare('SELECT game, plan FROM events').all()).toEqual([{ game: null, plan: null }]);
+    expect(db.prepare('SELECT forfeit FROM bracket_results').all()).toEqual([{ forfeit: 0 }]);
+    expect(db.prepare('SELECT missing FROM heat_results').all()).toEqual([{ missing: null }]);
+  });
+
+  it('takes a forfeit of 0 or 1 and nothing else', () => {
+    const db = m6Database();
+    migrate(db);
+    const insert = db.prepare("INSERT INTO bracket_results (bracket_id, match_id, winner_id, loser_id, at, forfeit) VALUES (1, 1, 1, 2, 't', ?)");
+    insert.run(1);
+    expect(() => insert.run(2)).toThrow(/CHECK/);
+    expect(() => insert.run(null)).toThrow(/NOT NULL/);
+  });
+
+  it('also upgrades a database that is still at M2', () => {
+    const db = new DatabaseSync(':memory:');
+    db.exec(MIGRATIONS[0] as string);
+    db.exec('PRAGMA user_version = 1');
+    db.exec("INSERT INTO events (name, created_at) VALUES ('Friday', 't')");
+    migrate(db);
+    expect(version(db)).toBe(MIGRATIONS.length);
+    expect(db.prepare('SELECT name, game, plan FROM events').all()).toEqual([{ name: 'Friday', game: null, plan: null }]);
   });
 });
 

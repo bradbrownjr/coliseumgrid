@@ -204,6 +204,19 @@ export const MIGRATIONS: readonly string[] = [
     created_at TEXT NOT NULL
   );
   `,
+  // M7: the setup wizard, new events, and no-shows (docs/PLAN.md, "The setup wizard" and
+  // "Waiting for a missing player"). `events.game` is the host's typed game name, null for none;
+  // `events.plan` is the plan as JSON, read back through `isEventPlan` so an unreadable one is
+  // as good as none. `bracket_results.forfeit` is 1 when the winner won because the other
+  // player didn't come; `heat_results.missing` is a JSON list of the player ids who didn't
+  // come, null for none. Every column is added with a default, so rows from M2 to M6 migrate
+  // as they were. Ids only, no handle (CLAUDE.md, rule 1).
+  `
+  ALTER TABLE events ADD COLUMN game TEXT;
+  ALTER TABLE events ADD COLUMN plan TEXT;
+  ALTER TABLE bracket_results ADD COLUMN forfeit INTEGER NOT NULL DEFAULT 0 CHECK (forfeit IN (0, 1));
+  ALTER TABLE heat_results ADD COLUMN missing TEXT;
+  `,
 ];
 
 export function migrate(db: Database): void {

@@ -27,7 +27,7 @@ const blaze: Player = { id: 3, handle: 'Blaze' };
 const slot = (player: Player | null, bye = false): BracketSlot => ({ player, bye });
 
 function match(id: number, over: Partial<BracketMatch> = {}): BracketMatch {
-  return { id, side: 'main', round: 1, number: id, status: 'ready', slots: [slot(zap), slot(kai)], winner: null, resultId: null, ...over };
+  return { id, side: 'main', round: 1, number: id, status: 'ready', slots: [slot(zap), slot(kai)], winner: null, forfeit: false, resultId: null, ...over };
 }
 
 function bracket(over: Partial<Bracket> = {}): Bracket {
@@ -38,6 +38,7 @@ function bracket(over: Partial<Bracket> = {}): Bracket {
     finished: false,
     lateOpen: true,
     lastResultId: null,
+    noShowMinutes: 5,
     stations: [],
     upNext: [],
     matches: [],

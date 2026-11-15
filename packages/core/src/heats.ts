@@ -90,6 +90,24 @@ export function isFinishOrder(players: readonly number[], order: readonly number
   return order.length === players.length && new Set(order).size === order.length && order.every((id) => players.includes(id));
 }
 
+/**
+ * A heat's result with players who didn't come (docs/PLAN.md, "Waiting for a missing
+ * player"): `order` is those who played, 1st first, and `missing` is the rest.
+ */
+export interface HeatFinish {
+  order: readonly number[];
+  missing: readonly number[];
+}
+
+/**
+ * True when `order` and `missing` together name every player of the heat once and nobody
+ * else, and at least one player is in `order`. With `missing` empty it is `isFinishOrder`.
+ */
+export function isHeatResult(players: readonly number[], order: readonly number[], missing: readonly number[]): boolean {
+  if (order.length === 0) return false;
+  return isFinishOrder(players, [...order, ...missing]);
+}
+
 export interface HeatScore {
   player: number;
   points: number;
@@ -97,26 +115,49 @@ export interface HeatScore {
   heatsPlayed: number;
 }
 
+const isFinishObject = (finish: readonly number[] | HeatFinish): finish is HeatFinish => !Array.isArray(finish);
+
 /**
  * Points so far, most first; players level on points stay in seeding order. `finishes` are
- * the finishing orders of the qualifying heats that have a result.
+ * the results of the qualifying heats that have one: a finishing order, or an order with the
+ * players who were missing. A missing player scores 0 points and the heat counts as played
+ * for them, so everyone plays the same number of heats (Brad, 2026-11-14). The players in
+ * `order` take places 1, 2, and so on among themselves.
  */
 export function scoreHeats(
   seeding: readonly number[],
-  finishes: ReadonlyArray<readonly number[]>,
+  finishes: ReadonlyArray<readonly number[] | HeatFinish>,
   points: readonly number[],
 ): HeatScore[] {
   const scores = new Map(seeding.map((player) => [player, { player, points: 0, heatsPlayed: 0 }]));
-  for (const order of finishes) {
+  const score = (player: number): { player: number; points: number; heatsPlayed: number } => {
+    const found = scores.get(player);
+    if (!found) throw new RangeError(`player ${player} is not in the seeding`);
+    return found;
+  };
+  for (const finish of finishes) {
+    const { order, missing } = isFinishObject(finish) ? finish : { order: finish, missing: [] };
     order.forEach((player, place) => {
-      const score = scores.get(player);
-      if (!score) throw new RangeError(`player ${player} is not in the seeding`);
-      score.points += points[place] ?? 0;
-      score.heatsPlayed += 1;
+      const found = score(player);
+      found.points += points[place] ?? 0;
+      found.heatsPlayed += 1;
     });
+    for (const player of missing) score(player).heatsPlayed += 1;
   }
   // Array sort is stable (ES2019), so level players keep seeding order.
   return [...scores.values()].sort((a, b) => b.points - a.points);
+}
+
+/**
+ * The full finishing order of a final or tie-break heat with missing players: those who
+ * played in their order, then the missing players in `ranking` order (the qualifying order,
+ * seeding order when level), so places 1 to 3 stay unique. `ranking` lists player ids, most
+ * points first, as `scoreHeats` gives them.
+ */
+export function placeMissing(order: readonly number[], missing: readonly number[], ranking: readonly number[]): number[] {
+  const rankOf = new Map(missing.map((player) => [player, ranking.indexOf(player)] as const));
+  for (const [player, rank] of rankOf) if (rank < 0) throw new RangeError(`player ${player} is not in the ranking`);
+  return [...order, ...[...missing].sort((a, b) => (rankOf.get(a) as number) - (rankOf.get(b) as number))];
 }
 
 /** The next round's heats: `cutIntoHeats` over the players by points so far. No new randomness. */

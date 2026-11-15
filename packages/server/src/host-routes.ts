@@ -2,6 +2,9 @@
 // and host API"). Bodies are JSON, every answer lists its fields, errors are { error: code }.
 
 import {
+  EVENT_NAME_MAX,
+  NO_SHOW_DEFAULT,
+  isEventPlan,
   parseJoinCode,
   type ApiError,
   type DeviceAnswer,
@@ -10,28 +13,47 @@ import {
   type EventBody,
   type HostSessionAnswer,
   type JoinBody,
+  type NewEventAnswer,
   type PairingCodeAnswer,
   type PairingCodeBody,
   type PasswordBody,
+  type PlanAnswer,
+  type PlanBody,
+  type PlanNowAnswer,
 } from '@coliseumgrid/core';
 import type { FastifyInstance } from 'fastify';
 import { rejectForeignOrigin, type Access } from './access.ts';
-import { errorSchema, fail, idParams, notSignedIn, objectSchema } from './api-schemas.ts';
+import {
+  errorSchema,
+  eventInfoSchema,
+  fail,
+  idParams,
+  notSignedIn,
+  nullableEventSchema,
+  objectSchema,
+  planSchema,
+} from './api-schemas.ts';
 import { getClientKey } from './client-ip.ts';
 import type { Clock } from './clock.ts';
+import type { Competition } from './competition.ts';
 import { HOST_PASSWORD_MAX, HOST_PASSWORD_MIN } from './config.ts';
 import type { Devices } from './devices.ts';
-import { cleanEventName, EVENT_NAME_MAX, type Events } from './events.ts';
+import { cleanEventName, cleanGameName, type Events } from './events.ts';
 import type { LiveHub } from './live.ts';
 import { ALL_CALLERS, FailureLimiter, GUESS_WINDOW_MS, SIGN_IN_MAX_WRONG_PER_IP, type JoinLimits } from './rate-limit.ts';
 import { secureRandom } from './secure-random.ts';
 import { hashToken, newToken } from './tokens.ts';
+import type { WriteChain } from './write-chain.ts';
 
 export interface HostRoutesOptions {
   access: Access;
   devices: Devices;
   events: Events;
+  /** Asked whether a bracket or groups are running before a new event is made (`POST /api/events`). */
+  competition: Competition;
   hub: LiveHub;
+  /** The one chain every bracket and heats write runs on, so a new event can't interleave with a start. */
+  chain: WriteChain;
   now: Clock;
   /** Called after the event changes, so the kept phone answer is dropped. */
   onEventChanged: () => void;
@@ -48,7 +70,6 @@ const deviceSchema = objectSchema({
   lastSeen: { type: 'string' },
 });
 
-const eventSchema = { anyOf: [{ type: 'null' }, objectSchema({ name: { type: 'string' } })] } as const;
 
 // The body schemas only keep a huge body from reaching a hash; the rules are checked in code.
 const passwordBody = objectSchema({ password: { type: 'string', maxLength: HOST_PASSWORD_MAX } });
@@ -57,13 +78,16 @@ const setupBody = objectSchema({
 });
 const codeBody = objectSchema({ code: { type: 'string', maxLength: 64 } });
 const roleBody = objectSchema({ role: { type: 'string', enum: ['display', 'signup'] } });
-const eventBody = objectSchema({ name: { type: 'string', maxLength: 4 * EVENT_NAME_MAX } });
+// The lengths only keep a huge body small; `cleanEventName` and `cleanGameName` check the rest.
+// `game` is optional: on PUT, leaving it out keeps the stored game and '' clears it.
+const eventBody = objectSchema({ name: { type: 'string', maxLength: 4 * EVENT_NAME_MAX } }, { game: { type: 'string', maxLength: 4 * EVENT_NAME_MAX } });
+const planBody = objectSchema({ plan: planSchema });
 
 const badRequest = errorSchema(['bad-request']);
 const tooManyTries = errorSchema(['too-many-tries']);
 
 export async function registerHostRoutes(app: FastifyInstance, options: HostRoutesOptions): Promise<void> {
-  const { access, devices, events, hub, now, joinLimits, onEventChanged, trustedProxy } = options;
+  const { access, devices, events, competition, hub, chain, now, joinLimits, onEventChanged, trustedProxy } = options;
 
   // Wrong passwords and wrong codes per client IP, in both modes (CLAUDE.md, rule 7). An
   // attempt is reserved before the slow check and cleared when it is right, so requests
@@ -230,7 +254,7 @@ export async function registerHostRoutes(app: FastifyInstance, options: HostRout
     '/api/event',
     {
       onRequest: access.requireViewer,
-      schema: { response: { 200: objectSchema({ event: eventSchema }), 401: notSignedIn } },
+      schema: { response: { 200: objectSchema({ event: nullableEventSchema }), 401: notSignedIn } },
     },
     async () => ({ event: events.current() }),
   );
@@ -239,15 +263,82 @@ export async function registerHostRoutes(app: FastifyInstance, options: HostRout
     '/api/event',
     {
       onRequest: access.requireHost,
-      schema: { body: eventBody, response: { 200: objectSchema({ event: eventSchema }), 400: badRequest, 401: notSignedIn } },
+      schema: { body: eventBody, response: { 200: objectSchema({ event: nullableEventSchema }), 400: badRequest, 401: notSignedIn } },
     },
     async (request, reply) => {
       const name = cleanEventName(request.body.name);
-      if (name === null) return fail(reply, 400, 'bad-request');
-      const event = events.setName(name);
+      const game = request.body.game === undefined ? undefined : cleanGameName(request.body.game);
+      if (name === null || game === null) return fail(reply, 400, 'bad-request');
+      const event = events.setName(name, game);
       onEventChanged();
       hub.broadcast({ type: 'event', event });
       return { event };
+    },
+  );
+
+  // A new event (docs/PLAN.md, "The setup wizard", "A new event"). It runs on the write chain,
+  // so the check for a running competition and the insert can't interleave with a start.
+  // The old event keeps its bracket or groups; the new one has no players until they sign up.
+  app.post<{ Body: EventBody; Reply: NewEventAnswer | ApiError }>(
+    '/api/events',
+    {
+      onRequest: access.requireHost,
+      schema: {
+        body: eventBody,
+        response: { 201: objectSchema({ event: eventInfoSchema }), 400: badRequest, 401: notSignedIn, 409: errorSchema(['bracket-running']) },
+      },
+    },
+    async (request, reply) => {
+      const name = cleanEventName(request.body.name);
+      const game = request.body.game === undefined ? undefined : cleanGameName(request.body.game);
+      if (name === null || game === null) return fail(reply, 400, 'bad-request');
+      return chain.run(async () => {
+        // A finished competition doesn't block a new event; one still being played does.
+        const oldId = events.currentId();
+        if (oldId !== null && (await competition.running(oldId, competition.handles()))) return fail(reply, 409, 'bracket-running');
+        const event = events.create(name, game);
+        // Before the screens are told, so a phone that reloads at once gets the new answer.
+        onEventChanged();
+        hub.broadcast({ type: 'event', event });
+        hub.broadcast({ type: 'players' });
+        hub.broadcast({ type: 'bracket' });
+        hub.broadcast({ type: 'heats' });
+        return reply.code(201).send({ event });
+      });
+    },
+  );
+
+  // The plan (docs/PLAN.md, "The setup wizard", "Storage and routes"). Host only: a phone, a
+  // Sign-up tablet, and a Display have no use for it. `isEventPlan` is the check (CLAUDE.md,
+  // rule 2); the schema keeps the body closed.
+  app.get<{ Reply: PlanAnswer | ApiError }>(
+    '/api/event/plan',
+    {
+      onRequest: access.requireHost,
+      schema: { response: { 200: objectSchema({ plan: { anyOf: [{ type: 'null' }, planSchema] } }), 401: notSignedIn } },
+    },
+    async () => ({ plan: events.plan() }),
+  );
+
+  app.put<{ Body: PlanBody; Reply: PlanNowAnswer | ApiError }>(
+    '/api/event/plan',
+    {
+      onRequest: access.requireHost,
+      schema: { body: planBody, response: { 200: objectSchema({ plan: planSchema }), 400: badRequest, 401: notSignedIn } },
+    },
+    async (request, reply) => {
+      const { plan } = request.body;
+      if (!isEventPlan(plan)) return fail(reply, 400, 'bad-request');
+      const before = events.plan()?.noShowMinutes ?? NO_SHOW_DEFAULT;
+      const { created, event } = events.setPlan(plan);
+      // The bracket and groups answers carry `noShowMinutes` from the plan.
+      onEventChanged();
+      if (created) hub.broadcast({ type: 'event', event });
+      if (plan.noShowMinutes !== before) {
+        hub.broadcast({ type: 'bracket' });
+        hub.broadcast({ type: 'heats' });
+      }
+      return { plan };
     },
   );
 

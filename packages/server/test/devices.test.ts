@@ -421,22 +421,22 @@ describe('the event', () => {
     const display = await pairDevice(app, host, 'display');
     const put = await call('PUT', '/api/event', { cookie: host, payload: { name: 'Summer Showdown' } });
     expect(put.statusCode).toBe(200);
-    expect(put.json()).toEqual({ event: { name: 'Summer Showdown' } });
+    expect(put.json()).toEqual({ event: { name: 'Summer Showdown', game: null } });
     for (const cookie of [host, display.cookie]) {
-      expect((await call('GET', '/api/event', { cookie })).json()).toEqual({ event: { name: 'Summer Showdown' } });
+      expect((await call('GET', '/api/event', { cookie })).json()).toEqual({ event: { name: 'Summer Showdown', game: null } });
     }
   });
 
   it('renames the same event instead of adding another', async () => {
     await call('PUT', '/api/event', { cookie: host, payload: { name: 'One' } });
     await call('PUT', '/api/event', { cookie: host, payload: { name: 'Two' } });
-    expect((await call('GET', '/api/event', { cookie: host })).json()).toEqual({ event: { name: 'Two' } });
+    expect((await call('GET', '/api/event', { cookie: host })).json()).toEqual({ event: { name: 'Two', game: null } });
     expect(db.prepare('SELECT COUNT(*) AS n FROM events').get()).toEqual({ n: 1 });
   });
 
   it('tidies the name: trims it and joins runs of spaces', async () => {
     const res = await call('PUT', '/api/event', { cookie: host, payload: { name: '  Friday \t Night   Brawl ' } });
-    expect(res.json()).toEqual({ event: { name: 'Friday Night Brawl' } });
+    expect(res.json()).toEqual({ event: { name: 'Friday Night Brawl', game: null } });
   });
 
   it.each([[''], ['   '], ['x'.repeat(61)], ['bad\u0000name'], ['zero​width'], ['x'.repeat(241)]])('refuses the name %j as bad-request', async (name) => {
@@ -444,12 +444,12 @@ describe('the event', () => {
     const res = await call('PUT', '/api/event', { cookie: host, payload: { name } });
     expect(res.statusCode).toBe(400);
     expect(res.json()).toEqual({ error: 'bad-request' });
-    expect((await call('GET', '/api/event', { cookie: host })).json()).toEqual({ event: { name: 'Kept' } });
+    expect((await call('GET', '/api/event', { cookie: host })).json()).toEqual({ event: { name: 'Kept', game: null } });
   });
 
   it('accepts a name of exactly 60 characters', async () => {
     const name = 'x'.repeat(60);
-    expect((await call('PUT', '/api/event', { cookie: host, payload: { name } })).json()).toEqual({ event: { name } });
+    expect((await call('PUT', '/api/event', { cookie: host, payload: { name } })).json()).toEqual({ event: { name, game: null } });
   });
 
   it.each([[{}], [{ name: 5 }], [{ name: 'A', extra: true }]])('answers bad-request for the body %j', async (payload) => {

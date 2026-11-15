@@ -788,22 +788,34 @@ sources that follow, and the host can change each one under "More options".
 | One life | n - 1, plus 1 from 4 players (the 3rd-place match) |
 | Two lives | 2n - 2 to 2n - 1 (the rematch for the title is played only sometimes) |
 | Everyone plays everyone | n(n - 1) / 2, up to 3 more for a tie-break; a three-way tie is 3 matches, and a bigger tie would add more, which the estimate doesn't count |
-| Groups | 4 players or fewer: 1 group, the final. More: `rounds` x ceil(n / 4), plus 1 for the final, plus 0 or 1 tie-break group |
+| Groups | 4 players or fewer: 1 group, the final. More: `rounds` x ceil(n / 4), plus 1 for the final, plus tie-break groups: up to 1 for 10 players or fewer, up to 3 from 11 (checked 2026-11-14 by playing 2016 runs of 5 to 32 players and 1 to 3 rounds through the engine; the 4, 3, 2, 1 table ties often, and a bigger tie needs several groups) |
 
 **Waves.** Matches at the same time are one **wave**. A plain count of matches times minutes
 divided by stations undercounts when there are several stations, because a round can't start
 before the round it needs has finished: 4 players in a one-life bracket on 8 stations is 4
 matches, which that count prices at half a match's time, but only 2 matches can be played
 at once (round 1), then the final and the 3rd-place match, so it takes 2 waves. So the
-estimate counts waves, with `s` stations, `M` matches, and `L`, the fewest waves the bracket's
-rounds allow:
+estimate counts waves, with `s` stations, `n` players, and `live` = min(s, floor(n / 2)), the
+most matches that can be played at once.
 
-| Format | Waves |
+| Format | Waves (low to high) |
 |---|---|
-| One life | max(ceil(M / s_eff), L), with `s_eff` = min(s, floor(n / 2)) and L = ceil(log2 n) |
-| Two lives | the same, with L = 2R or 2R + 1 (the rematch), where R = ceil(log2 n) |
-| Everyone plays everyone | the same, with L = n - 1 when n is even and n when n is odd (the number of rounds) |
-| Groups | `rounds` x ceil(ceil(n / 4) / s), plus 0 or 1 for the tie-break group, plus 1 for the final |
+| One life, Two lives | `simulateWaves` (below) over the bracket's rounds; Two lives adds 1 at the high end for the rematch for the title |
+| Everyone plays everyone | low = max(ceil(M / live), R), with M the matches without a tie-break and R = n - 1 rounds when n is even and n when n is odd; high = low + 3 for a tie-break round of 3 matches, which can't be played together |
+| Groups | up to 4 players: 1 wave. More: `rounds` x ceil(ceil(n / 4) / s) + 1 for the final, plus at the high end 1 wave for 10 players or fewer, or 2 waves from 11 (3 on one station, where each tie-break group is a wave) |
+
+**Elimination waves.** `simulateWaves` in `packages/core/src/estimate.ts` works the waves out
+round by round from the engine's real round sizes (checked 2026-11-14 against
+`brackets-manager` for 2 to 32 players; Two lives has the losers' rounds too). Each wave plays
+up to `live` matches from the rounds that are ready, the round that became ready first going
+first, as the queue does. A round is ready once every round it needs ended in an earlier wave,
+so the simulation treats a round as a whole, which is slightly stricter than the real bracket,
+where a match needs only its two feeders. The simple formula max(ceil(M / live), fewest rounds)
+that this section first had is not used: a round with more matches than stations takes several
+waves, and the formula missed 58 of 305 engine cases (12 players on 3 stations: it says 4
+waves, the engine needs 6). Everyone plays everyone has no rounds to wait for, so it keeps the
+simple formula; with many stations its waves can still run a few above the low end (2 or 3 were
+seen), which the high end's +3 covers.
 
 **Minutes.** One match in a bracket takes minutes per game x games played + changeover
 minutes. Games played is 1 for best of 1, 2.5 for best of 3, and 4.125 for best of 5, the
@@ -822,10 +834,17 @@ and shows the two that save the most time: add a station, pick One life, play be
 offered when it applies to the plan, such as One life for Two lives.
 
 **The code.** `packages/core/src/estimate.ts`, pure and tested for 2 to 32 players in every
-format. A server test checks the waves against the real engine: it plays a bracket out in
-batches (`playOutInBatches` in `packages/server/test/bracket-helpers.ts`, which records a
-result for every match on a station, then rebuilds once) and counts the batches. The
-estimated waves, low and high, must be within max(1, 10%) of the batches counted.
+format. A server test (`packages/server/test/estimate-calibration.test.ts`) checks the waves
+against the real engines. It plays a bracket out in batches (`playOutCountingBatches` in
+`packages/server/test/bracket-helpers.ts`, which records a result for every match on a
+station, then rebuilds once) and groups the same way (`heat-helpers.ts`), and counts the
+batches. The batches must be within the estimate's [low, high] widened by max(1, 10% of
+high) either way (a tolerance of ceil(10% of high) waves, at least 1), for 12 sizes from 2 to
+32 players (to 12 for everyone plays everyone) on 1, 2, 3, 4, and 8 stations, with random
+winners over 3 seeds, and 1 to 3 rounds for groups. Everyone plays everyone is
+measured only when its ties need no more than the one tie-break round of 3 matches that the
+estimate counts: a loop among 3 players that repeats, or a tie of 4 or more, needs 6 or more
+tie-break matches and ran past the high end in 10 of 120 runs (2026-11-15).
 
 **Examples.** 16 players in Two lives, best of 1, 1 station, 5 + 4 = 9 minutes a match: 30 to
 31 matches in 30 to 31 waves, which is 270 to 279 minutes. The screen shows about 4 hours 45

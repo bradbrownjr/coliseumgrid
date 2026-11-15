@@ -40,15 +40,20 @@ describe('live messages', () => {
     expect(parseLiveMessage('{"type":"unpaired"}')).toEqual({ type: 'unpaired' });
     expect(parseLiveMessage('{"type":"bracket"}')).toEqual({ type: 'bracket' });
     expect(parseLiveMessage('{"type":"heats"}')).toEqual({ type: 'heats' });
-    expect(parseLiveMessage('{"type":"event","event":{"name":"Spring Bash"}}')).toEqual({
+    expect(parseLiveMessage('{"type":"event","event":{"name":"Spring Bash","game":"Tag"}}')).toEqual({
       type: 'event',
-      event: { name: 'Spring Bash' },
+      event: { name: 'Spring Bash', game: 'Tag' },
+    });
+    // A game that is missing or not text is no game.
+    expect(parseLiveMessage('{"type":"event","event":{"name":"Spring Bash","game":null}}')).toEqual({
+      type: 'event',
+      event: { name: 'Spring Bash', game: null },
     });
     expect(parseLiveMessage('{"type":"event","event":null}')).toEqual({ type: 'event', event: null });
   });
 
   it('keeps only the fields it knows', () => {
-    expect(parseLiveMessage('{"type":"event","event":{"name":"A","extra":1}}')).toEqual({ type: 'event', event: { name: 'A' } });
+    expect(parseLiveMessage('{"type":"event","event":{"name":"A","extra":1}}')).toEqual({ type: 'event', event: { name: 'A', game: null } });
   });
 
   it('ignores anything else', () => {

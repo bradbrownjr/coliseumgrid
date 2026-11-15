@@ -278,14 +278,14 @@ describe('POST /api/heats', () => {
   it('puts the heats in the current event, naming one if the host has not', async () => {
     expect((await host('GET', '/api/event')).json()).toEqual({ event: null });
     await make(5);
-    expect((await host('GET', '/api/event')).json()).toEqual({ event: { name: 'ColiseumGrid' } });
+    expect((await host('GET', '/api/event')).json()).toEqual({ event: { name: 'ColiseumGrid', game: null } });
     expect(db.prepare('SELECT e.name FROM heat_runs r JOIN events e ON e.id = r.event_id').get()).toEqual({ name: 'ColiseumGrid' });
   });
 
   it('keeps the event the host named', async () => {
     await host('PUT', '/api/event', { name: 'Friday night' });
     await make(5);
-    expect((await host('GET', '/api/event')).json()).toEqual({ event: { name: 'Friday night' } });
+    expect((await host('GET', '/api/event')).json()).toEqual({ event: { name: 'Friday night', game: null } });
     expect(count('events')).toBe(1);
   });
 });

@@ -254,7 +254,7 @@ describe('the answer', () => {
     const random = createSeededRandom(6);
     const run = await playOut(await start('double', 6, 6, 2), random, randomPick(random));
     expect(Object.keys(run.bracket).sort()).toEqual(
-      ['finished', 'format', 'bestOf', 'id', 'lateOpen', 'lastResultId', 'matches', 'standings', 'stations', 'ties', 'upNext'].sort(),
+      ['finished', 'format', 'bestOf', 'id', 'lateOpen', 'lastResultId', 'noShowMinutes', 'matches', 'standings', 'stations', 'ties', 'upNext'].sort(),
     );
     const walk = (value: unknown): void => {
       if (Array.isArray(value)) return value.forEach(walk);
@@ -263,7 +263,7 @@ describe('the answer', () => {
       Object.values(value).forEach(walk);
     };
     walk(run.bracket);
-    for (const m of run.bracket.matches) expect(Object.keys(m).sort()).toEqual(['id', 'number', 'resultId', 'round', 'side', 'slots', 'status', 'winner']);
+    for (const m of run.bracket.matches) expect(Object.keys(m).sort()).toEqual(['forfeit', 'id', 'number', 'resultId', 'round', 'side', 'slots', 'status', 'winner']);
   });
 
   it('is the same every time for the same state', async () => {

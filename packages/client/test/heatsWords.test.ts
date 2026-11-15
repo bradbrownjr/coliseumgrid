@@ -15,6 +15,7 @@ function heats(extra: Partial<Heats> = {}): Heats {
     finished: false,
     lateOpen: false,
     lastResultId: null,
+    noShowMinutes: 5,
     round: 1,
     stations: [],
     upNext: [],

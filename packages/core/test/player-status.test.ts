@@ -25,7 +25,7 @@ const p = (id: number): Player => ({ id, handle: `P${id}` });
 /** A match. A number is a known player, null an unknown one, 'bye' an empty slot. */
 function match(id: number, status: MatchStatus, a: number | null | 'bye', b: number | null | 'bye', side: MatchSide = 'main', round = 1): BracketMatch {
   const slot = (v: number | null | 'bye') => ({ player: typeof v === 'number' ? p(v) : null, bye: v === 'bye' });
-  return { id, side, round, number: id, status, slots: [slot(a), slot(b)], winner: null, resultId: null };
+  return { id, side, round, number: id, status, slots: [slot(a), slot(b)], winner: null, forfeit: false, resultId: null };
 }
 
 interface BracketPieces {
@@ -47,6 +47,7 @@ function bracket({ matches, stations, upNext = [], finished = false, places = []
     finished,
     lateOpen: false,
     lastResultId: null,
+    noShowMinutes: 5,
     stations: stations.map((id, i) => ({ number: i + 1, match: id === null ? null : byId(id), calledAt: null })),
     upNext: upNext.map(byId),
     matches,
@@ -56,7 +57,7 @@ function bracket({ matches, stations, upNext = [], finished = false, places = []
 }
 
 function heat(id: number, status: Heat['status'], players: number[], kind: HeatKind = 'round', round = 1): Heat {
-  return { id, kind, round, number: id % 100, status, players: players.map(p), order: null, resultId: null };
+  return { id, kind, round, number: id % 100, status, players: players.map(p), order: null, missing: [], resultId: null };
 }
 
 interface HeatsPieces {
@@ -80,6 +81,7 @@ function groups({ heats, stations, upNext = [], round = 1, finished = false, fin
     finished,
     lateOpen: false,
     lastResultId: null,
+    noShowMinutes: 5,
     round,
     stations: stations.map((id, i) => ({ number: i + 1, heat: id === null ? null : byId(id), calledAt: null })),
     upNext: upNext.map(byId),

@@ -143,7 +143,7 @@ describe('messages', () => {
     const connection = await connect(display.cookie);
     expect((await put('Summer Showdown')).statusCode).toBe(200);
     // The message is queued before the PUT answers; waitFor covers only the in-memory stream hop.
-    await vi.waitFor(() => expect(connection.messages).toEqual([{ type: 'event', event: { name: 'Summer Showdown' } }]));
+    await vi.waitFor(() => expect(connection.messages).toEqual([{ type: 'event', event: { name: 'Summer Showdown', game: null } }]));
   });
 
   it('sends every change to every connection, host and devices alike', async () => {
@@ -155,8 +155,8 @@ describe('messages', () => {
     for (const connection of connections) {
       await vi.waitFor(() =>
         expect(connection.messages).toEqual([
-          { type: 'event', event: { name: 'One' } },
-          { type: 'event', event: { name: 'Two' } },
+          { type: 'event', event: { name: 'One', game: null } },
+          { type: 'event', event: { name: 'Two', game: null } },
         ]),
       );
     }
@@ -167,7 +167,7 @@ describe('messages', () => {
     const connection = await connect(display.cookie);
     expect((await put('')).statusCode).toBe(400);
     await put('Marker');
-    await vi.waitFor(() => expect(connection.messages).toEqual([{ type: 'event', event: { name: 'Marker' } }]));
+    await vi.waitFor(() => expect(connection.messages).toEqual([{ type: 'event', event: { name: 'Marker', game: null } }]));
   });
 
   it('sends { type: "players" } after each change to the player list, and only then', async () => {
@@ -194,12 +194,12 @@ describe('messages', () => {
 
     await vi.waitFor(() =>
       expect(connection.messages).toEqual([
-        { type: 'event', event: { name: 'ColiseumGrid' } },
+        { type: 'event', event: { name: 'ColiseumGrid', game: null } },
         { type: 'players' },
         { type: 'players' },
         { type: 'players' },
         { type: 'players' },
-        { type: 'event', event: { name: 'End marker' } },
+        { type: 'event', event: { name: 'End marker', game: null } },
       ]),
     );
   });
@@ -210,7 +210,7 @@ describe('messages', () => {
     await put('Names only');
     await withCookie(app, host, { method: 'POST', url: '/api/players', payload: { handle: 'Zap' } });
     await vi.waitFor(() => expect(connection.messages).toHaveLength(2));
-    expect(JSON.stringify(connection.messages)).toBe('[{"type":"event","event":{"name":"Names only"}},{"type":"players"}]');
+    expect(JSON.stringify(connection.messages)).toBe('[{"type":"event","event":{"name":"Names only","game":null}},{"type":"players"}]');
   });
 });
 
@@ -231,7 +231,7 @@ describe('unpairing', () => {
     await rejected(display.cookie);
     // The other device is untouched and still gets updates.
     await put('Still here');
-    await vi.waitFor(() => expect(bystander.messages).toEqual([{ type: 'event', event: { name: 'Still here' } }]));
+    await vi.waitFor(() => expect(bystander.messages).toEqual([{ type: 'event', event: { name: 'Still here', game: null } }]));
     expect(bystander.closed).toBeUndefined();
   });
 

@@ -29,7 +29,7 @@ export interface BracketStore {
 export function createBracketStore(db: Database): BracketStore {
   const byEvent = db.prepare('SELECT id, format, best_of, stations, seeding, created_at FROM brackets WHERE event_id = ?');
   const results = db.prepare(
-    'SELECT id, match_id, winner_id, loser_id, at, undone_step, undone_at FROM bracket_results WHERE bracket_id = ? ORDER BY id',
+    'SELECT id, match_id, winner_id, loser_id, at, forfeit, undone_step, undone_at FROM bracket_results WHERE bracket_id = ? ORDER BY id',
   );
   const lateJoins = db.prepare('SELECT player_id, step FROM bracket_late_joins WHERE bracket_id = ? ORDER BY position');
   const tieBreaks = db.prepare(
@@ -46,7 +46,7 @@ export function createBracketStore(db: Database): BracketStore {
   const clearLate = db.prepare('DELETE FROM bracket_late_joins WHERE bracket_id = ?');
   const clearTies = db.prepare('DELETE FROM bracket_tie_breaks WHERE bracket_id = ?');
   const insertResult = db.prepare(
-    'INSERT INTO bracket_results (id, bracket_id, match_id, winner_id, loser_id, at, undone_step, undone_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO bracket_results (id, bracket_id, match_id, winner_id, loser_id, at, forfeit, undone_step, undone_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
   );
   const insertLate = db.prepare('INSERT INTO bracket_late_joins (bracket_id, position, player_id, step) VALUES (?, ?, ?, ?)');
   const insertTie = db.prepare(
@@ -86,7 +86,8 @@ export function createBracketStore(db: Database): BracketStore {
           winnerId: r['winner_id'] as number,
           loserId: r['loser_id'] as number,
           at: r['at'] as string,
-          // The field is left off a result that stands, as the engine writes it.
+          // Both fields are left off a result that has no such mark, as the engine writes it.
+          ...(r['forfeit'] === 1 ? { forfeit: true as const } : {}),
           ...(r['undone_step'] === null ? {} : { undone: { step: r['undone_step'] as number, at: r['undone_at'] as string } }),
         })),
         tieBreaks: tieBreaks.all(id).map((r) => ({
@@ -111,7 +112,7 @@ export function createBracketStore(db: Database): BracketStore {
           insertBracket.run(settings.id, eventId, settings.format, settings.bestOf, settings.stations, seeding, settings.createdAt);
         }
         for (const r of state.results) {
-          insertResult.run(r.id, settings.id, r.matchId, r.winnerId, r.loserId, r.at, r.undone?.step ?? null, r.undone?.at ?? null);
+          insertResult.run(r.id, settings.id, r.matchId, r.winnerId, r.loserId, r.at, r.forfeit ? 1 : 0, r.undone?.step ?? null, r.undone?.at ?? null);
         }
         state.lateJoins.forEach((j, position) => insertLate.run(settings.id, position, j.playerId, j.step));
         state.tieBreaks.forEach((t, position) => insertTie.run(settings.id, position, t.round, t.players[0], t.players[1], t.step));

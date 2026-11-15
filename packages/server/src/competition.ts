@@ -11,7 +11,7 @@
 // cache"): a 32-player round robin takes 258 ms to rebuild, and every phone reloads on every
 // result. Whatever changes the answer calls `drop`.
 
-import type { Bracket, Heats } from '@coliseumgrid/core';
+import { NO_SHOW_DEFAULT, type Bracket, type Heats } from '@coliseumgrid/core';
 import { bracketAnswer, type BracketState, type HandleLookup } from './bracket-engine.ts';
 import type { BracketStore } from './bracket-store.ts';
 import { inTransaction, type Database } from './database.ts';
@@ -23,6 +23,12 @@ import type { Players } from './players.ts';
 export interface Competition {
   /** Every current handle, read when an answer is made so a rename shows at once. */
   handles(): HandleLookup;
+  /**
+   * How long a station's wait is before the host is asked about a missing player, from the
+   * event's plan, or `NO_SHOW_DEFAULT` when it has none. Read when an answer is made, with
+   * the handles, so a plan change shows once the answer is rebuilt.
+   */
+  noShowMinutes(): number;
   /** True if the event has a bracket or heats that isn't finished. */
   running(eventId: number, handles: HandleLookup): Promise<boolean>;
   /**
@@ -54,12 +60,14 @@ export function createCompetition(
   brackets: BracketStore,
   heats: HeatStore,
   players: Players,
-  events: Pick<Events, 'currentId'>,
+  events: Pick<Events, 'currentId' | 'plan'>,
   /** Called each time an answer is built, so a test can see whether the kept one was used. */
   onBuild?: () => void,
 ): Competition {
   let kept: Promise<Bracket | Heats | null> | null = null;
   const listeners: (() => void)[] = [];
+
+  const noShowMinutes = (): number => events.plan()?.noShowMinutes ?? NO_SHOW_DEFAULT;
 
   /** Reads everything it needs before its first await, so the answer is one moment of the database. */
   async function build(): Promise<Bracket | Heats | null> {
@@ -67,10 +75,11 @@ export function createCompetition(
     const eventId = events.currentId();
     if (eventId === null) return null;
     const handles = new Map(players.list().map((p) => [p.id, p.handle]));
+    const noShow = noShowMinutes();
     const bracket = brackets.load(eventId);
-    if (bracket) return bracketAnswer(bracket, handles);
+    if (bracket) return bracketAnswer(bracket, handles, noShow);
     const run = heats.load(eventId);
-    return run ? heatsAnswer(run, handles) : null;
+    return run ? heatsAnswer(run, handles, noShow) : null;
   }
 
   function drop(): void {
@@ -80,6 +89,7 @@ export function createCompetition(
 
   return {
     handles: () => new Map(players.list().map((p) => [p.id, p.handle])),
+    noShowMinutes,
     async running(eventId, handles) {
       const bracket = brackets.load(eventId);
       if (bracket && !(await bracketAnswer(bracket, handles)).finished) return true;

@@ -2,16 +2,18 @@
 // body or an answer, so a field added to a handler later can't leave the server unless it is
 // added here too (CLAUDE.md, rule 1).
 
-import type {
-  ApiError,
-  ApiErrorCode,
-  BracketFormat,
-  FollowStatus,
-  HandleRefusal,
-  HeatKind,
-  HeatStatus,
-  MatchSide,
-  MatchStatus,
+import {
+  PLAN_FORMATS,
+  PLAN_TEMPLATES,
+  type ApiError,
+  type ApiErrorCode,
+  type BracketFormat,
+  type FollowStatus,
+  type HandleRefusal,
+  type HeatKind,
+  type HeatStatus,
+  type MatchSide,
+  type MatchStatus,
 } from '@coliseumgrid/core';
 import type { FastifyReply } from 'fastify';
 
@@ -35,8 +37,12 @@ export function errorSchema(codes: string[], withReason = false) {
   } as const;
 }
 
-export function objectSchema(properties: Record<string, object>) {
-  return { type: 'object', properties, required: Object.keys(properties), additionalProperties: false } as const;
+/**
+ * A closed object: every field in `properties` is required, and the ones in `optional` may be
+ * left out. Nothing else is accepted.
+ */
+export function objectSchema(properties: Record<string, object>, optional: Record<string, object> = {}) {
+  return { type: 'object', properties: { ...properties, ...optional }, required: Object.keys(properties), additionalProperties: false } as const;
 }
 
 // The id arrives as a string (Fastify is told not to coerce types, see app.ts), so the schema
@@ -61,6 +67,28 @@ export function refuse(reply: FastifyReply, error: ApiErrorCode, statuses: Recor
 export const playerSchema = objectSchema({ id: { type: 'integer' }, handle: { type: 'string' } });
 
 const nullable = (schema: object) => ({ anyOf: [{ type: 'null' }, schema] }) as const;
+
+/** An event leaves the server as its name and game, and nothing else (CLAUDE.md, rule 1). */
+export const eventInfoSchema = objectSchema({ name: { type: 'string' }, game: { type: ['string', 'null'] } });
+export const nullableEventSchema = nullable(eventInfoSchema);
+
+/**
+ * The event's plan (docs/PLAN.md, "The setup wizard"), closed. `isEventPlan` checks the
+ * ranges; the schema fixes the shape, so the body and the answer name every field.
+ */
+export const planSchema = objectSchema({
+  template: { type: 'string', enum: [...PLAN_TEMPLATES] },
+  format: { type: 'string', enum: [...PLAN_FORMATS] },
+  bestOf: { type: 'integer', enum: [1, 3, 5] },
+  races: { type: 'integer' },
+  rounds: { type: 'integer' },
+  points: { type: 'array', items: { type: 'integer' }, minItems: 4, maxItems: 4 },
+  stations: { type: 'integer' },
+  minutesPerGame: { type: 'integer' },
+  changeoverMinutes: { type: 'integer' },
+  hours: { type: 'integer' },
+  noShowMinutes: { type: 'integer' },
+});
 
 // Brackets (docs/PLAN.md, "Brackets API"). Each shape names every field, and the enums are
 // written as Records so a word added to core fails the type check until it is listed here.
@@ -92,6 +120,7 @@ const matchSchema = objectSchema({
   status: { type: 'string', enum: MATCH_STATUSES },
   slots: { type: 'array', items: slotSchema, minItems: 2, maxItems: 2 },
   winner: { type: ['integer', 'null'] },
+  forfeit: { type: 'boolean' },
   resultId: { type: ['integer', 'null'] },
 });
 
@@ -112,6 +141,7 @@ export const bracketSchema = objectSchema({
   finished: { type: 'boolean' },
   lateOpen: { type: 'boolean' },
   lastResultId: { type: ['integer', 'null'] },
+  noShowMinutes: { type: 'integer' },
   stations: {
     type: 'array',
     items: objectSchema({ number: { type: 'integer' }, match: nullable(matchSchema), calledAt: { type: ['string', 'null'] } }),
@@ -136,6 +166,7 @@ const heatSchema = objectSchema({
   status: { type: 'string', enum: HEAT_STATUSES },
   players: { type: 'array', items: playerSchema },
   order: nullable({ type: 'array', items: playerSchema }),
+  missing: { type: 'array', items: playerSchema },
   resultId: { type: ['integer', 'null'] },
 });
 
@@ -154,6 +185,7 @@ export const heatsSchema = objectSchema({
   finished: { type: 'boolean' },
   lateOpen: { type: 'boolean' },
   lastResultId: { type: ['integer', 'null'] },
+  noShowMinutes: { type: 'integer' },
   round: { type: ['integer', 'null'] },
   stations: {
     type: 'array',
@@ -213,7 +245,7 @@ const phoneStandingsSchema = nullable({
 });
 
 export const phoneAnswerSchema = objectSchema({
-  event: { anyOf: [{ type: 'null' }, objectSchema({ name: { type: 'string' } })] },
+  event: nullableEventSchema,
   following: { type: 'array', items: followedPlayerSchema },
   standings: phoneStandingsSchema,
 });

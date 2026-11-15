@@ -28,6 +28,7 @@ const group = (ids: number[], kind: HeatKind = 'round', number = 1, status: Heat
   status,
   players: ids.map((id) => player(id)),
   order: null,
+  missing: [],
   resultId: null,
 });
 
@@ -40,6 +41,7 @@ function heats(extra: Partial<Heats> = {}): Heats {
     finished: false,
     lateOpen: false,
     lastResultId: null,
+    noShowMinutes: 5,
     round: 1,
     stations: [],
     upNext: [],
@@ -80,7 +82,7 @@ describe('station cards', () => {
 
   it('keeps a bracket card as it was: the note only for a tie-break match', () => {
     const slots = [{ player: player(1), bye: false }, { player: player(2), bye: false }] as const;
-    const base = { id: 1, round: 1, number: 1, status: 'playing' as const, slots: [...slots] as [typeof slots[0], typeof slots[1]], winner: null, resultId: null };
+    const base = { id: 1, round: 1, number: 1, status: 'playing' as const, slots: [...slots] as [typeof slots[0], typeof slots[1]], winner: null, forfeit: false, resultId: null };
     const cards = bracketStationCards([
       { number: 1, match: { ...base, side: 'main' }, calledAt: 'x' },
       { number: 2, match: { ...base, side: 'tie-break' }, calledAt: 'y' },
@@ -102,7 +104,7 @@ describe('Up next', () => {
   it('keeps "Tie-break:" and "vs" for a bracket', () => {
     const slot = (id: number | null) => ({ player: id === null ? null : player(id), bye: false });
     const entries = bracketUpNext([
-      { id: 7, side: 'tie-break', round: 1, number: 1, status: 'ready', slots: [slot(1), slot(null)], winner: null, resultId: null },
+      { id: 7, side: 'tie-break', round: 1, number: 1, status: 'ready', slots: [slot(1), slot(null)], winner: null, forfeit: false, resultId: null },
     ]);
     expect(entries[0]).toMatchObject({ prefix: 'Tie-break:', names: ['P1', 'Waiting'], separator: 'vs' });
   });

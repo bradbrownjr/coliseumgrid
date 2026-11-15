@@ -96,7 +96,7 @@ describe('event_players', () => {
   it('names an event when a player signs up before the host has, and keeps the host\'s name after', async () => {
     expect((await host('GET', '/api/event')).json()).toEqual({ event: null });
     const zap = await signUp('Zap');
-    expect((await host('GET', '/api/event')).json()).toEqual({ event: { name: 'ColiseumGrid' } });
+    expect((await host('GET', '/api/event')).json()).toEqual({ event: { name: 'ColiseumGrid', game: null } });
     expect(await inEvent()).toEqual([zap]);
     // The host names it later: the same event, so Zap stays in it.
     await host('PUT', '/api/event', { name: 'Friday' });

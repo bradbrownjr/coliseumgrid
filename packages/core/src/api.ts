@@ -1,6 +1,7 @@
 // The players API's request and answer shapes (docs/PLAN.md, "Players API"), shared so the
 // server and the client can't drift apart. Types only: nothing here runs.
 
+import type { EventPlan } from './event-plan.ts';
 import type { HandleRefusal } from './handle.ts';
 
 /** The only player fields that leave the server (CLAUDE.md, rule 1). */
@@ -96,6 +97,8 @@ export interface Device {
 
 export interface EventInfo {
   name: string;
+  /** What the event plays, as the host typed it (M7); null when left empty. Event data, never code. */
+  game: string | null;
 }
 
 /** GET /api/host/session */
@@ -142,9 +145,32 @@ export interface EventAnswer {
   event: EventInfo | null;
 }
 
-/** PUT /api/event */
+/** PUT /api/event and POST /api/events. On PUT, a `game` left out keeps the stored one and an empty string clears it. */
 export interface EventBody {
   name: string;
+  game?: string;
+}
+
+/** POST /api/events (M7): 201, the new current event. */
+export interface NewEventAnswer {
+  event: EventInfo;
+}
+
+// The event's plan (docs/PLAN.md, "The setup wizard"), from M7. Host only.
+
+/** GET /api/event/plan: null when the event has no plan or its plan can't be read. */
+export interface PlanAnswer {
+  plan: EventPlan | null;
+}
+
+/** PUT /api/event/plan: the server answers 400 `bad-request` unless `isEventPlan` accepts it. */
+export interface PlanBody {
+  plan: EventPlan;
+}
+
+/** PUT /api/event/plan */
+export interface PlanNowAnswer {
+  plan: EventPlan;
 }
 
 /** Messages the server sends on GET /api/live. */
@@ -195,6 +221,8 @@ export interface BracketMatch {
   slots: [BracketSlot, BracketSlot];
   /** Index of the winning slot, or null before a result. */
   winner: 0 | 1 | null;
+  /** M7: the winner won because the other player didn't come (docs/PLAN.md, "Waiting for a missing player"). */
+  forfeit: boolean;
   /** The result to undo; null until the match is done. */
   resultId: number | null;
 }
@@ -229,6 +257,8 @@ export interface Bracket {
   /** True while the host can still add a player. */
   lateOpen: boolean;
   lastResultId: number | null;
+  /** M7: minutes after `calledAt` when a station's wait is over; 5 when the event has no plan. */
+  noShowMinutes: number;
   stations: BracketStation[];
   upNext: BracketMatch[];
   matches: BracketMatch[];
@@ -259,6 +289,8 @@ export interface NewBracketBody {
 export interface BracketResultBody {
   matchId: number;
   winnerId: number;
+  /** M7: true when `winnerId` is the player who came and the other didn't. False when left out. */
+  forfeit?: boolean;
 }
 
 /** POST /api/bracket/results */
@@ -306,6 +338,8 @@ export interface Heat {
   players: Player[];
   /** The finishing order once recorded, 1st first. */
   order: Player[] | null;
+  /** M7: players who didn't come, empty when none and before a result. They score 0 points. */
+  missing: Player[];
   /** The result to undo; null until the heat is done. */
   resultId: number | null;
 }
@@ -339,6 +373,8 @@ export interface Heats {
   /** True while the host can still add a player. */
   lateOpen: boolean;
   lastResultId: number | null;
+  /** M7: minutes after `calledAt` when a station's wait is over; 5 when the event has no plan. */
+  noShowMinutes: number;
   /** The qualifying round being played; null once qualifying is over (tie-breaks and the final). */
   round: number | null;
   stations: HeatStation[];
@@ -377,8 +413,10 @@ export interface NewHeatsBody {
 /** POST /api/heats/results */
 export interface HeatResultBody {
   heatId: number;
-  /** Every player of the heat once, 1st first. */
+  /** The players who played, 1st first. With no `missing`, every player of the heat once. At least one. */
   order: number[];
+  /** M7: the players who didn't come. `order` and `missing` together are the heat's players, each once. Empty when left out. */
+  missing?: number[];
 }
 
 /** POST /api/heats/results */

@@ -29,7 +29,7 @@ const blaze: Player = { id: 3, handle: 'Blaze' };
 const moe: Player = { id: 4, handle: 'Moe' };
 
 function heat(id: number, over: Partial<Heat> = {}): Heat {
-  return { id, kind: 'round', round: 1, number: id, status: 'ready', players: [zap, kai, blaze, moe], order: null, resultId: null, ...over };
+  return { id, kind: 'round', round: 1, number: id, status: 'ready', players: [zap, kai, blaze, moe], order: null, missing: [], resultId: null, ...over };
 }
 
 function heats(over: Partial<Heats> = {}): Heats {
@@ -41,6 +41,7 @@ function heats(over: Partial<Heats> = {}): Heats {
     finished: false,
     lateOpen: true,
     lastResultId: null,
+    noShowMinutes: 5,
     round: 1,
     stations: [],
     upNext: [],

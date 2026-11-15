@@ -69,7 +69,8 @@ const newBracketBody = objectSchema({
   // No size limit here: too few and too many have their own error codes.
   playerIds: { type: 'array', items: idSchema, maxItems: 1000 },
 });
-const resultBody = objectSchema({ matchId: { type: 'integer', minimum: 0 }, winnerId: idSchema });
+// `forfeit` is optional and false when left out: the winner came and the other didn't.
+const resultBody = objectSchema({ matchId: { type: 'integer', minimum: 0 }, winnerId: idSchema }, { forfeit: { type: 'boolean' } });
 const undoBody = objectSchema({ resultId: idSchema });
 const playerBody = objectSchema({ playerId: idSchema });
 
@@ -108,14 +109,14 @@ export async function registerBracketRoutes(app: FastifyInstance, options: Brack
    */
   const change = (
     reply: FastifyReply,
-    work: (state: BracketState, handles: HandleLookup) => Promise<EngineAnswer>,
+    work: (state: BracketState, handles: HandleLookup, noShowMinutes: number) => Promise<EngineAnswer>,
     statuses: Record<string, number>,
     saved?: () => void,
   ): Promise<FastifyReply | BracketNowAnswer> =>
     chain.run(async () => {
       const found = current();
       if (!found) return fail(reply, 404, 'no-bracket');
-      const answer = await work(found.state, handleLookup());
+      const answer = await work(found.state, handleLookup(), competition.noShowMinutes());
       if (!answer.ok) return refuse(reply, answer.error, statuses);
       const bracket = commit(found.eventId, answer);
       saved?.();
@@ -132,7 +133,7 @@ export async function registerBracketRoutes(app: FastifyInstance, options: Brack
       // Both reads happen before the first await, so they see one moment.
       const found = current();
       const handles = handleLookup();
-      return { bracket: found ? await bracketAnswer(found.state, handles) : null };
+      return { bracket: found ? await bracketAnswer(found.state, handles, competition.noShowMinutes()) : null };
     },
   );
 
@@ -158,7 +159,7 @@ export async function registerBracketRoutes(app: FastifyInstance, options: Brack
         if (eventId !== null && (await competition.running(eventId, handles))) return fail(reply, 409, 'bracket-running');
         const { format, bestOf, stations, playerIds } = request.body;
         const answer = await createBracket(
-          { id: store.nextBracketId(), format, bestOf, stations, playerIds, createdAt: iso(now()) },
+          { id: store.nextBracketId(), format, bestOf, stations, playerIds, createdAt: iso(now()), noShowMinutes: competition.noShowMinutes() },
           secureRandom,
           handles,
         );
@@ -191,10 +192,11 @@ export async function registerBracketRoutes(app: FastifyInstance, options: Brack
       },
     },
     async (request, reply) => {
-      const { matchId, winnerId } = request.body;
+      const { matchId, winnerId, forfeit } = request.body;
       const answer = await change(
         reply,
-        (state, handles) => recordResult(state, { id: store.nextResultId(), matchId, winnerId, at: iso(now()) }, handles),
+        (state, handles, noShow) =>
+          recordResult(state, { id: store.nextResultId(), matchId, winnerId, at: iso(now()), ...(forfeit !== undefined && { forfeit }) }, handles, noShow),
         { 'not-found': 404, 'not-on-station': 409, 'bad-request': 400 },
       );
       if (!('bracket' in answer)) return answer;
@@ -221,7 +223,7 @@ export async function registerBracketRoutes(app: FastifyInstance, options: Brack
     async (request, reply) =>
       change(
         reply,
-        (state, handles) => undoResult(state, { resultId: request.body.resultId, at: iso(now()) }, handles),
+        (state, handles, noShow) => undoResult(state, { resultId: request.body.resultId, at: iso(now()) }, handles, noShow),
         { 'undo-later-first': 409, 'nothing-to-undo': 409 },
       ),
   );
@@ -244,7 +246,7 @@ export async function registerBracketRoutes(app: FastifyInstance, options: Brack
     async (request, reply) =>
       change(
         reply,
-        (state, handles) => joinLate(state, request.body.playerId, handles),
+        (state, handles, noShow) => joinLate(state, request.body.playerId, handles, noShow),
         { 'not-found': 404, 'late-closed': 409, 'already-in': 409 },
         // A late player is here now, so the event lists them, once the bracket is saved.
         () => void eventPlayers.add(request.body.playerId),
@@ -257,7 +259,7 @@ export async function registerBracketRoutes(app: FastifyInstance, options: Brack
       onRequest: access.requireHost,
       schema: { response: { 200: nowAnswer, 401: notSignedIn, 404: noBracket, 409: errorSchema(['no-tie']) } },
     },
-    async (_request, reply) => change(reply, (state, handles) => startTieBreak(state, handles), { 'no-tie': 409 }),
+    async (_request, reply) => change(reply, (state, handles, noShow) => startTieBreak(state, handles, noShow), { 'no-tie': 409 }),
   );
 
   app.delete(

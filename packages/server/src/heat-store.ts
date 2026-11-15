@@ -29,7 +29,7 @@ export interface HeatStore {
 export function createHeatStore(db: Database): HeatStore {
   const byEvent = db.prepare('SELECT id, stations, races, rounds, points, seeding, created_at FROM heat_runs WHERE event_id = ?');
   const results = db.prepare(
-    'SELECT id, heat_id, finish_order, at, undone_step, undone_at FROM heat_results WHERE run_id = ? ORDER BY id',
+    'SELECT id, heat_id, finish_order, missing, at, undone_step, undone_at FROM heat_results WHERE run_id = ? ORDER BY id',
   );
   const lateJoins = db.prepare('SELECT player_id, heat_id, step FROM heat_late_joins WHERE run_id = ? ORDER BY position');
   const tieBreaks = db.prepare('SELECT players, step FROM heat_tie_breaks WHERE run_id = ? ORDER BY position');
@@ -44,7 +44,7 @@ export function createHeatStore(db: Database): HeatStore {
   const clearLate = db.prepare('DELETE FROM heat_late_joins WHERE run_id = ?');
   const clearTies = db.prepare('DELETE FROM heat_tie_breaks WHERE run_id = ?');
   const insertResult = db.prepare(
-    'INSERT INTO heat_results (id, run_id, heat_id, finish_order, at, undone_step, undone_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO heat_results (id, run_id, heat_id, finish_order, missing, at, undone_step, undone_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
   );
   const insertLate = db.prepare('INSERT INTO heat_late_joins (run_id, position, player_id, heat_id, step) VALUES (?, ?, ?, ?, ?)');
   const insertTie = db.prepare('INSERT INTO heat_tie_breaks (run_id, position, players, step) VALUES (?, ?, ?, ?)');
@@ -90,7 +90,8 @@ export function createHeatStore(db: Database): HeatStore {
           heatId: r['heat_id'] as number,
           order: JSON.parse(r['finish_order'] as string) as number[],
           at: r['at'] as string,
-          // The field is left off a result that stands, as the engine writes it.
+          // Both fields are left off a result that has no such mark, as the engine writes them.
+          ...(r['missing'] === null ? {} : { missing: JSON.parse(r['missing'] as string) as number[] }),
           ...(r['undone_step'] === null ? {} : { undone: { step: r['undone_step'] as number, at: r['undone_at'] as string } }),
         })),
         tieBreaks: tieBreaks.all(id).map((r) => ({ players: JSON.parse(r['players'] as string) as number[], step: r['step'] as number })),
@@ -120,7 +121,16 @@ export function createHeatStore(db: Database): HeatStore {
           );
         }
         for (const r of state.results) {
-          insertResult.run(r.id, settings.id, r.heatId, JSON.stringify(r.order), r.at, r.undone?.step ?? null, r.undone?.at ?? null);
+          insertResult.run(
+            r.id,
+            settings.id,
+            r.heatId,
+            JSON.stringify(r.order),
+            r.missing ? JSON.stringify(r.missing) : null,
+            r.at,
+            r.undone?.step ?? null,
+            r.undone?.at ?? null,
+          );
         }
         state.lateJoins.forEach((j, position) => insertLate.run(settings.id, position, j.playerId, j.heatId, j.step));
         state.tieBreaks.forEach((t, position) => insertTie.run(settings.id, position, JSON.stringify(t.players), t.step));

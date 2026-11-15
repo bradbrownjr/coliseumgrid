@@ -12,13 +12,14 @@ export function expectHeatsShape(heats: Heats): void {
   const keys = (value: object): string[] => sorted(Object.keys(value));
   const player = (p: object): void => expect(keys(p)).toEqual(['handle', 'id']);
   const heat = (h: Heat): void => {
-    expect(keys(h)).toEqual(sorted(['id', 'kind', 'round', 'number', 'status', 'players', 'order', 'resultId']));
+    expect(keys(h)).toEqual(sorted(['id', 'kind', 'round', 'number', 'status', 'players', 'order', 'missing', 'resultId']));
     h.players.forEach(player);
     h.order?.forEach(player);
+    h.missing.forEach(player);
   };
   expect(keys(heats)).toEqual(
     sorted([
-      'id', 'races', 'rounds', 'points', 'finished', 'lateOpen', 'lastResultId', 'round',
+      'id', 'races', 'rounds', 'points', 'finished', 'lateOpen', 'lastResultId', 'noShowMinutes', 'round',
       'stations', 'upNext', 'heats', 'standings', 'finalSize', 'ties',
     ]),
   );

@@ -527,7 +527,7 @@ describe('who may call which route', () => {
     await callers.host('PUT', '/api/event', { name: 'Friday' });
     const res = await phone.api('GET', '/api/event');
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ event: { name: 'Friday' } });
+    expect(res.json()).toEqual({ event: { name: 'Friday', game: null } });
     expect((await nobody()('GET', '/api/event')).statusCode).toBe(401);
   });
 
@@ -672,7 +672,7 @@ describe('GET /api/phone', () => {
     await phone.api('POST', '/api/phone/follow', { handle: 'Player8', pin: PIN });
     const answer = (await phone.api('GET', '/api/phone')).json() as PhoneAnswer;
     expectShape(answer);
-    expect(answer.event).toEqual({ name: 'Friday' });
+    expect(answer.event).toEqual({ name: 'Friday', game: null });
     const [a, b, c] = answer.following;
     expect(a).toMatchObject({ player: playing, status: 'now', away: 0, station: 1, matchId: onStation.id, others: [onStation.slots[1].player] });
     expect(b).toMatchObject({ player: waiting, status: 'next', away: 1, station: null, matchId: made.upNext[0]!.id });

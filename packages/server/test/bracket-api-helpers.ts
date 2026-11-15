@@ -33,7 +33,7 @@ export function expectContractShape(bracket: Bracket): void {
     if (p !== null) expect(keys(p)).toEqual(['handle', 'id']);
   };
   const match = (m: BracketMatch): void => {
-    expect(keys(m)).toEqual(sorted(['id', 'side', 'round', 'number', 'status', 'slots', 'winner', 'resultId']));
+    expect(keys(m)).toEqual(sorted(['id', 'side', 'round', 'number', 'status', 'slots', 'winner', 'forfeit', 'resultId']));
     expect(m.slots).toHaveLength(2);
     for (const slot of m.slots) {
       expect(keys(slot)).toEqual(['bye', 'player']);
@@ -41,7 +41,7 @@ export function expectContractShape(bracket: Bracket): void {
     }
   };
   expect(keys(bracket)).toEqual(
-    sorted(['id', 'format', 'bestOf', 'finished', 'lateOpen', 'lastResultId', 'stations', 'upNext', 'matches', 'standings', 'ties']),
+    sorted(['id', 'format', 'bestOf', 'finished', 'lateOpen', 'lastResultId', 'noShowMinutes', 'stations', 'upNext', 'matches', 'standings', 'ties']),
   );
   bracket.matches.forEach(match);
   bracket.upNext.forEach(match);

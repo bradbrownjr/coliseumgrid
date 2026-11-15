@@ -11,6 +11,7 @@
 
 import {
   BRACKET_PLAYERS_MAX,
+  NO_SHOW_DEFAULT,
   STATIONS_MAX,
   STATIONS_MIN,
   addLatePlayer,
@@ -52,6 +53,12 @@ export interface BracketResultRecord {
   loserId: number;
   /** ISO 8601; the station it frees is called again at this time. */
   at: string;
+  /**
+   * True when the winner won because the other player didn't come (docs/PLAN.md, "Waiting for
+   * a missing player"). Left off a result that wasn't a forfeit, as the engine writes it. It
+   * changes nothing in the replay, so undo, standings, and ties work as for any result.
+   */
+  forfeit?: true;
   /**
    * Set when an older undo took it back. The result stays in the log, so the stations it
    * freed stay as they were, and the undo is the log entry at `step`.
@@ -373,7 +380,7 @@ function eliminationPlaces(format: BracketFormat, built: Built): Map<number, num
   return places;
 }
 
-function buildAnswer(state: BracketState, built: Built, handles: HandleLookup, lateOpen: boolean): Bracket {
+function buildAnswer(state: BracketState, built: Built, handles: HandleLookup, lateOpen: boolean, noShowMinutes: number): Bracket {
   const player = (id: number): Player => {
     const handle = handles.get(id);
     if (handle === undefined) throw new Error(`bracket ${state.settings.id}: no handle for player ${id}`);
@@ -396,6 +403,7 @@ function buildAnswer(state: BracketState, built: Built, handles: HandleLookup, l
       status,
       slots: [slotView(m.slots[0]), slotView(m.slots[1])],
       winner: result ? (playerIdOf(m.slots[0]) === result.winnerId ? 0 : 1) : null,
+      forfeit: result?.forfeit === true,
       resultId: result ? result.id : null,
     };
   };
@@ -437,6 +445,7 @@ function buildAnswer(state: BracketState, built: Built, handles: HandleLookup, l
     finished: [...views.values()].every((m) => m.status === 'done' || m.status === 'bye') && ties.length === 0,
     lateOpen,
     lastResultId: lastResult ? lastResult.id : null,
+    noShowMinutes,
     stations: built.queue.stations.map((s) => ({ number: s.number, match: s.matchId === null ? null : viewOf(s.matchId), calledAt: s.calledAt })),
     upNext: built.queue.upNext.map(viewOf),
     matches: built.matches.map((m) => viewOf(m.id)),
@@ -479,14 +488,18 @@ async function tryJoin(
 /** No real player has a negative id, so this stands in for "anyone" when asking if a join would pass. */
 const ANY_PLAYER = -1;
 
-async function answerFor(state: BracketState, built: Built, handles: HandleLookup): Promise<Bracket> {
+async function answerFor(state: BracketState, built: Built, handles: HandleLookup, noShowMinutes: number): Promise<Bracket> {
   const lateOpen = (await tryJoin(state, built, ANY_PLAYER)).ok;
-  return buildAnswer(state, built, handles, lateOpen);
+  return buildAnswer(state, built, handles, lateOpen, noShowMinutes);
 }
 
-/** The answer for a stored bracket. Throws if the stored log doesn't replay, which is a bug. */
-export async function bracketAnswer(state: BracketState, handles: HandleLookup): Promise<Bracket> {
-  return answerFor(state, await rebuildOrThrow(state), handles);
+/**
+ * The answer for a stored bracket. Throws if the stored log doesn't replay, which is a bug.
+ * `noShowMinutes` comes from the event's plan, which the engine doesn't see (docs/PLAN.md,
+ * "Waiting for a missing player"); every operation below takes it the same way.
+ */
+export async function bracketAnswer(state: BracketState, handles: HandleLookup, noShowMinutes = NO_SHOW_DEFAULT): Promise<Bracket> {
+  return answerFor(state, await rebuildOrThrow(state), handles, noShowMinutes);
 }
 
 export interface NewBracket {
@@ -496,6 +509,8 @@ export interface NewBracket {
   stations: number;
   playerIds: number[];
   createdAt: string;
+  /** From the event's plan; `NO_SHOW_DEFAULT` when left out. */
+  noShowMinutes?: number;
 }
 
 /** Makes a bracket with a random seeding from `random`. */
@@ -517,7 +532,7 @@ export async function createBracket(input: NewBracket, random: RandomSource, han
     tieBreaks: [],
   };
   const built = await rebuildOrThrow(state);
-  return { ok: true, state, bracket: await answerFor(state, built, handles) };
+  return { ok: true, state, bracket: await answerFor(state, built, handles, input.noShowMinutes ?? NO_SHOW_DEFAULT) };
 }
 
 export interface NewResult {
@@ -526,10 +541,17 @@ export interface NewResult {
   matchId: number;
   winnerId: number;
   at: string;
+  /** True when `winnerId` is the player who came and the other didn't. */
+  forfeit?: boolean;
 }
 
 /** Records the winner of a match on a station. */
-export async function recordResult(state: BracketState, input: NewResult, handles: HandleLookup): Promise<EngineAnswer> {
+export async function recordResult(
+  state: BracketState,
+  input: NewResult,
+  handles: HandleLookup,
+  noShowMinutes = NO_SHOW_DEFAULT,
+): Promise<EngineAnswer> {
   const built = await rebuildOrThrow(state);
   const match = built.byId.get(input.matchId);
   if (!match) return { ok: false, error: 'not-found' };
@@ -541,9 +563,12 @@ export async function recordResult(state: BracketState, input: NewResult, handle
   const loserId = (input.winnerId === a ? b : a) as number;
   const next: BracketState = {
     ...state,
-    results: [...state.results, { id: input.id, matchId: match.id, winnerId: input.winnerId, loserId, at: input.at }],
+    results: [
+      ...state.results,
+      { id: input.id, matchId: match.id, winnerId: input.winnerId, loserId, at: input.at, ...(input.forfeit === true ? { forfeit: true as const } : {}) },
+    ],
   };
-  return { ok: true, state: next, bracket: await answerFor(next, await rebuildOrThrow(next), handles) };
+  return { ok: true, state: next, bracket: await answerFor(next, await rebuildOrThrow(next), handles, noShowMinutes) };
 }
 
 export interface UndoInput {
@@ -564,7 +589,12 @@ export interface UndoInput {
  * later depends on it: a later result that no longer replays or was recorded off a station, a
  * match on a station that would lose a player, or a tie-break made after it.
  */
-export async function undoResult(state: BracketState, input: UndoInput, handles: HandleLookup): Promise<EngineAnswer> {
+export async function undoResult(
+  state: BracketState,
+  input: UndoInput,
+  handles: HandleLookup,
+  noShowMinutes = NO_SHOW_DEFAULT,
+): Promise<EngineAnswer> {
   const result = state.results.find((r) => r.id === input.resultId && !r.undone);
   if (!result) return { ok: false, error: 'nothing-to-undo' };
   const before = await rebuildOrThrow(state);
@@ -579,7 +609,7 @@ export async function undoResult(state: BracketState, input: UndoInput, handles:
       lateJoins: state.lateJoins.map((j) => (j.step > index ? { ...j, step: j.step - 1 } : j)),
       tieBreaks: state.tieBreaks.filter((t) => t.step <= index),
     };
-    return { ok: true, state: next, bracket: await answerFor(next, await rebuildOrThrow(next), handles) };
+    return { ok: true, state: next, bracket: await answerFor(next, await rebuildOrThrow(next), handles, noShowMinutes) };
   }
 
   if (state.tieBreaks.some((t) => t.step > index)) return { ok: false, error: 'undo-later-first' };
@@ -599,19 +629,24 @@ export async function undoResult(state: BracketState, input: UndoInput, handles:
     return sameSlots(before.byId.get(s.matchId) as EngineMatch, after.byId.get(s.matchId) as EngineMatch);
   });
   if (!kept) return { ok: false, error: 'undo-later-first' };
-  return { ok: true, state: next, bracket: await answerFor(next, after, handles) };
+  return { ok: true, state: next, bracket: await answerFor(next, after, handles, noShowMinutes) };
 }
 
 /** Adds a player after the start, into the first empty slot. */
-export async function joinLate(state: BracketState, playerId: number, handles: HandleLookup): Promise<EngineAnswer> {
+export async function joinLate(
+  state: BracketState,
+  playerId: number,
+  handles: HandleLookup,
+  noShowMinutes = NO_SHOW_DEFAULT,
+): Promise<EngineAnswer> {
   if (!handles.has(playerId)) return { ok: false, error: 'not-found' };
   const joined = await tryJoin(state, await rebuildOrThrow(state), playerId);
   if (!joined.ok) return joined;
-  return { ok: true, state: joined.state, bracket: await answerFor(joined.state, joined.built, handles) };
+  return { ok: true, state: joined.state, bracket: await answerFor(joined.state, joined.built, handles, noShowMinutes) };
 }
 
 /** Makes the matches of every tie-break round the answer asks for that aren't made yet. */
-export async function startTieBreak(state: BracketState, handles: HandleLookup): Promise<EngineAnswer> {
+export async function startTieBreak(state: BracketState, handles: HandleLookup, noShowMinutes = NO_SHOW_DEFAULT): Promise<EngineAnswer> {
   const built = await rebuildOrThrow(state);
   const made = new Set(state.tieBreaks.map((t) => `${t.round}:${Math.min(...t.players)}-${Math.max(...t.players)}`));
   const added: TieBreakRecord[] = [];
@@ -623,5 +658,5 @@ export async function startTieBreak(state: BracketState, handles: HandleLookup):
   }
   if (added.length === 0) return { ok: false, error: 'no-tie' };
   const next: BracketState = { ...state, tieBreaks: [...state.tieBreaks, ...added] };
-  return { ok: true, state: next, bracket: await answerFor(next, await rebuildOrThrow(next), handles) };
+  return { ok: true, state: next, bracket: await answerFor(next, await rebuildOrThrow(next), handles, noShowMinutes) };
 }

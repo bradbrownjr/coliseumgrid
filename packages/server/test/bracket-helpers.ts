@@ -50,10 +50,14 @@ export const undo = (state: BracketState, resultId: number): Promise<EngineAnswe
 export type Pick = (match: BracketMatch) => 0 | 1;
 export const randomPick = (random: RandomSource): Pick => () => (random() < 0.5 ? 0 : 1);
 
-/** Records a result for one match on a station. */
-export async function play(run: Run, match: BracketMatch, winner: 0 | 1): Promise<Run> {
+/** Records a result for one match on a station. `forfeit` marks the winner as the player who came. */
+export async function play(run: Run, match: BracketMatch, winner: 0 | 1, forfeit = false): Promise<Run> {
   const winnerId = match.slots[winner].player?.id as number;
-  const answer = await recordResult(run.state, { id: nextResultId(run.state), matchId: match.id, winnerId, at: at(logLength(run.state) + 1) }, handles);
+  const answer = await recordResult(
+    run.state,
+    { id: nextResultId(run.state), matchId: match.id, winnerId, at: at(logLength(run.state) + 1), ...(forfeit && { forfeit }) },
+    handles,
+  );
   return expectOk(answer);
 }
 
@@ -108,15 +112,33 @@ export function expectPodium(bracket: Bracket, n: number): void {
  * 496 results). `until` stops it early, before the batch after which it first holds.
  */
 export async function playOutInBatches(run: Run, random: RandomSource, pick: Pick, until?: (state: BracketState) => boolean): Promise<Run> {
+  const { state, bracket } = await playOutCountingBatches(run, random, pick, until);
+  return { state, bracket };
+}
+
+/**
+ * The same as `playOutInBatches`, and the number of batches played too. A batch is one wave:
+ * the matches on stations at the same time. A tie-break made along the way starts a batch of
+ * its own, as it does on the host's screen. The calibration test compares this count with the
+ * time estimate's waves (`estimate-calibration.test.ts`).
+ */
+export async function playOutCountingBatches(
+  run: Run,
+  random: RandomSource,
+  pick: Pick,
+  until?: (state: BracketState) => boolean,
+): Promise<Run & { batches: number }> {
   let { state, bracket } = run;
+  let batches = 0;
   for (;;) {
-    if (until?.(state)) return { state, bracket };
+    if (until?.(state)) return { state, bracket, batches };
     const live = onStations(bracket);
     if (live.length === 0) {
-      if (!bracket.ties.some((t) => !t.started)) return { state, bracket };
+      if (!bracket.ties.some((t) => !t.started)) return { state, bracket, batches };
       ({ state, bracket } = expectOk(await startTieBreak(state, handles)));
       continue;
     }
+    batches += 1;
     const results = [...state.results];
     for (const match of live) {
       const winner = pick(match);

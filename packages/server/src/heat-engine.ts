@@ -20,15 +20,17 @@ import {
   HEAT_ROUNDS_MAX,
   HEAT_ROUNDS_MIN,
   HEAT_SIZE_MAX,
+  NO_SHOW_DEFAULT,
   STATIONS_MAX,
   STATIONS_MIN,
   buildQueue,
   cutIntoHeats,
   finalPlaces,
   hasQualifying,
-  isFinishOrder,
+  isHeatResult,
   isPointsTable,
   lateJoinHeat,
+  placeMissing,
   rankByPoints,
   regroup,
   scoreHeats,
@@ -37,6 +39,7 @@ import {
   type ApiErrorCode,
   type FinalCut,
   type Heat,
+  type HeatFinish,
   type HeatKind,
   type HeatScore,
   type HeatStandingsRow,
@@ -67,8 +70,14 @@ export interface HeatSettings {
 export interface HeatResultRecord {
   id: number;
   heatId: number;
-  /** Every player of the heat once, 1st first. */
+  /** The players who played, 1st first: every player of the heat once, less those in `missing`. */
   order: number[];
+  /**
+   * The players who didn't come (docs/PLAN.md, "Waiting for a missing player"). Left off a
+   * result with none, as the engine writes it. They score 0 points, and the heat counts as
+   * played for them.
+   */
+  missing?: number[];
   /** ISO 8601; the station it frees is called again at this time. */
   at: string;
   /**
@@ -221,9 +230,9 @@ function heatsFor(
   standing: ReadonlyMap<number, HeatResultRecord>,
 ): Derived | null {
   const { rounds, points } = settings;
-  const finishes = (heats: readonly EngineHeat[]): number[][] => heats.flatMap((h) => {
+  const finishes = (heats: readonly EngineHeat[]): HeatFinish[] => heats.flatMap((h) => {
     const r = standing.get(h.id);
-    return r ? [r.order] : [];
+    return r ? [{ order: r.order, missing: r.missing ?? [] }] : [];
   });
   const allDone = (heats: readonly EngineHeat[]): boolean => heats.every((h) => standing.has(h.id));
 
@@ -246,7 +255,13 @@ function heatsFor(
   }
 
   const finalSize = rounds > 0 ? FINAL_SIZE : players.length;
-  const made: TieBreakHeat[] = tieHeats.map((h) => ({ pass: h.round, players: h.players, order: standing.get(h.id)?.order ?? null }));
+  // A tie-break heat's players are level on points, so a missing player takes the places after
+  // those who played in seeding order, which is the order `scores` keeps level players in.
+  const qualifyingOrder = scores.map((s) => s.player);
+  const made: TieBreakHeat[] = tieHeats.map((h) => {
+    const r = standing.get(h.id);
+    return { pass: h.round, players: h.players, order: r ? fullOrder(r, qualifyingOrder) : null };
+  });
   let cut: FinalCut;
   try {
     cut = settleCut(rankByPoints(scores), made, finalSize);
@@ -259,6 +274,12 @@ function heatsFor(
   if (cut.finalists) heats.push({ id: FINAL_HEAT_ID, kind: 'final', round: 1, number: 1, players: cut.finalists });
   return { heats, scores, round: null, cut };
 }
+
+/**
+ * A result's full finishing order: those who played in their order, then the missing players
+ * in `ranking` order, so places stay unique (docs/PLAN.md, "Waiting for a missing player").
+ */
+const fullOrder = (result: HeatResultRecord, ranking: readonly number[]): number[] => placeMissing(result.order, result.missing ?? [], ranking);
 
 const samePlayers = (a: readonly number[], b: readonly number[]): boolean => a.length === b.length && a.every((id, i) => b[i] === id);
 
@@ -319,7 +340,7 @@ function rebuild(state: HeatState): Built | null {
     const heat = byId.get(e.result.heatId);
     if (!heat) return null;
     if (e.kind === 'result') {
-      if (standing.has(heat.id) || !isFinishOrder(heat.players, e.result.order)) return null;
+      if (standing.has(heat.id) || !isHeatResult(heat.players, e.result.order, e.result.missing ?? [])) return null;
       standing.set(heat.id, e.result);
     } else {
       if (standing.get(heat.id) !== e.result) return null;
@@ -368,7 +389,7 @@ function stationsKept(before: Built, after: Built, mayTake: (heatId: number) => 
   });
 }
 
-function buildAnswer(state: HeatState, built: Built, handles: HandleLookup, lateOpen: boolean): Heats {
+function buildAnswer(state: HeatState, built: Built, handles: HandleLookup, lateOpen: boolean, noShowMinutes: number): Heats {
   const player = (id: number): Player => {
     const handle = handles.get(id);
     if (handle === undefined) throw new Error(`heats ${state.settings.id}: no handle for player ${id}`);
@@ -387,6 +408,7 @@ function buildAnswer(state: HeatState, built: Built, handles: HandleLookup, late
       status,
       players: h.players.map(player),
       order: result ? result.order.map(player) : null,
+      missing: result?.missing ? result.missing.map(player) : [],
       resultId: result ? result.id : null,
     };
   };
@@ -397,7 +419,7 @@ function buildAnswer(state: HeatState, built: Built, handles: HandleLookup, late
   let ranking: RankedGroup[] = rankByPoints(built.scores);
   if (built.cut) {
     const final = built.resultOf.get(FINAL_HEAT_ID);
-    ranking = finalPlaces(built.cut.ranking, final ? final.order : null);
+    ranking = finalPlaces(built.cut.ranking, final ? fullOrder(final, built.cut.ranking.flatMap((g) => g.players)) : null);
   }
   const scoreOf = new Map(built.scores.map((s) => [s.player, s]));
   const row = (place: number, id: number): HeatStandingsRow => {
@@ -416,6 +438,7 @@ function buildAnswer(state: HeatState, built: Built, handles: HandleLookup, late
     finished: built.resultOf.has(FINAL_HEAT_ID),
     lateOpen,
     lastResultId: lastResult ? lastResult.id : null,
+    noShowMinutes,
     round: built.round,
     stations: built.queue.stations.map((s) => ({ number: s.number, heat: s.matchId === null ? null : viewOf(s.matchId), calledAt: s.calledAt })),
     upNext: built.queue.upNext.map(viewOf),
@@ -450,13 +473,17 @@ function tryJoin(state: HeatState, built: Built, playerId: number): { ok: true; 
 /** No real player has a negative id, so this stands in for "anyone" when asking if a join would pass. */
 const ANY_PLAYER = -1;
 
-function answerFor(state: HeatState, built: Built, handles: HandleLookup): Heats {
-  return buildAnswer(state, built, handles, tryJoin(state, built, ANY_PLAYER).ok);
+function answerFor(state: HeatState, built: Built, handles: HandleLookup, noShowMinutes: number): Heats {
+  return buildAnswer(state, built, handles, tryJoin(state, built, ANY_PLAYER).ok, noShowMinutes);
 }
 
-/** The answer for stored heats. Throws if the stored log doesn't replay, which is a bug. */
-export function heatsAnswer(state: HeatState, handles: HandleLookup): Heats {
-  return answerFor(state, rebuildOrThrow(state), handles);
+/**
+ * The answer for stored heats. Throws if the stored log doesn't replay, which is a bug.
+ * `noShowMinutes` comes from the event's plan, which the engine doesn't see; every operation
+ * below takes it the same way, as the bracket engine does.
+ */
+export function heatsAnswer(state: HeatState, handles: HandleLookup, noShowMinutes = NO_SHOW_DEFAULT): Heats {
+  return answerFor(state, rebuildOrThrow(state), handles, noShowMinutes);
 }
 
 export interface NewHeats {
@@ -468,6 +495,8 @@ export interface NewHeats {
   points: number[];
   playerIds: number[];
   createdAt: string;
+  /** From the event's plan; `NO_SHOW_DEFAULT` when left out. */
+  noShowMinutes?: number;
 }
 
 const inRange = (value: number, min: number, max: number): boolean => Number.isInteger(value) && value >= min && value <= max;
@@ -492,29 +521,35 @@ export function createHeats(input: NewHeats, random: RandomSource, handles: Hand
     results: [],
     tieBreaks: [],
   };
-  return { ok: true, state, heats: answerFor(state, rebuildOrThrow(state), handles) };
+  return { ok: true, state, heats: answerFor(state, rebuildOrThrow(state), handles, input.noShowMinutes ?? NO_SHOW_DEFAULT) };
 }
 
 export interface NewHeatResult {
   /** The id the caller stores it under; unique within the heats. */
   id: number;
   heatId: number;
-  /** Every player of the heat once, 1st first. */
+  /** The players who played, 1st first. With no `missing`, every player of the heat once. */
   order: number[];
+  /** The players who didn't come. `order` and `missing` together are the heat's players, each once. */
+  missing?: number[];
   at: string;
 }
 
-/** Records the finishing order of a heat on a station. */
-export function recordHeatResult(state: HeatState, input: NewHeatResult, handles: HandleLookup): HeatEngineAnswer {
+/** Records the finishing order of a heat on a station, and the players who didn't come. */
+export function recordHeatResult(state: HeatState, input: NewHeatResult, handles: HandleLookup, noShowMinutes = NO_SHOW_DEFAULT): HeatEngineAnswer {
   const built = rebuildOrThrow(state);
   const heat = built.byId.get(input.heatId);
   if (!heat) return { ok: false, error: 'not-found' };
   if (!onStation(built, heat.id)) return { ok: false, error: 'not-on-station' };
-  if (!Array.isArray(input.order) || !isFinishOrder(heat.players, input.order)) return { ok: false, error: 'bad-request' };
+  const missing = input.missing ?? [];
+  if (!Array.isArray(input.order) || !Array.isArray(missing) || !isHeatResult(heat.players, input.order, missing)) {
+    return { ok: false, error: 'bad-request' };
+  }
   if (state.results.some((r) => r.id === input.id)) throw new Error(`result id ${input.id} is already in the log`);
 
-  const next: HeatState = { ...state, results: [...state.results, { id: input.id, heatId: heat.id, order: [...input.order], at: input.at }] };
-  return { ok: true, state: next, heats: answerFor(next, rebuildOrThrow(next), handles) };
+  const record: HeatResultRecord = { id: input.id, heatId: heat.id, order: [...input.order], ...(missing.length > 0 ? { missing: [...missing] } : {}), at: input.at };
+  const next: HeatState = { ...state, results: [...state.results, record] };
+  return { ok: true, state: next, heats: answerFor(next, rebuildOrThrow(next), handles, noShowMinutes) };
 }
 
 export interface HeatUndoInput {
@@ -536,7 +571,7 @@ export interface HeatUndoInput {
  * later depends on it: a later round, a tie-break heat, or the final made after it, or a heat
  * on a station that would change.
  */
-export function undoHeatResult(state: HeatState, input: HeatUndoInput, handles: HandleLookup): HeatEngineAnswer {
+export function undoHeatResult(state: HeatState, input: HeatUndoInput, handles: HandleLookup, noShowMinutes = NO_SHOW_DEFAULT): HeatEngineAnswer {
   const result = state.results.find((r) => r.id === input.resultId && !r.undone);
   if (!result) return { ok: false, error: 'nothing-to-undo' };
   const before = rebuildOrThrow(state);
@@ -551,7 +586,7 @@ export function undoHeatResult(state: HeatState, input: HeatUndoInput, handles: 
       lateJoins: state.lateJoins.map((j) => (j.step > index ? { ...j, step: j.step - 1 } : j)),
       tieBreaks: state.tieBreaks.filter((t) => t.step <= index),
     };
-    return { ok: true, state: next, heats: answerFor(next, rebuildOrThrow(next), handles) };
+    return { ok: true, state: next, heats: answerFor(next, rebuildOrThrow(next), handles, noShowMinutes) };
   }
 
   if (state.tieBreaks.some((t) => t.step > index)) return { ok: false, error: 'undo-later-first' };
@@ -564,22 +599,22 @@ export function undoHeatResult(state: HeatState, input: HeatUndoInput, handles: 
   if (!after || after.queue.offStation.length > 0 || !stationsKept(before, after, (id) => id === result.heatId)) {
     return { ok: false, error: 'undo-later-first' };
   }
-  return { ok: true, state: next, heats: answerFor(next, after, handles) };
+  return { ok: true, state: next, heats: answerFor(next, after, handles, noShowMinutes) };
 }
 
 /** Adds a player after the start, into the smallest round 1 heat still waiting with room. */
-export function joinHeatsLate(state: HeatState, playerId: number, handles: HandleLookup): HeatEngineAnswer {
+export function joinHeatsLate(state: HeatState, playerId: number, handles: HandleLookup, noShowMinutes = NO_SHOW_DEFAULT): HeatEngineAnswer {
   if (!handles.has(playerId)) return { ok: false, error: 'not-found' };
   const joined = tryJoin(state, rebuildOrThrow(state), playerId);
   if (!joined.ok) return joined;
-  return { ok: true, state: joined.state, heats: answerFor(joined.state, joined.built, handles) };
+  return { ok: true, state: joined.state, heats: answerFor(joined.state, joined.built, handles, noShowMinutes) };
 }
 
 /** Makes the tie-break heats of the pass the cut for the final is waiting on. */
-export function startHeatTieBreak(state: HeatState, handles: HandleLookup): HeatEngineAnswer {
+export function startHeatTieBreak(state: HeatState, handles: HandleLookup, noShowMinutes = NO_SHOW_DEFAULT): HeatEngineAnswer {
   const tie = rebuildOrThrow(state).cut?.tie;
   if (!tie || tie.started) return { ok: false, error: 'no-tie' };
   const step = stepNow(state);
   const next: HeatState = { ...state, tieBreaks: [...state.tieBreaks, ...tie.heats.map((players) => ({ players: [...players], step }))] };
-  return { ok: true, state: next, heats: answerFor(next, rebuildOrThrow(next), handles) };
+  return { ok: true, state: next, heats: answerFor(next, rebuildOrThrow(next), handles, noShowMinutes) };
 }

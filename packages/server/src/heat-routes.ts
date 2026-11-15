@@ -63,8 +63,12 @@ const newHeatsBody = objectSchema({
   // No size limit here: too few and too many have their own error codes.
   playerIds: { type: 'array', items: idSchema, maxItems: 1000 },
 });
-// A heat holds 2 to 4 players, so a longer order is never right.
-const resultBody = objectSchema({ heatId: { type: 'integer', minimum: 0 }, order: { type: 'array', items: idSchema, maxItems: 4 } });
+// A heat holds 2 to 4 players, so a longer order or list is never right. `missing` is optional
+// and empty when left out; `isHeatResult` checks that the two lists are the heat's players.
+const resultBody = objectSchema(
+  { heatId: { type: 'integer', minimum: 0 }, order: { type: 'array', items: idSchema, maxItems: 4 } },
+  { missing: { type: 'array', items: idSchema, maxItems: 4 } },
+);
 const undoBody = objectSchema({ resultId: idSchema });
 const playerBody = objectSchema({ playerId: idSchema });
 
@@ -91,14 +95,14 @@ export async function registerHeatRoutes(app: FastifyInstance, options: HeatRout
    */
   const change = (
     reply: FastifyReply,
-    work: (state: HeatState, handles: HandleLookup) => HeatEngineAnswer,
+    work: (state: HeatState, handles: HandleLookup, noShowMinutes: number) => HeatEngineAnswer,
     statuses: Record<string, number>,
     saved?: () => void,
   ): Promise<FastifyReply | HeatsNowAnswer> =>
     chain.run(() => {
       const found = current();
       if (!found) return fail(reply, 404, 'no-heats');
-      const answer = work(found.state, competition.handles());
+      const answer = work(found.state, competition.handles(), competition.noShowMinutes());
       if (!answer.ok) return refuse(reply, answer.error, statuses);
       store.save(found.eventId, answer.state);
       // Before the screens are told, so a phone that reloads at once gets the new answer.
@@ -117,7 +121,7 @@ export async function registerHeatRoutes(app: FastifyInstance, options: HeatRout
     async () => {
       // Both reads happen in one synchronous step, so they see one moment.
       const found = current();
-      return { heats: found ? heatsAnswer(found.state, competition.handles()) : null };
+      return { heats: found ? heatsAnswer(found.state, competition.handles(), competition.noShowMinutes()) : null };
     },
   );
 
@@ -143,7 +147,7 @@ export async function registerHeatRoutes(app: FastifyInstance, options: HeatRout
         if (oldEventId !== null && (await competition.running(oldEventId, handles))) return fail(reply, 409, 'bracket-running');
         const { stations, races, rounds, points, playerIds } = request.body;
         const answer = createHeats(
-          { id: store.nextRunId(), stations, races, rounds, points, playerIds, createdAt: iso(now()) },
+          { id: store.nextRunId(), stations, races, rounds, points, playerIds, createdAt: iso(now()), noShowMinutes: competition.noShowMinutes() },
           secureRandom,
           handles,
         );
@@ -176,10 +180,11 @@ export async function registerHeatRoutes(app: FastifyInstance, options: HeatRout
       },
     },
     async (request, reply) => {
-      const { heatId, order } = request.body;
+      const { heatId, order, missing } = request.body;
       const answer = await change(
         reply,
-        (state, handles) => recordHeatResult(state, { id: store.nextResultId(), heatId, order, at: iso(now()) }, handles),
+        (state, handles, noShow) =>
+          recordHeatResult(state, { id: store.nextResultId(), heatId, order, ...(missing !== undefined && { missing }), at: iso(now()) }, handles, noShow),
         { 'not-found': 404, 'not-on-station': 409, 'bad-request': 400 },
       );
       if (!('heats' in answer)) return answer;
@@ -204,7 +209,7 @@ export async function registerHeatRoutes(app: FastifyInstance, options: HeatRout
       },
     },
     async (request, reply) =>
-      change(reply, (state, handles) => undoHeatResult(state, { resultId: request.body.resultId, at: iso(now()) }, handles), {
+      change(reply, (state, handles, noShow) => undoHeatResult(state, { resultId: request.body.resultId, at: iso(now()) }, handles, noShow), {
         'undo-later-first': 409,
         'nothing-to-undo': 409,
       }),
@@ -228,7 +233,7 @@ export async function registerHeatRoutes(app: FastifyInstance, options: HeatRout
     async (request, reply) =>
       change(
         reply,
-        (state, handles) => joinHeatsLate(state, request.body.playerId, handles),
+        (state, handles, noShow) => joinHeatsLate(state, request.body.playerId, handles, noShow),
         { 'not-found': 404, 'late-closed': 409, 'already-in': 409 },
         // A late player is here now, so the event lists them, once the heats are saved.
         () => void eventPlayers.add(request.body.playerId),
@@ -241,7 +246,7 @@ export async function registerHeatRoutes(app: FastifyInstance, options: HeatRout
       onRequest: access.requireHost,
       schema: { response: { 200: nowAnswer, 401: notSignedIn, 404: noHeats, 409: errorSchema(['no-tie']) } },
     },
-    async (_request, reply) => change(reply, (state, handles) => startHeatTieBreak(state, handles), { 'no-tie': 409 }),
+    async (_request, reply) => change(reply, (state, handles, noShow) => startHeatTieBreak(state, handles, noShow), { 'no-tie': 409 }),
   );
 
   app.delete(
