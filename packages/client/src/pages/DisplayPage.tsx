@@ -99,6 +99,8 @@ function DisplayFrame() {
   });
 
   const name = event?.name ?? 'ColiseumGrid';
+  // The host typed it, or there is none (docs/DESIGN.md, "Display").
+  const game = event?.game ?? null;
 
   if (bracket === null && heats === null) {
     return (
@@ -117,9 +119,16 @@ function DisplayFrame() {
       >
         <Logo size={16} />
         {/* The theme's largest heading, scaled by its breakpoints. */}
-        <Typography variant="h1" component="h1" sx={{ overflowWrap: 'anywhere' }}>
-          {name}
-        </Typography>
+        <Box component="header">
+          <Typography variant="h1" component="h1" sx={{ overflowWrap: 'anywhere' }}>
+            {name}
+          </Typography>
+          {game && (
+            <Typography variant="h3" component="p" color="text.secondary" sx={{ overflowWrap: 'anywhere', mt: 1 }}>
+              {game}
+            </Typography>
+          )}
+        </Box>
         <WaitingPanels />
       </Box>
     );
@@ -142,9 +151,16 @@ function DisplayFrame() {
     >
       <Box component="header" sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
         <Logo size={6} />
-        <Typography component="h1" sx={{ typography: { xs: 'h4', xl: 'h3' }, overflowWrap: 'anywhere', lineHeight: 1.1 }}>
-          {name}
-        </Typography>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography component="h1" sx={{ typography: { xs: 'h4', xl: 'h3' }, overflowWrap: 'anywhere', lineHeight: 1.1 }}>
+            {name}
+          </Typography>
+          {game && (
+            <Typography component="p" color="text.secondary" sx={{ typography: { xs: 'h6', xl: 'h5' }, overflowWrap: 'anywhere', lineHeight: 1.2 }}>
+              {game}
+            </Typography>
+          )}
+        </Box>
       </Box>
       {bracket === null ? (
         heats && <HeatsScreen heats={heats} />
@@ -165,6 +181,7 @@ function DisplayFrame() {
               stations={bracketStationCards(bracket.stations)}
               layout={stationLayout(bracket.stations.length, screen)}
               idle="Waiting for a match"
+              noShowMinutes={bracket.noShowMinutes}
             />
             <UpNextPanel entries={bracketUpNext(bracket.upNext)} empty="No matches waiting." />
           </Box>

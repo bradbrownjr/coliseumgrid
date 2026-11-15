@@ -1,5 +1,6 @@
 import type { EventInfo, Player } from '@coliseumgrid/core';
 import AddIcon from '@mui/icons-material/Add';
+import EventIcon from '@mui/icons-material/Event';
 import LogoutIcon from '@mui/icons-material/Logout';
 import Alert from '@mui/material/Alert';
 import AppBar from '@mui/material/AppBar';
@@ -38,6 +39,7 @@ import { MergeDialog } from './MergeDialog.tsx';
 import { PairingPanel } from './PairingPanel.tsx';
 import { PinDialog } from './PinDialog.tsx';
 import { PlayerActions } from './PlayerActions.tsx';
+import { SetupWizard, type WizardMode } from './SetupWizard.tsx';
 import { useBracket } from './useBracket.ts';
 import { useHeats } from './useHeats.ts';
 
@@ -58,6 +60,10 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
   const [loadWords, setLoadWords] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [event, setEvent] = useState<EventInfo | null>(null);
+  // Bumped on each player list load, so the wizard's step 3 reloads who signed up.
+  const [playersVersion, setPlayersVersion] = useState(0);
+  // The wizard opened from play mode: New event, or New competition after a finish.
+  const [wizard, setWizard] = useState<Exclude<WizardMode, 'setup'> | null>(null);
   // `id` restarts the snackbar's timer when a new message replaces one still showing. `undo`
   // adds an Undo button (docs/DESIGN.md, "Undo, not Are you sure").
   const [notice, setNotice] = useState<{ id: number; message: string; undo?: () => void } | null>(null);
@@ -76,6 +82,7 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
     const result = await listPlayers();
     if (result.ok) {
       setPlayers(result.data.players);
+      setPlayersVersion((before) => before + 1);
       setLoadWords(null);
     } else {
       setLoadWords(failureWords(result));
@@ -157,6 +164,13 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
   const alreadyIn = bracket && bracket.lateOpen ? playersInBracket(bracket) : heats && heats.lateOpen ? playersInHeats(heats) : null;
   const lateLabel = heats && !bracket ? 'Add to group' : 'Add to bracket';
 
+  // Setup mode while the event has no bracket and no groups (docs/PLAN.md, "The setup wizard"):
+  // the wizard takes the place of the Event and Competition sections. Until both are loaded
+  // neither mode shows, so the rename box doesn't flash up before the wizard.
+  const loaded = bracket !== undefined && heats !== undefined;
+  const setupMode = bracket === null && heats === null;
+  const wizardMode: WizardMode | null = setupMode ? 'setup' : wizard;
+
   const close = () => {
     resetting.current += 1;
     setDialog(null);
@@ -201,16 +215,64 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
         </Toolbar>
       </AppBar>
       <Container component="main" sx={{ py: { xs: 2, sm: 4 }, display: 'flex', flexDirection: 'column', gap: { xs: 3, sm: 4 } }}>
-        <Section title="Event">
-          <EventName event={event} onSaved={(saved) => { setEvent(saved); say('Event name saved'); }} />
-        </Section>
+        {/* One element in one place for setup and play-mode openings alike, so the wizard keeps its step when a new event turns play mode into setup mode. */}
+        {wizardMode ? (
+          <SetupWizard
+            mode={wizardMode}
+            event={event}
+            players={players ?? []}
+            playersVersion={playersVersion}
+            onCancel={setupMode ? undefined : () => setWizard(null)}
+            onEventSaved={setEvent}
+            onEventCreated={(created) => {
+              setEvent(created);
+              // The new event has no bracket and no groups; the old one keeps its own.
+              applyBracket(null);
+              applyHeats(null);
+              setWizard(null);
+              say('New event made');
+            }}
+            onStartedBracket={(started) => {
+              applyBracket(started);
+              // A new one replaces a finished one of either kind.
+              applyHeats(null);
+              setWizard(null);
+              say('Bracket started');
+            }}
+            onStartedGroups={(started) => {
+              applyHeats(started);
+              applyBracket(null);
+              setWizard(null);
+              say('Groups started');
+            }}
+          />
+        ) : (
+          loaded && (
+            <Section
+              title="Event"
+              action={
+                <Button variant="outlined" size="large" startIcon={<EventIcon />} onClick={() => setWizard('new-event')}>
+                  New event
+                </Button>
+              }
+            >
+              <EventName
+                event={event}
+                onSaved={(saved) => {
+                  setEvent(saved);
+                  say('Event saved');
+                }}
+              />
+            </Section>
+          )
+        )}
 
         <Section title="Screens">
           <PairingPanel />
           <DeviceList onUnpaired={say} />
         </Section>
 
-        <CompetitionSection bracket={bracketState} heats={heatsState} players={players} say={say} />
+        {!wizardMode && <CompetitionSection bracket={bracketState} heats={heatsState} say={say} onNewCompetition={() => setWizard('new-competition')} />}
 
         <Box component="section">
         <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', mb: 3 }}>
@@ -338,13 +400,16 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
   );
 }
 
-/** A titled block of the host screen. */
-function Section({ title, children }: { title: string; children: ReactNode }) {
+/** A titled block of the host screen, with an optional button by the title. */
+function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
     <Box component="section">
-      <Typography variant="h4" component="h2" sx={{ mb: 2 }}>
-        {title}
-      </Typography>
+      <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', mb: 2 }}>
+        <Typography variant="h4" component="h2">
+          {title}
+        </Typography>
+        {action}
+      </Stack>
       <Stack sx={{ gap: 3 }}>{children}</Stack>
     </Box>
   );

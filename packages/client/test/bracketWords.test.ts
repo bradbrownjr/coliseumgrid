@@ -8,6 +8,9 @@ import {
   byePlayer,
   doneMatches,
   elapsedText,
+  BOTH_MISSING_WORDS,
+  MISSING_QUESTION,
+  forfeitWords,
   formatName,
   joinHandles,
   matchTitle,
@@ -197,5 +200,15 @@ describe('bracket lists', () => {
   });
   it('sorts handles without regard to case', () => {
     expect([kai, { id: 4, handle: 'amy' }, zap].sort(byHandle).map((p) => p.handle)).toEqual(['amy', 'Kai', 'Zap']);
+  });
+});
+
+describe('forfeit words', () => {
+  it('says who forfeited and who wins', () => {
+    expect(forfeitWords(zap, kai)).toBe('Zap forfeited. Kai wins.');
+  });
+  it('asks who is missing and says what happens when both are', () => {
+    expect(MISSING_QUESTION).toBe('Who is missing?');
+    expect(BOTH_MISSING_WORDS).toBe('If both are missing, pick one. The other moves on.');
   });
 });

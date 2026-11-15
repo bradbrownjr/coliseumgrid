@@ -1,12 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { planDefaults } from '@coliseumgrid/core';
 import {
+  createEvent,
   getEvent,
+  getPlan,
   getHostSession,
   getMyDevice,
   joinWithCode,
   listDevices,
   makePairingCode,
-  setEventName,
+  saveEvent,
+  savePlan,
   setUpHost,
   signInHost,
   signOutHost,
@@ -91,10 +95,40 @@ describe('host requests', () => {
     expect(lastRequest()).toMatchObject({ path: '/api/devices/7', method: 'DELETE', body: undefined });
   });
 
-  it('names the event with PUT /api/event', async () => {
-    answer(200, { event: { name: 'Spring Bash' } });
-    await setEventName('Spring Bash');
-    expect(lastRequest()).toMatchObject({ path: '/api/event', method: 'PUT', body: { name: 'Spring Bash' } });
+  it('names the event with PUT /api/event, leaving the game out unless it is given', async () => {
+    answer(200, { event: { name: 'Spring Bash', game: null } });
+    await saveEvent('Spring Bash');
+    expect(lastRequest()).toMatchObject({ path: '/api/event', method: 'PUT' });
+    expect(lastRequest().body).toEqual({ name: 'Spring Bash' });
+    answer(200, { event: { name: 'Spring Bash', game: null } });
+    await saveEvent('Spring Bash', '');
+    expect(lastRequest().body).toEqual({ name: 'Spring Bash', game: '' });
+    answer(200, { event: { name: 'Spring Bash', game: 'Kart racer' } });
+    await saveEvent('Spring Bash', 'Kart racer');
+    expect(lastRequest().body).toEqual({ name: 'Spring Bash', game: 'Kart racer' });
+  });
+
+  it('makes a new event with POST /api/events, with no game when none was typed', async () => {
+    answer(201, { event: { name: 'Round two', game: null } });
+    const result = await createEvent('Round two', '');
+    expect(lastRequest()).toMatchObject({ path: '/api/events', method: 'POST' });
+    expect(lastRequest().body).toEqual({ name: 'Round two' });
+    expect(result).toEqual({ ok: true, data: { event: { name: 'Round two', game: null } } });
+    answer(201, { event: { name: 'Round two', game: 'Kart racer' } });
+    await createEvent('Round two', 'Kart racer');
+    expect(lastRequest().body).toEqual({ name: 'Round two', game: 'Kart racer' });
+    answer(409, { error: 'bracket-running' });
+    expect(await createEvent('Round two', '')).toEqual({ ok: false, error: 'bracket-running' });
+  });
+
+  it('reads and saves the plan with GET and PUT /api/event/plan', async () => {
+    answer(200, { plan: null });
+    expect(await getPlan()).toEqual({ ok: true, data: { plan: null } });
+    expect(lastRequest()).toMatchObject({ path: '/api/event/plan', method: 'GET', body: undefined });
+    const plan = planDefaults('racing');
+    answer(200, { plan });
+    await savePlan(plan);
+    expect(lastRequest()).toMatchObject({ path: '/api/event/plan', method: 'PUT', body: { plan } });
   });
 
   it('sends cookies on every request', async () => {

@@ -13,6 +13,7 @@ import {
   singleRoundName,
   splitPodium,
   splitTable,
+  stationCallLine,
   stationLayout,
   stepDown,
   tableTypeFor,
@@ -251,5 +252,23 @@ describe('final standings', () => {
   it('keeps players who share a place in one group', () => {
     const { podium } = splitPodium([row(1, 'A'), row(2, 'C'), row(2, 'B')]);
     expect(podium[1]?.rows.map((r) => r.player.handle)).toEqual(['B', 'C']);
+  });
+});
+
+describe('the call line', () => {
+  const calledAt = '2026-11-14T18:00:00.000Z';
+  const now = (minutes: number) => Date.parse(calledAt) + minutes * 60_000;
+  const card = (slots: { player: Player | null; bye: boolean }[]) => ({ number: 2, note: null, slots, calledAt });
+
+  it('calls every player once the wait is over', () => {
+    const match = card([{ player: player(1, 'Zap'), bye: false }, { player: player(2, 'Kai'), bye: false }]);
+    expect(stationCallLine(match, 5, now(4))).toBeNull();
+    expect(stationCallLine(match, 5, now(5))).toBe('Zap and Kai, come to station 2!');
+    const group = card(['Zap', 'Kai', 'Blaze'].map((handle, i) => ({ player: player(i + 1, handle), bye: false })));
+    expect(stationCallLine(group, 10, now(11))).toBe('Zap, Kai, and Blaze, come to station 2!');
+  });
+
+  it('shows nothing on an empty station', () => {
+    expect(stationCallLine(card([]), 5, now(30))).toBeNull();
   });
 });

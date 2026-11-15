@@ -1,4 +1,3 @@
-import type { Player } from '@coliseumgrid/core';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import Alert from '@mui/material/Alert';
@@ -19,7 +18,6 @@ import { deleteHeats } from '../../api/heats.ts';
 import type { Result } from '../../api/request.ts';
 import { BracketBody } from './BracketBody.tsx';
 import { GroupsBody } from './GroupsBody.tsx';
-import { StartCompetitionDialog } from './StartCompetitionDialog.tsx';
 import type { BracketState } from './useBracket.ts';
 import type { HeatsState } from './useHeats.ts';
 import type { Say } from './useWriter.ts';
@@ -27,19 +25,19 @@ import type { Say } from './useWriter.ts';
 interface CompetitionSectionProps {
   bracket: BracketState;
   heats: HeatsState;
-  players: Player[] | null;
   say: Say;
+  /** Opens the wizard at step 2 for a new competition, once this one has finished. */
+  onNewCompetition: () => void;
 }
 
 type Kind = 'bracket' | 'groups';
 
 /**
- * The host's competition: start a bracket or groups, run it, and delete it. An event runs one
- * of them (docs/PLAN.md, "Heats API"), so one section and one start dialog cover both. The title
- * is "Competition" because "Bracket" would be wrong over a race.
+ * The host's competition in play mode: run the bracket or the groups, and delete it. An event
+ * runs one of them (docs/PLAN.md, "Heats API"), so one section covers both. The setup wizard
+ * starts one. The title is "Competition" because "Bracket" would be wrong over a race.
  */
-export function CompetitionSection({ bracket, heats, players, say }: CompetitionSectionProps) {
-  const [starting, setStarting] = useState(false);
+export function CompetitionSection({ bracket, heats, say, onNewCompetition }: CompetitionSectionProps) {
   const [deleting, setDeleting] = useState(false);
 
   // At most one exists. A finished one is shown until a new one replaces it.
@@ -51,18 +49,17 @@ export function CompetitionSection({ bracket, heats, players, say }: Competition
     await Promise.all([bracket.reload(), heats.reload()]);
   };
 
-  const nothingYet = bracket.value === null && heats.value === null;
   const body = () => {
     if (bracket.value) return <BracketBody bracket={bracket.value} apply={bracket.apply} reload={bracket.reload} say={say} />;
     if (heats.value) return <GroupsBody heats={heats.value} apply={heats.apply} reload={heats.reload} say={say} />;
-    if (loading) {
-      return loadWords ? null : (
+    if (loading && !loadWords) {
+      return (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
           <CircularProgress aria-label="Loading the competition" />
         </Box>
       );
     }
-    return nothingYet ? <Typography>Nothing started yet. Start one when the players have signed up.</Typography> : null;
+    return null;
   };
 
   return (
@@ -72,9 +69,9 @@ export function CompetitionSection({ bracket, heats, players, say }: Competition
           Competition
         </Typography>
         <Stack direction="row" sx={{ gap: 1, flexWrap: 'wrap' }}>
-          {(nothingYet || finished) && (
-            <Button variant="contained" size="large" startIcon={<AddIcon />} onClick={() => setStarting(true)}>
-              {kind ? 'New competition' : 'Start a competition'}
+          {finished && (
+            <Button variant="contained" size="large" startIcon={<AddIcon />} onClick={onNewCompetition}>
+              New competition
             </Button>
           )}
           {kind && (
@@ -100,25 +97,6 @@ export function CompetitionSection({ bracket, heats, players, say }: Competition
       )}
       {body()}
 
-      {starting && (
-        <StartCompetitionDialog
-          players={players ?? []}
-          onStartedBracket={(started) => {
-            bracket.apply(started);
-            // A new one replaces a finished one of either kind.
-            heats.apply(null);
-            setStarting(false);
-            say('Bracket started');
-          }}
-          onStartedGroups={(started) => {
-            heats.apply(started);
-            bracket.apply(null);
-            setStarting(false);
-            say('Groups started');
-          }}
-          onClose={() => setStarting(false)}
-        />
-      )}
       {deleting && kind && (
         <DeleteDialog
           kind={kind}

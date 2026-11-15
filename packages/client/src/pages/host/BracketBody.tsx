@@ -1,10 +1,12 @@
-import type { Bracket, BracketMatch } from '@coliseumgrid/core';
+import type { Bracket, BracketMatch, Player } from '@coliseumgrid/core';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import { useState } from 'react';
 import { recordResult, startTieBreak, undoResult } from '../../api/bracket.ts';
 import { useNow } from '../../components/useNow.ts';
 import { Results, Standings, TieNotices, UpNext } from './BracketLists.tsx';
-import { byePlayer, doneMatches, formatName, resultWords, stationWords } from './bracketWords.ts';
+import { byePlayer, doneMatches, forfeitWords, formatName, matchTitle, resultWords, stationWords } from './bracketWords.ts';
+import { ForfeitDialog } from './ForfeitDialog.tsx';
 import { StationGrid } from './StationGrid.tsx';
 import { useWriter, type Say } from './useWriter.ts';
 
@@ -24,6 +26,7 @@ interface BracketBodyProps {
 export function BracketBody({ bracket, apply, reload, say }: BracketBodyProps) {
   const { busy, run } = useWriter(apply, reload, say);
   const now = useNow(bracket.stations.some((station) => station.match !== null));
+  const [forfeiting, setForfeiting] = useState<BracketMatch | null>(null);
 
   const undo = (resultId: number, message: string) =>
     run(
@@ -38,6 +41,21 @@ export function BracketBody({ bracket, apply, reload, say }: BracketBodyProps) {
       (data) => data.bracket,
       (data) => say(`${handle} won`, () => void undo(data.resultId, 'Result undone')),
     );
+
+  // A forfeit is an ordinary result for the player who came, flagged so the lists can say so
+  // (docs/PLAN.md, "Waiting for a missing player").
+  const forfeit = (matchId: number, missing: Player, winnerPlayer: Player) => {
+    setForfeiting(null);
+    void run(
+      () => recordResult(matchId, winnerPlayer.id, true),
+      (data) => data.bracket,
+      (data) => say(forfeitWords(missing, winnerPlayer), () => void undo(data.resultId, 'Result undone')),
+    );
+  };
+
+  // The panel closes with its match, as the groups' record panel does, so a tap never goes to a
+  // match that a live update or an Undo took off its station.
+  const forfeitPlayers = forfeiting && bracket.stations.some((station) => station.match?.id === forfeiting.id) ? bothPlayers(forfeiting) : null;
 
   const undoMatch = (match: BracketMatch) => {
     if (match.resultId !== null) void undo(match.resultId, `Undid: ${resultWords(match)}`);
@@ -62,11 +80,33 @@ export function BracketBody({ bracket, apply, reload, say }: BracketBodyProps) {
         <Standings rows={bracket.standings} />
       ) : (
         <>
-          <StationGrid stations={bracket.stations} bestOf={bracket.bestOf} now={now} busy={busy} onWinner={(...args) => void winner(...args)} />
+          <StationGrid
+            stations={bracket.stations}
+            bestOf={bracket.bestOf}
+            now={now}
+            busy={busy}
+            noShowMinutes={bracket.noShowMinutes}
+            onWinner={(...args) => void winner(...args)}
+            onForfeit={setForfeiting}
+          />
           <UpNext matches={bracket.upNext} />
         </>
       )}
       <Results done={done} byes={byes} busy={busy} onUndo={undoMatch} />
+      {forfeiting && forfeitPlayers && (
+        <ForfeitDialog
+          title={matchTitle(forfeiting)}
+          players={forfeitPlayers}
+          onMissing={(missing, other) => forfeit(forfeiting.id, missing, other)}
+          onClose={() => setForfeiting(null)}
+        />
+      )}
     </Stack>
   );
+}
+
+/** Both players of a match, or null while one is still to be decided. */
+function bothPlayers(match: BracketMatch): [Player, Player] | null {
+  const [first, second] = match.slots;
+  return first.player && second.player ? [first.player, second.player] : null;
 }

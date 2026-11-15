@@ -1,6 +1,7 @@
 import type { BracketFormat, BracketMatch } from '@coliseumgrid/core';
 import Box from '@mui/material/Box';
 import { PlayerLine, type LineState } from './PlayerLine.tsx';
+import { FORFEIT_MARK } from '../../noShow.ts';
 import { loserWords, type Density } from './model.ts';
 
 interface MatchCardProps {
@@ -57,6 +58,11 @@ export function MatchCard({ match, format, hasRematch, station, density }: Match
           </>
         )}
       </Box>
+      {done && match.forfeit && (
+        <Box component="span" sx={{ fontSize: '0.6em', color: 'text.secondary', whiteSpace: 'nowrap' }}>
+          {FORFEIT_MARK}
+        </Box>
+      )}
       {playing && station !== undefined && (
         <Box component="span" sx={{ fontSize: '0.6em', color: 'text.secondary', whiteSpace: 'nowrap' }}>
           Station {station}

@@ -7,11 +7,16 @@ import type {
   DevicesAnswer,
   EventAnswer,
   EventBody,
+  EventPlan,
   HostSessionAnswer,
   JoinBody,
+  NewEventAnswer,
   PairingCodeAnswer,
   PairingCodeBody,
   PasswordBody,
+  PlanAnswer,
+  PlanBody,
+  PlanNowAnswer,
 } from '@coliseumgrid/core';
 import { call } from './request.ts';
 
@@ -42,4 +47,21 @@ export const getMyDevice = () => call<DeviceAnswer>('GET', '/api/devices/me');
 
 export const getEvent = () => call<EventAnswer>('GET', '/api/event');
 
-export const setEventName = (name: string) => call<EventAnswer>('PUT', '/api/event', { name } satisfies EventBody);
+/**
+ * Renames the event. A `game` left out keeps the stored one, and an empty string clears it
+ * (docs/PLAN.md, "The setup wizard", "Storage and routes").
+ */
+export const saveEvent = (name: string, game?: string) =>
+  call<EventAnswer>('PUT', '/api/event', { name, ...(game !== undefined && { game }) } satisfies EventBody);
+
+/**
+ * A new event that becomes the current one. The old one keeps its bracket or groups; players
+ * sign up again. 409 bracket-running while a competition is being played.
+ */
+export const createEvent = (name: string, game: string) =>
+  call<NewEventAnswer>('POST', '/api/events', { name, ...(game !== '' && { game }) } satisfies EventBody);
+
+/** The wizard's choices, kept on the server so a reload or a second window finds them. */
+export const getPlan = () => call<PlanAnswer>('GET', '/api/event/plan');
+
+export const savePlan = (plan: EventPlan) => call<PlanNowAnswer>('PUT', '/api/event/plan', { plan } satisfies PlanBody);

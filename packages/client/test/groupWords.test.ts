@@ -17,6 +17,8 @@ import {
   gameCount,
   gamesWords,
   heatOnStation,
+  heatResultWords,
+  missingWords,
   recordHelp,
   roundsWords,
   savedWords,
@@ -98,6 +100,11 @@ describe('orderEntry', () => {
   it('fills in the last of 2 and of 3 players', () => {
     expect(orderEntry([zap, kai], [2]).complete?.map((p) => p.id)).toEqual([2, 1]);
     expect(orderEntry([zap, kai, blaze], [1, 3]).complete?.map((p) => p.id)).toEqual([1, 3, 2]);
+  });
+  it('completes at once with one player left, as when the rest of a group is missing', () => {
+    const entry = orderEntry([kai], []);
+    expect(entry.complete?.map((p) => p.id)).toEqual([2]);
+    expect(orderQuestion(entry)).toBe('Is this the order?');
   });
   it('is not complete before the second to last tap', () => {
     expect(orderEntry([zap, kai, blaze], [1]).complete).toBeNull();
@@ -236,5 +243,21 @@ describe('words for what is running', () => {
   it('finds every player in the groups, standings included', () => {
     const answer = heats({ heats: [heat(1, { players: [zap, kai] })], standings: [{ place: 1, player: blaze, points: 0, heatsPlayed: 0 }] });
     expect([...playersInHeats(answer)].sort()).toEqual([1, 2, 3]);
+  });
+});
+
+describe('missing players in a result', () => {
+  it('reads "Missing, 0 points" in a qualifying group', () => {
+    const done = heat(1, { status: 'done', order: [kai, zap], missing: [blaze, moe] });
+    expect(missingWords(done)).toBe('Blaze: Missing, 0 points. Moe: Missing, 0 points');
+    expect(heatResultWords(done)).toBe('1st Kai, 2nd Zap. Blaze: Missing, 0 points. Moe: Missing, 0 points');
+  });
+  it('leaves the points off in the final and a tie-break group, which score places', () => {
+    expect(heatResultWords(heat(2000, { kind: 'final', status: 'done', order: [kai, zap, moe], missing: [blaze] }))).toBe('1st Kai, 2nd Zap, 3rd Moe. Blaze: Missing');
+    expect(missingWords(heat(1000, { kind: 'tie-break', missing: [zap] }))).toBe('Zap: Missing');
+  });
+  it('is the order alone when everyone came, and null before a result', () => {
+    expect(heatResultWords(heat(1, { status: 'done', order: [zap, kai, blaze, moe] }))).toBe('1st Zap, 2nd Kai, 3rd Blaze, 4th Moe');
+    expect(heatResultWords(heat(1))).toBeNull();
   });
 });

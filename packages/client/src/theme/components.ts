@@ -127,6 +127,17 @@ export const components: Components<Theme> = {
           : null,
     },
   },
+  // The wizard's Stepper: the active and finished steps are primary.light in dark mode, and the
+  // step number on the active circle is drawn in the page background, which reads on primary.light.
+  MuiStepIcon: {
+    styleOverrides: {
+      root: ({ theme }) =>
+        darkRed(theme, (red) => ({
+          '&.Mui-active, &.Mui-completed': { color: red },
+          '&.Mui-active .MuiStepIcon-text': { fill: theme.vars.palette.background.default },
+        })),
+    },
+  },
   MuiCheckbox: {
     styleOverrides: {
       root: ({ theme, ownerState }) => [

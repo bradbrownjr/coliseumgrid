@@ -18,8 +18,9 @@ export const getBracket = () => call<BracketAnswer>('GET', '/api/bracket');
 
 export const startBracket = (body: NewBracketBody) => call<BracketNowAnswer>('POST', '/api/bracket', body);
 
-export const recordResult = (matchId: number, winnerId: number) =>
-  call<BracketResultAnswer>('POST', '/api/bracket/results', { matchId, winnerId } satisfies BracketResultBody);
+/** With `forfeit`, the winner is the player who came, and the other didn't (docs/PLAN.md, "Waiting for a missing player"). */
+export const recordResult = (matchId: number, winnerId: number, forfeit = false) =>
+  call<BracketResultAnswer>('POST', '/api/bracket/results', { matchId, winnerId, ...(forfeit && { forfeit }) } satisfies BracketResultBody);
 
 /** Any result can be undone while no later result depends on it; otherwise 409 undo-later-first. */
 export const undoResult = (resultId: number) =>

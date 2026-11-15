@@ -15,6 +15,7 @@ import type {
   TieNotice,
 } from '@coliseumgrid/core';
 import { joinHandles } from '../../handles.ts';
+import { callWords, waitIsOver } from '../../noShow.ts';
 
 /** The earliest unfinished round and the two after it, so 32 players stay readable. */
 export const SHOWN_ROUNDS = 3;
@@ -351,6 +352,17 @@ export interface StationCard {
 }
 
 const slotOf = (player: Player): BracketSlot => ({ player, bye: false });
+
+/**
+ * The call line for a station whose wait for a missing player is over (docs/PLAN.md, "Waiting
+ * for a missing player"): every player on it, since the TV can't know who is missing. Null
+ * while the wait goes on or nothing is on the station; it clears once a result is recorded.
+ */
+export function stationCallLine(card: StationCard, noShowMinutes: number, nowMs: number): string | null {
+  const players = card.slots.flatMap((slot) => (slot.player ? [slot.player] : []));
+  if (players.length === 0 || !waitIsOver(card.calledAt, noShowMinutes, nowMs)) return null;
+  return callWords(players, card.number);
+}
 
 export const bracketStationCards = (stations: BracketStation[]): StationCard[] =>
   stations.map((station) => ({

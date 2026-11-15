@@ -17,6 +17,7 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 import { useState } from 'react';
+import { FORFEIT_MARK } from '../../noShow.ts';
 import { byePlayer, matchTitle, matchWords, placeWords, resultWords, tieWords } from './bracketWords.ts';
 
 /** How many rows a long list shows before "Show all". A 32-player round robin has 496 matches. */
@@ -144,7 +145,7 @@ export function Results({ done, byes, busy, onUndo }: ResultsProps) {
                 <ListItemText
                   sx={{ flex: '1 1 auto', minWidth: 0 }}
                   primary={resultWords(match)}
-                  secondary={matchTitle(match)}
+                  secondary={match.forfeit ? `${matchTitle(match)}. ${FORFEIT_MARK}` : matchTitle(match)}
                   slotProps={{ primary: { sx: { overflowWrap: 'anywhere' } } }}
                 />
                 <UndoButton busy={busy} label={`Undo: ${resultWords(match)}`} onClick={() => onUndo(match)} />

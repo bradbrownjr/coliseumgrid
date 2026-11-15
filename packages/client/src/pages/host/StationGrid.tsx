@@ -1,4 +1,4 @@
-import type { BestOf, BracketStation } from '@coliseumgrid/core';
+import type { BestOf, BracketMatch, BracketStation } from '@coliseumgrid/core';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import TimerIcon from '@mui/icons-material/Timer';
 import Box from '@mui/material/Box';
@@ -6,22 +6,27 @@ import Button from '@mui/material/Button';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import { waitIsOver } from '../../noShow.ts';
 import { elapsedText, matchTitle } from './bracketWords.ts';
+import { NoShowPrompt } from './NoShowPrompt.tsx';
 
 interface StationGridProps {
   stations: BracketStation[];
   bestOf: BestOf;
   now: number;
   busy: boolean;
+  /** Minutes after the call before the card asks "Still waiting?". */
+  noShowMinutes: number;
   onWinner: (matchId: number, winnerId: number, winnerHandle: string) => void;
+  onForfeit: (match: BracketMatch) => void;
 }
 
 /** One card per station, laid out in columns from the md breakpoint up. */
-export function StationGrid({ stations, bestOf, now, busy, onWinner }: StationGridProps) {
+export function StationGrid({ stations, ...card }: StationGridProps) {
   return (
     <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'repeat(2, minmax(0, 1fr))' } }}>
       {stations.map((station) => (
-        <StationCard key={station.number} station={station} bestOf={bestOf} now={now} busy={busy} onWinner={onWinner} />
+        <StationCard key={station.number} station={station} {...card} />
       ))}
     </Box>
   );
@@ -36,9 +41,10 @@ interface StationCardProps extends Omit<StationGridProps, 'stations'> {
  * of the whole match, whatever the best-of label says (docs/PLAN.md, "1 vs 1 bracket"). The
  * timer counts up from the time the match was called.
  */
-function StationCard({ station, bestOf, now, busy, onWinner }: StationCardProps) {
+function StationCard({ station, bestOf, now, busy, noShowMinutes, onWinner, onForfeit }: StationCardProps) {
   const { match } = station;
   const elapsed = elapsedText(station.calledAt, now);
+  const waited = match !== null && match.slots.every((slot) => slot.player) && waitIsOver(station.calledAt, noShowMinutes, now);
   return (
     <Paper variant="outlined" sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
@@ -76,6 +82,7 @@ function StationCard({ station, bestOf, now, busy, onWinner }: StationCardProps)
               <Typography key={index}>To be decided</Typography>
             ),
           )}
+          {waited && <NoShowPrompt busy={busy} onForfeit={() => onForfeit(match)} />}
         </>
       ) : (
         <Typography color="text.secondary">Waiting for a match.</Typography>

@@ -1,7 +1,7 @@
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { PlayerLine } from './PlayerLine.tsx';
-import { elapsedText, type StationCard, type TypeVariant } from './model.ts';
+import { elapsedText, stationCallLine, type StationCard, type TypeVariant } from './model.ts';
 import { useNow } from '../../components/useNow.ts';
 
 interface StationsPanelProps {
@@ -11,10 +11,12 @@ interface StationsPanelProps {
   idle: string;
   /** The group's name goes on its own line under "Station n", which a narrow card needs. */
   noteBelow?: boolean;
+  /** Minutes after the call before the card calls its players again. */
+  noShowMinutes: number;
 }
 
 /** One card per station: the handles (two in a match, up to four in a group) and a timer counting up from the call. */
-export function StationsPanel({ stations, layout, idle, noteBelow = false }: StationsPanelProps) {
+export function StationsPanel({ stations, layout, idle, noteBelow = false, noShowMinutes }: StationsPanelProps) {
   const now = useNow(true);
 
   return (
@@ -30,6 +32,7 @@ export function StationsPanel({ stations, layout, idle, noteBelow = false }: Sta
     >
       {stations.map((station) => {
         const timer = elapsedText(station.calledAt, now);
+        const call = stationCallLine(station, noShowMinutes, now);
         return (
           <Box
             key={station.number}
@@ -63,6 +66,24 @@ export function StationsPanel({ stations, layout, idle, noteBelow = false }: Sta
               station.slots.map((slot, index) => <PlayerLine key={index} slot={slot} />)
             ) : (
               <Box sx={{ fontSize: '0.8em', color: 'text.secondary' }}>{idle}</Box>
+            )}
+            {/* Large, and in words: the crimson fill is never the only sign. */}
+            {call && (
+              <Box
+                role="status"
+                sx={{
+                  mt: 0.75,
+                  px: 1,
+                  py: 0.5,
+                  borderRadius: 1,
+                  bgcolor: 'primary.main',
+                  color: 'primary.contrastText',
+                  fontWeight: 700,
+                  overflowWrap: 'anywhere',
+                }}
+              >
+                {call}
+              </Box>
             )}
           </Box>
         );

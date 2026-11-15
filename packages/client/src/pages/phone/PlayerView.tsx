@@ -107,9 +107,17 @@ export function PlayerView({ answer, failed, reload, onSignedOut, notice, onClea
           <NextBanner alerts={alerts.soon} onDismiss={alerts.dismissSoon} />
           <Box component="header" sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Logo size={5} />
-            <Typography variant="h5" component="h1" sx={{ flex: 1, minWidth: 0, fontWeight: 700, overflowWrap: 'anywhere', lineHeight: 1.2 }}>
-              {answer.event?.name ?? 'ColiseumGrid'}
-            </Typography>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography variant="h5" component="h1" sx={{ fontWeight: 700, overflowWrap: 'anywhere', lineHeight: 1.2 }}>
+                {answer.event?.name ?? 'ColiseumGrid'}
+              </Typography>
+              {/* The game the host typed, under the name, as on the TV (docs/DESIGN.md, "Display"). */}
+              {answer.event?.game && (
+                <Typography color="text.secondary" sx={{ overflowWrap: 'anywhere', lineHeight: 1.3 }}>
+                  {answer.event.game}
+                </Typography>
+              )}
+            </Box>
           </Box>
 
           {notice && (

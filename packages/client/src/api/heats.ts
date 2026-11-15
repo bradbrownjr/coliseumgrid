@@ -17,9 +17,12 @@ export const getHeats = () => call<HeatsAnswer>('GET', '/api/heats');
 
 export const startHeats = (body: NewHeatsBody) => call<HeatsNowAnswer>('POST', '/api/heats', body);
 
-/** `order` is the group's players from 1st to last, each once. */
-export const recordHeat = (heatId: number, order: number[]) =>
-  call<HeatResultAnswer>('POST', '/api/heats/results', { heatId, order } satisfies HeatResultBody);
+/**
+ * `order` is the players who played, 1st first, and `missing` the ones who didn't come: together
+ * the group's players, each once, with at least one in `order`. A missing player scores 0 points.
+ */
+export const recordHeat = (heatId: number, order: number[], missing: number[] = []) =>
+  call<HeatResultAnswer>('POST', '/api/heats/results', { heatId, order, ...(missing.length > 0 && { missing }) } satisfies HeatResultBody);
 
 /** The newest result comes off exactly; an older one reopens its group without moving anyone playing. */
 export const undoHeat = (resultId: number) =>

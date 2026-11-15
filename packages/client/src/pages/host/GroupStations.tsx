@@ -6,8 +6,10 @@ import Button from '@mui/material/Button';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import { waitIsOver } from '../../noShow.ts';
 import { elapsedText } from './bracketWords.ts';
 import { heatTitle } from './groupWords.ts';
+import { NoShowPrompt } from './NoShowPrompt.tsx';
 
 interface GroupStationsProps {
   stations: HeatStation[];
@@ -15,15 +17,19 @@ interface GroupStationsProps {
   heats: readonly Heat[];
   now: number;
   busy: boolean;
+  /** Minutes after the call before the card asks "Still waiting?". */
+  noShowMinutes: number;
   onRecord: (heat: Heat) => void;
+  /** Opens the record panel with "Who is missing?" first. */
+  onForfeit: (heat: Heat) => void;
 }
 
 /** One card per station, laid out in columns from the md breakpoint up. */
-export function GroupStations({ stations, heats, now, busy, onRecord }: GroupStationsProps) {
+export function GroupStations({ stations, ...card }: GroupStationsProps) {
   return (
     <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'repeat(2, minmax(0, 1fr))' } }}>
       {stations.map((station) => (
-        <StationCard key={station.number} station={station} heats={heats} now={now} busy={busy} onRecord={onRecord} />
+        <StationCard key={station.number} station={station} {...card} />
       ))}
     </Box>
   );
@@ -37,9 +43,10 @@ interface StationCardProps extends Omit<GroupStationsProps, 'stations'> {
  * A station's group: its players, a count-up timer from the time it was called, and one "Record
  * result" button (docs/PLAN.md, "Races and free-for-all": recording is once per group).
  */
-function StationCard({ station, heats, now, busy, onRecord }: StationCardProps) {
+function StationCard({ station, heats, now, busy, noShowMinutes, onRecord, onForfeit }: StationCardProps) {
   const { heat } = station;
   const elapsed = elapsedText(station.calledAt, now);
+  const waited = heat !== null && waitIsOver(station.calledAt, noShowMinutes, now);
   return (
     <Paper variant="outlined" sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
@@ -77,6 +84,7 @@ function StationCard({ station, heats, now, busy, onRecord }: StationCardProps) 
           >
             Record result
           </Button>
+          {waited && <NoShowPrompt busy={busy} onForfeit={() => onForfeit(heat)} />}
         </>
       ) : (
         <Typography color="text.secondary">Waiting for a group.</Typography>

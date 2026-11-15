@@ -164,3 +164,14 @@ export function doneMatches(bracket: Bracket): BracketMatch[] {
 export function byHandle(a: Pick<Player, 'handle'>, b: Pick<Player, 'handle'>): number {
   return a.handle.localeCompare(b.handle, undefined, { sensitivity: 'base' });
 }
+
+// Waiting for a missing player (docs/PLAN.md, "Waiting for a missing player").
+
+/** The forfeit panel's question and its line for a match where nobody came. */
+export const MISSING_QUESTION = 'Who is missing?';
+export const BOTH_MISSING_WORDS = 'If both are missing, pick one. The other moves on.';
+
+/** The snackbar after a forfeit: "Zap forfeited. Kai wins." */
+export function forfeitWords(missing: Pick<Player, 'handle'>, winner: Pick<Player, 'handle'>): string {
+  return `${missing.handle} forfeited. ${winner.handle} wins.`;
+}

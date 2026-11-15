@@ -3,8 +3,14 @@ import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import type { SxProps, Theme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
-import type { ReactNode } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
 import { Logo } from './Logo.tsx';
+
+/**
+ * What a page puts above every entry screen it shows. The Sign-up tablet puts the event name and
+ * the game there (docs/DESIGN.md, "Sign-up"); the join screen and the host sign-in put nothing.
+ */
+export const EntryHeader = createContext<ReactNode>(null);
 
 interface EntryFrameProps {
   title: string;
@@ -18,6 +24,7 @@ interface EntryFrameProps {
  * never"): the sign-up steps, the join screen, and the host sign-in.
  */
 export function EntryFrame({ title, narrow = false, children }: EntryFrameProps) {
+  const header = useContext(EntryHeader);
   return (
     <Container
       component="main"
@@ -33,6 +40,7 @@ export function EntryFrame({ title, narrow = false, children }: EntryFrameProps)
         textAlign: 'center',
       }}
     >
+      {header}
       {/* The keypad screens need the height. */}
       {!narrow && <Logo size={10} />}
       <Typography variant="h3" component="h1" sx={{ overflowWrap: 'anywhere' }}>

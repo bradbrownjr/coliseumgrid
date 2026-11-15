@@ -34,6 +34,24 @@ export function orderWords(order: readonly Pick<Player, 'handle'>[]): string {
   return order.map((player, i) => `${placeWords(i + 1)} ${player.handle}`).join(', ');
 }
 
+/**
+ * The missing players of a result: "Zap: Missing, 0 points". The points are said only in a
+ * qualifying group, since the final and a tie-break group score places, not points.
+ */
+export function missingWords(heat: Pick<Heat, 'kind' | 'missing'>): string {
+  return heat.missing.map((player) => `${player.handle}: Missing${heat.kind === 'round' ? ', 0 points' : ''}`).join('. ');
+}
+
+/** A recorded group in one line: "1st Zap, 2nd Kai. Blaze: Missing, 0 points". Null before a result. */
+export function heatResultWords(heat: Pick<Heat, 'kind' | 'order' | 'missing'>): string | null {
+  if (heat.order === null) return null;
+  const order = orderWords(heat.order);
+  return heat.missing.length > 0 ? `${order}. ${missingWords(heat)}` : order;
+}
+
+/** The record panel's line when everyone is marked missing: the server needs one player in the order. */
+export const ONE_HERE_WORDS = 'At least 1 player has to be here.';
+
 /** "Saved: Round 1, group 3". */
 export function savedWords(heat: Pick<Heat, 'kind' | 'round' | 'number'>, all: readonly Pick<Heat, 'kind' | 'round'>[]): string {
   return `Saved: ${heatTitle(heat, all)}`;
@@ -163,8 +181,9 @@ export function orderEntry(players: readonly Player[], pickedIds: readonly numbe
     if (player && !picked.includes(player)) picked.push(player);
   }
   let remaining = players.filter((player) => !picked.includes(player));
-  // With one player left there is only one place left for them.
-  if (remaining.length === 1 && picked.length > 0) {
+  // With one player left there is only one place left for them. That is also the whole order
+  // when the others in the group are missing.
+  if (remaining.length === 1) {
     picked.push(...remaining);
     remaining = [];
   }

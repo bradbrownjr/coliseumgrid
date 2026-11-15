@@ -53,6 +53,7 @@ export function HeatsScreen({ heats }: { heats: Heats }) {
           layout={heatStationLayout(heats.stations.length, screen)}
           idle="Waiting for a group"
           noteBelow
+          noShowMinutes={heats.noShowMinutes}
         />
         <UpNextPanel entries={heatUpNext(heats.upNext)} empty="No groups waiting." />
       </Box>

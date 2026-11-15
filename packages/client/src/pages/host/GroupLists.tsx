@@ -19,7 +19,7 @@ import { placeWords } from './bracketWords.ts';
 import { SHORT_LIST, UndoButton } from './BracketLists.tsx';
 import { joinHandles } from '../../handles.ts';
 import { cutWords } from '../../heatsWords.ts';
-import { heatTitle, orderWords } from './groupWords.ts';
+import { heatResultWords, heatTitle } from './groupWords.ts';
 
 /** More standings rows than this start folded to the top; 32 players is a long table. */
 const SHORT_STANDINGS = 12;
@@ -85,7 +85,7 @@ export function GroupResults({ done, all, busy, onUndo }: GroupResultsProps) {
               <ListItemText
                 sx={{ flex: '1 1 auto', minWidth: 0 }}
                 primary={heatTitle(heat, all)}
-                secondary={heat.order ? orderWords(heat.order) : null}
+                secondary={heatResultWords(heat)}
                 slotProps={{ primary: { sx: { overflowWrap: 'anywhere' } }, secondary: { sx: { overflowWrap: 'anywhere' } } }}
               />
               <UndoButton busy={busy} label={`Undo: ${heatTitle(heat, all)}`} onClick={() => onUndo(heat)} />

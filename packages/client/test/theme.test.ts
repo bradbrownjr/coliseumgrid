@@ -56,6 +56,7 @@ const DARK_RED: ReadonlyArray<[string, string, Record<string, unknown>]> = [
   ['MuiChip', 'root', { color: 'primary', variant: 'outlined' }],
   ['MuiOutlinedInput', 'root', { color: 'primary' }],
   ['MuiInputLabel', 'root', {}],
+  ['MuiStepIcon', 'root', {}],
 ];
 
 function darkStyles(component: string, slot: string, ownerState: Record<string, unknown>): string {

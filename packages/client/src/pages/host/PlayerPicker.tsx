@@ -9,7 +9,7 @@ import FormGroup from '@mui/material/FormGroup';
 import FormLabel from '@mui/material/FormLabel';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { getEventPlayers } from '../../api/bracket.ts';
 import { failureWords } from '../../api/errors.ts';
 import { byHandle, playerCountWords } from './bracketWords.ts';
@@ -28,21 +28,33 @@ export interface PlayerPick {
   clear: () => void;
 }
 
-/** The start dialog's player pick: this event's players start checked, everyone else unchecked. */
-export function usePlayerPick(players: Player[], onChange: () => void): PlayerPick {
+/**
+ * Who to start with: this event's players start checked, everyone else unchecked. It loads
+ * again whenever `version` changes (the host screen bumps it on each `players` message), so the
+ * wizard's step 3 follows sign-ups. A reload keeps the host's own changes: a player who joined
+ * the event is checked, a player who left it is unchecked, and the rest stay as they were.
+ */
+export function usePlayerPick(players: Player[], onChange: () => void, version = 0): PlayerPick {
   const [picked, setPicked] = useState<ReadonlySet<number>>(new Set());
   const [eventIds, setEventIds] = useState<ReadonlySet<number>>(new Set());
   const [loading, setLoading] = useState(true);
   const [loadWords, setLoadWords] = useState<string | null>(null);
+  // The event's players at the last load, to tell the host's picks from sign-ups.
+  const lastEventIds = useRef<ReadonlySet<number>>(new Set());
+  const loaded = useRef(false);
 
   const reload = useCallback(async () => {
-    setLoading(true);
+    // Only the first load shows the spinner; later ones change the list in place.
+    if (!loaded.current) setLoading(true);
     const result = await getEventPlayers();
     setLoading(false);
     if (result.ok) {
-      const ids = new Set(result.data.playerIds);
+      const ids: ReadonlySet<number> = new Set(result.data.playerIds);
+      const before = lastEventIds.current;
+      lastEventIds.current = ids;
+      loaded.current = true;
       setEventIds(ids);
-      setPicked(ids);
+      setPicked((was) => nextPick(was, before, ids));
       setLoadWords(null);
     } else {
       setLoadWords(failureWords(result));
@@ -51,7 +63,7 @@ export function usePlayerPick(players: Player[], onChange: () => void): PlayerPi
 
   useEffect(() => {
     void reload();
-  }, [reload]);
+  }, [reload, version]);
 
   return {
     picked,
@@ -72,6 +84,18 @@ export function usePlayerPick(players: Player[], onChange: () => void): PlayerPi
     pickAll: () => setPicked(new Set(players.map((player) => player.id))),
     clear: () => setPicked(new Set()),
   };
+}
+
+/**
+ * The pick after the event's players changed from `before` to `after`. A player new to the event
+ * is checked, one who left it is unchecked unless the host had picked them from outside it,
+ * and everyone else keeps their mark.
+ */
+export function nextPick(picked: ReadonlySet<number>, before: ReadonlySet<number>, after: ReadonlySet<number>): Set<number> {
+  const next = new Set<number>();
+  for (const id of after) if (!before.has(id) || picked.has(id)) next.add(id);
+  for (const id of picked) if (!after.has(id) && !before.has(id)) next.add(id);
+  return next;
 }
 
 interface PlayerPickerProps {
