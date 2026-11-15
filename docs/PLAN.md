@@ -1512,11 +1512,11 @@ PIN therefore adds little risk (Brad's decision, 2026-11-15).
 
 | Request | Who | Answer |
 |---|---|---|
-| `PUT /api/event/graphic` (raw image body) | host | `{ event }`; 400 `bad-image`; 413 `too-large`; 415 `bad-type` |
+| `PUT /api/event/graphic` (raw image body) | host | `{ event }`; 400 `bad-image` when the bytes don't match the type, `bad-size` when a side is outside 16 to 4000 pixels; 413 `too-large`; 415 `bad-type` |
 | `DELETE /api/event/graphic` | host | `{ event }` |
 | `GET /api/event/graphic` | host or paired device | the image; 404 when there's none |
 | `GET /api/tags` | host | `{ tags: [{ playerId, handle, pin }] }`, `pin` a string or null, sorted by handle |
-| `POST /api/tags` `{ playerId }` | host | 201 `{ tag }`, a reprint with no PIN; 404 |
+| `POST /api/tags` `{ playerId }` | host | 201 `{ tag }`, a reprint; it keeps a PIN still waiting to print, and otherwise has none; 404 |
 | `POST /api/tags/printed` `{ playerIds }` | host | 204; those tags and their PINs are deleted |
 
 An event becomes `{ name, game, graphic }`, where `graphic` is `{ width, height, version }`
