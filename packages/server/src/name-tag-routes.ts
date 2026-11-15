@@ -105,7 +105,7 @@ export async function registerNameTagRoutes(app: FastifyInstance, options: NameT
         schema: {
           response: {
             200: eventAnswerSchema,
-            400: errorSchema(['bad-image', 'bad-request']),
+            400: errorSchema(['bad-image', 'bad-size', 'bad-request']),
             401: notSignedIn,
             413: errorSchema(['too-large']),
             415: errorSchema(['bad-type']),
@@ -121,7 +121,8 @@ export async function registerNameTagRoutes(app: FastifyInstance, options: NameT
         // The type and size come from the file's own header; the declared type must agree.
         const info = imageInfo(bytes);
         const inRange = (n: number): boolean => n >= GRAPHIC_SIZE_MIN && n <= GRAPHIC_SIZE_MAX;
-        if (!info.ok || info.type !== declared || !inRange(info.width) || !inRange(info.height)) return fail(reply, 400, 'bad-image');
+        if (!info.ok || info.type !== declared) return fail(reply, 400, 'bad-image');
+        if (!inRange(info.width) || !inRange(info.height)) return fail(reply, 400, 'bad-size');
 
         // A random name the server makes, never anything from the request.
         const file = newToken();

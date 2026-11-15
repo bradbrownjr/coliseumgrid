@@ -1451,10 +1451,14 @@ event. Badge sheets for an ordinary printer come later (`ROADMAP.md`, "Later").
 
 ### The tag
 
-- The handle is the largest thing on the tag, on one line, sized to fit its width: up to
-  72 points, and never under 28, which fits 16 wide characters (`HANDLE_MAX`) across 94 mm.
-- The event graphic sits at the left, up to a third of the width, kept in its own proportions.
-- The event name and the game name are small under the handle.
+- The handle is the largest thing on the tag, on one line across the whole width inside the
+  safe edge, sized to fit: up to 72 points, and down to 28. 16 ordinary characters
+  (`HANDLE_MAX`) fit across 94 mm at 28 points; 16 capital M and W do not (measured 2026-11-15:
+  they need about 18 points), so a handle that needs less than 28 keeps shrinking, to a floor
+  of 12, rather than cross the edge.
+- The event graphic sits at the left of the row under the handle, up to a third of the width,
+  kept in its own proportions. The row takes 40% of the height inside the safe edge.
+- The event name and the game name are small beside it, in the middle of that row.
 - The PIN is small in a corner, "PIN 4821", so it can be read up close and not across the
   room. A tag with no PIN to print leaves the corner empty.
 - Black on white, so a one-color printer prints it as designed. The graphic prints as the

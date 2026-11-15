@@ -153,10 +153,17 @@ describe('PUT /api/event/graphic refuses', () => {
     await refused(await upload(Buffer.alloc(0), 'image/png'), 400, 'bad-image');
   });
 
-  it.each([0, 15, 4001])('a width or a height of %i pixels', async (n) => {
+  it.each([15, 4001])('a width or a height of %i pixels: 400 bad-size', async (n) => {
     const png = fixture('graphic.png');
-    await refused(await upload(patched(png, 16, be32(n)), 'image/png'), 400, 'bad-image');
-    await refused(await upload(patched(png, 20, be32(n)), 'image/png'), 400, 'bad-image');
+    await refused(await upload(patched(png, 16, be32(n)), 'image/png'), 400, 'bad-size');
+    await refused(await upload(patched(png, 20, be32(n)), 'image/png'), 400, 'bad-size');
+  });
+
+  it('a width or a height of 0 is not a readable image: 400 bad-image', async () => {
+    // The PNG spec calls zero invalid, so imageInfo refuses the header before any size check.
+    const png = fixture('graphic.png');
+    await refused(await upload(patched(png, 16, be32(0)), 'image/png'), 400, 'bad-image');
+    await refused(await upload(patched(png, 20, be32(0)), 'image/png'), 400, 'bad-image');
   });
 
   it('a file over 2 MB, as 413 too-large', async () => {

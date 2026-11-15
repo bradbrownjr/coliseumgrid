@@ -40,6 +40,7 @@ export type ApiErrorCode =
   | 'too-many-handles'
   | 'push-off'
   | 'bad-image'
+  | 'bad-size'
   | 'too-large'
   | 'bad-type';
 
