@@ -269,6 +269,9 @@ This needs the Brother QL-800 and DK-11202 labels (62 x 100 mm).
 - Print a tag with a color graphic. Does it come out clear in black and white?
 - Answer **No, keep them** after a cancelled print. Are the tags still there? Answer **Yes**
   after a real print. Are they gone?
+- Reset a player's PIN while "Did all 5 tags print?" is open, then tap **Yes**. Is that
+  player's new tag still waiting to print, with the new PIN?
+- Upload a color picture for the event. Does it show beside the event name on the TV?
 
 ### Offline bundle (after M9)
 
