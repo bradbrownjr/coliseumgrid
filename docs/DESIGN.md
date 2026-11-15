@@ -404,7 +404,7 @@ iOS fills a transparent icon with black. `tools/make-icons.ts` makes them.
 - **The Name tags panel** (M8) is on `/host` in setup and play mode. In order: the label size
   select, **Print 5 new tags** (a contained button whose count is the queue, turned off at 0),
   **Print a test tag**, and the event graphic with **Choose a picture** and **Remove**. The
-  test tag prints "SampleName", "PIN 0000", and a thin outline at the 3 mm safe edge, so the
+  test tag prints "SampleName", "0000", and a thin outline at the 3 mm safe edge, so the
   host can see whether anything is cut off.
 - After the print dialog closes, a dialog asks "Did all 5 tags print?" with **Yes** and **No,
   keep them**. The question names the count, because a browser can't tell a printed page from

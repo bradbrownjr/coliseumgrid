@@ -35,12 +35,13 @@ describe('a tag page', () => {
     expect(html).toContain('>Zap<');
     expect(html).toContain('Spring Showdown');
     expect(html).toContain('Fighting game');
-    expect(html).toContain('PIN 4821');
+    expect(html).toContain('>4821<');
+    expect(html).not.toContain('PIN');
   });
 
   it('leaves the PIN corner empty for a reprint', () => {
     const html = render(<TagFace tag={{ handle: 'Zap', pin: null }} {...face} />);
-    expect(html).not.toContain('PIN');
+    expect(html).not.toMatch(/>\d{4}</);
   });
 
   it('is one page the size of the label, and the handle starts at the biggest size', () => {
@@ -63,7 +64,7 @@ describe('a tag page', () => {
     const plain = render(<TagFace tag={{ handle: 'SampleName', pin: '0000' }} {...face} />);
     const test = render(<TagFace tag={{ handle: 'SampleName', pin: '0000' }} {...face} outline />);
     expect(test.length).toBeGreaterThan(plain.length);
-    expect(test).toContain('PIN 0000');
+    expect(test).toContain('>0000<');
   });
 
   it('is black on white with no hex colors', () => {

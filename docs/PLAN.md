@@ -1459,8 +1459,9 @@ event. Badge sheets for an ordinary printer come later (`ROADMAP.md`, "Later").
 - The event graphic sits at the left of the row under the handle, up to a third of the width,
   kept in its own proportions. The row takes 40% of the height inside the safe edge.
 - The event name and the game name are small beside it, in the middle of that row.
-- The PIN is small in a corner, "PIN 4821", so it can be read up close and not across the
-  room. A tag with no PIN to print leaves the corner empty.
+- The PIN is small in a corner as its four digits alone, "4821", with no "PIN" word (Brad,
+  2026-11-15), so it can be read up close and not across the room. A tag with no PIN to
+  print leaves the corner empty.
 - Black on white, so a one-color printer prints it as designed. The graphic prints as the
   printer's driver renders it.
 

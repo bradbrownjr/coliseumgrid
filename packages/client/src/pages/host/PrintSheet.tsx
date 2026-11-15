@@ -101,7 +101,7 @@ export function TagFace({ tag, page, eventName, game, graphic, outline = false }
             </Box>
             {tag.pin !== null && (
               <Box component="span" sx={{ flex: 'none', whiteSpace: 'nowrap', fontWeight: 500 }}>
-                {`PIN ${tag.pin}`}
+                {tag.pin}
               </Box>
             )}
           </Box>

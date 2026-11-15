@@ -113,7 +113,8 @@ here may be forgotten next session.
 - A 12-year-old has to be able to host an event (Brad, 2026-11-12).
 - Players are identified by a handle only. The optional PIN is 4 digits, suggested
   automatically so choosing one never holds up the sign-up line, changeable by the player,
-  and printed small in a corner of the name tag (Brad, 2026-11-12).
+  and printed small in a corner of the name tag (Brad, 2026-11-12), as the four digits alone
+  with no "PIN" word (Brad, 2026-11-15).
 - Vulgar handles are filtered the way Pattern Break filters names, tightened for handles:
   capital letters inside a handle count as word breaks (`BigAss` fails), and common
   spelled-by-sound variants are on the lists (Brad, 2026-11-12).
