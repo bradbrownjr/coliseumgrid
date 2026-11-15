@@ -521,7 +521,7 @@ no corepack. Keep that version in step with `packageManager` in `package.json`.
 
 ## Tests
 
-- The server suite takes about 105 s (measured 2026-11-15 on the dev box, 1228 tests passing, after M7; the calibration test is the slowest). Each PIN and the host
+- The server suite takes about 105 s (measured 2026-11-15 on the dev box, 1228 tests passing, after M7; the slowest file is `phone.test.ts`, about 95 s). Each PIN and the host
   password is hashed at the production scrypt cost (`pin-hash.ts`), and
   `packages/server/vitest.config.ts` allows 30 s per test. A test that signs in several times
   needs that room.
