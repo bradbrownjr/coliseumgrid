@@ -12,7 +12,7 @@ screens). The Layout table lists their files.
 - **Node 26.** The version is in `.nvmrc`. Node runs TypeScript directly (type stripping),
   so `core` and `server` have no build step; only the client is built (by Vite).
 - **pnpm 12.** The exact version is `packageManager` in the root `package.json`
-  (`pnpm@12.18.0`).
+  (`pnpm@12.21.0`).
 
 ### On the dev box
 

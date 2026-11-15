@@ -1567,7 +1567,7 @@ milestone.
 | Concern | Choice | Notes |
 |---|---|---|
 | Runtime | Node 26 LTS (26.13.1) | Runs TypeScript directly (type stripping), as in Pattern Break |
-| Package manager | pnpm 12.18.0 | Workspaces: `core`, `server`, `client` |
+| Package manager | pnpm 12.21.0 | Workspaces: `core`, `server`, `client` |
 | Language | TypeScript 7.0.2, strict | `erasableSyntaxOnly` on, so Node can run every file |
 | Lint | Oxlint 1.93.0 | TypeScript 7 has no compiler API yet, so no typescript-eslint |
 | Tests | Vitest 5.1.0; Playwright 1.65.1 | Playwright for screen tests and screenshots |

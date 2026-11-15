@@ -7,7 +7,7 @@
 # to run: its production dependencies and the workspace packages it imports.
 FROM node:26-alpine AS build
 # Keep this version in step with "packageManager" in package.json. Node 26 has no corepack.
-RUN npm install --global pnpm@12.18.0
+RUN npm install --global pnpm@12.21.0
 WORKDIR /src
 COPY . .
 RUN pnpm install --frozen-lockfile
