@@ -2,10 +2,11 @@
 // is wiped at startup and hourly while its tag stays queued, and a PIN that leaves the queue is
 // gone from the database file itself, not only from the answers.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../src/app.ts';
@@ -66,6 +67,56 @@ describe('TagQueue.wipeOldPins', () => {
     clock += 11 * HOUR;
     expect(tags.wipeOldPins(TAG_PIN_MAX_MS)).toBe(0);
     expect(tags.get(id!)?.pin).toBe('3333');
+  });
+});
+
+describe('a checkpoint that a reader holds up', () => {
+  let dir: string;
+  let file: string;
+  let reader: DatabaseSync | undefined;
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'coliseumgrid-busy-'));
+    file = join(dir, 'coliseumgrid.db');
+    db = openDatabase(file);
+  });
+  afterEach(async () => {
+    reader?.close();
+    reader = undefined;
+    db.close();
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('is logged without a PIN, and the next hourly wipe empties the log', () => {
+    const [a, b] = addPlayers(db, 2);
+    const warnings: string[] = [];
+    const tags = createTagQueue(db, () => clock, (message) => warnings.push(message));
+    tags.queue(a!, '4821');
+    // A reader that began before the next write stops the checkpoint at its snapshot
+    // (https://sqlite.org/wal.html#checkpointing).
+    reader = new DatabaseSync(file);
+    reader.exec('BEGIN');
+    reader.prepare('SELECT COUNT(*) FROM tag_queue').get();
+    tags.queue(b!, '5932');
+
+    expect(tags.printed([{ playerId: a!, version: tags.get(a!)!.version }])).toBe(1);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).not.toMatch(/\d{4}/);
+    expect(statSync(`${file}-wal`).size, 'the log still holds the old pages').toBeGreaterThan(0);
+
+    // The reader is done. The hourly wipe has no PIN to wipe, and still checkpoints.
+    reader.exec('COMMIT');
+    expect(tags.wipeOldPins(TAG_PIN_MAX_MS)).toBe(0);
+    expect(warnings).toHaveLength(1);
+    expect(statSync(`${file}-wal`).size).toBe(0);
+  });
+
+  it('does not warn when nothing holds the checkpoint up', () => {
+    const [a] = addPlayers(db, 1);
+    const warnings: string[] = [];
+    const tags = createTagQueue(db, () => clock, (message) => warnings.push(message));
+    tags.queue(a!, '4821');
+    tags.remove(a!);
+    expect(warnings).toEqual([]);
   });
 });
 
@@ -157,7 +208,8 @@ describe('in the app, with the database in a file', () => {
     const id = res.json().player.id as number;
     expect(onDisk().includes(storedPin('4821', START)), 'the queued PIN is in the file before Yes').toBe(true);
 
-    expect((await laptop()('POST', '/api/tags/printed', { playerIds: [id] })).statusCode).toBe(204);
+    const { tags } = (await laptop()('GET', '/api/tags')).json();
+    expect((await laptop()('POST', '/api/tags/printed', { tags: [{ playerId: id, version: tags[0].version }] })).statusCode).toBe(204);
     expect(rows()).toEqual([]);
     expect(onDisk().includes(storedPin('4821', START))).toBe(false);
   });
@@ -172,7 +224,7 @@ describe('in the app, with the database in a file', () => {
     clock += TAG_PIN_MAX_MS;
     await start();
     expect(rows()).toEqual([{ player_id: id, pin: null, pin_stored_at: null }]);
-    expect((await laptop()('GET', '/api/tags')).json()).toEqual({ tags: [{ playerId: id, handle: 'Player1', pin: null }] });
+    expect((await laptop()('GET', '/api/tags')).json()).toEqual({ tags: [{ playerId: id, handle: 'Player1', pin: null, version: expect.any(Number) }] });
     expect(onDisk().includes(storedPin('4821', START))).toBe(false);
   });
 

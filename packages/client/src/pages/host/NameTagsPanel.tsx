@@ -45,8 +45,9 @@ export function NameTagsPanel({ event, tagsVersion, onEventChanged }: NameTagsPa
   const [customWidth, setCustomWidth] = useState(String(setting.widthMm));
   const [customHeight, setCustomHeight] = useState(String(setting.heightMm));
   const [job, setJob] = useState<Job | null>(null);
-  // The tags the host is asked about. They stay while the dialog fades out, so its words don't change as it closes.
-  const [asked, setAsked] = useState<number[]>([]);
+  // The tags the host is asked about, as they were when printing began, each with its version.
+  // They stay while the dialog fades out, so its words don't change as it closes.
+  const [asked, setAsked] = useState<NameTag[]>([]);
   const [askOpen, setAskOpen] = useState(false);
   const [askWords, setAskWords] = useState<string | null>(null);
   const [pictureWords, setPictureWords] = useState<string | null>(null);
@@ -92,7 +93,7 @@ export function NameTagsPanel({ event, tagsVersion, onEventChanged }: NameTagsPa
       printing.current = null;
       setJob(null);
       if (running.kind !== 'queue') return;
-      setAsked(running.tags.map((tag) => tag.playerId));
+      setAsked(running.tags);
       setAskWords(null);
       setAskOpen(true);
     };
@@ -104,7 +105,9 @@ export function NameTagsPanel({ event, tagsVersion, onEventChanged }: NameTagsPa
 
   const answer = async (printed: boolean) => {
     if (!printed) return setAskOpen(false);
-    const result = await markTagsPrinted(asked);
+    // The versions printed, not the ids alone: a tag queued again while this dialog was open
+    // (a new PIN) is a different tag, and the server keeps it.
+    const result = await markTagsPrinted(asked.map(({ playerId, version }) => ({ playerId, version })));
     if (!result.ok) return setAskWords(failureWords(result));
     setAskOpen(false);
     void load();

@@ -2,7 +2,7 @@
 // JSON answer lists its fields and every body schema is closed (CLAUDE.md, rule 1). The queue and
 // its PINs are for the host only; the graphic is for the host and paired screens, never a phone.
 
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   GRAPHIC_BYTES_MAX,
@@ -44,15 +44,23 @@ export interface NameTagRoutesOptions {
   onTagsChanged: () => void;
 }
 
-const tagSchema = objectSchema({ playerId: { type: 'integer' }, handle: { type: 'string' }, pin: { type: ['string', 'null'] } });
+const tagSchema = objectSchema({ playerId: { type: 'integer' }, handle: { type: 'string' }, pin: { type: ['string', 'null'] }, version: { type: 'integer' } });
 const eventAnswerSchema = objectSchema({ event: nullableEventSchema });
 
-// The ids only have to be players; the size limit keeps a huge body small.
-const PRINTED_IDS_MAX = 1000;
+// The pairs only have to match queued tags; the size limit keeps a huge body small.
+const PRINTED_MAX = 1000;
 const tagBody = objectSchema({ playerId: { type: 'integer', minimum: 1 } });
 const printedBody = objectSchema({
-  playerIds: { type: 'array', items: { type: 'integer', minimum: 1 }, maxItems: PRINTED_IDS_MAX },
+  tags: {
+    type: 'array',
+    items: objectSchema({ playerId: { type: 'integer', minimum: 1 }, version: { type: 'integer', minimum: 1 } }),
+    maxItems: PRINTED_MAX,
+  },
 });
+
+// A graphic's file name is newToken(): 32 random bytes as 43 base64url characters. Only a name
+// of that shape is ever deleted as an orphan, so a file someone put in the folder is left alone.
+const GRAPHIC_FILE_NAME = /^[A-Za-z0-9_-]{43}$/;
 
 const badRequest = errorSchema(['bad-request']);
 const notFound = errorSchema(['not-found']);
@@ -71,15 +79,41 @@ export async function registerNameTagRoutes(app: FastifyInstance, options: NameT
   const pathOf = (file: string): string => join(graphicsDir, file);
 
   /**
-   * Deletes a replaced graphic's file once no event, current or past, uses it. It runs after the
-   * database has moved on, so a failure is logged and never undoes the change.
+   * Deletes a replaced graphic's file. events.setGraphic already cleared it from every event, so
+   * nothing names it. It runs after the database has moved on, so a failure is logged and never
+   * undoes the change.
    */
-  async function removeIfUnused(file: string | null): Promise<void> {
-    if (file === null || events.graphicInUse(file)) return;
+  async function removeReplaced(file: string | null): Promise<void> {
+    if (file === null) return;
     await unlink(pathOf(file)).catch((error: unknown) => {
       if (!isMissingFile(error)) app.log.warn(`A replaced graphic could not be deleted: ${error instanceof Error ? error.message : String(error)}`);
     });
   }
+
+  /**
+   * At startup, deletes the files no event names: an upload that died between writing the file
+   * and storing it, or a delete that failed. Nothing is uploading yet, so no file is half made.
+   */
+  async function removeOrphans(): Promise<void> {
+    let names: string[];
+    try {
+      names = await readdir(graphicsDir);
+    } catch (error) {
+      // The folder is made by the first upload.
+      if (isMissingFile(error)) return;
+      throw error;
+    }
+    const named = events.graphicFiles();
+    for (const name of names) {
+      if (!GRAPHIC_FILE_NAME.test(name) || named.has(name)) continue;
+      await unlink(pathOf(name)).catch((error: unknown) => {
+        if (!isMissingFile(error)) app.log.warn(`An unused graphic could not be deleted: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    }
+  }
+  await removeOrphans().catch((error: unknown) => {
+    app.log.warn(`Unused graphics could not be looked for: ${error instanceof Error ? error.message : String(error)}`);
+  });
 
   // The event graphic ---------------------------------------------------------------------
 
@@ -126,15 +160,22 @@ export async function registerNameTagRoutes(app: FastifyInstance, options: NameT
 
         // A random name the server makes, never anything from the request.
         const file = newToken();
-        await mkdir(graphicsDir, { recursive: true });
-        await writeFile(pathOf(file), bytes, { flag: 'wx', mode: 0o600 });
+        // The file is written before the database changes, so a failure at either step must not
+        // leave it behind. A failed write can leave part of a file, so it is deleted too.
+        const discard = () => unlink(pathOf(file)).catch(() => undefined);
+        try {
+          await mkdir(graphicsDir, { recursive: true });
+          await writeFile(pathOf(file), bytes, { flag: 'wx', mode: 0o600 });
+        } catch (error) {
+          await discard();
+          throw error;
+        }
         const { event, replaced } = await chain.run(async () => {
           let changed;
           try {
             changed = events.setGraphic({ file, type: info.type, width: info.width, height: info.height });
           } catch (error) {
-            // The file was written first, so a failed update would leave it behind.
-            await unlink(pathOf(file)).catch(() => undefined);
+            await discard();
             throw error;
           }
           // On the chain, so two uploads tell the screens in the order they were stored.
@@ -142,7 +183,7 @@ export async function registerNameTagRoutes(app: FastifyInstance, options: NameT
           hub.broadcast({ type: 'event', event: changed.event });
           return changed;
         });
-        await removeIfUnused(replaced);
+        await removeReplaced(replaced);
         return { event };
       },
     );
@@ -155,7 +196,7 @@ export async function registerNameTagRoutes(app: FastifyInstance, options: NameT
       chain.run(async () => {
         const { event, replaced } = events.setGraphic(null);
         if (replaced === null) return { event };
-        await removeIfUnused(replaced);
+        await removeReplaced(replaced);
         onEventChanged();
         hub.broadcast({ type: 'event', event });
         return { event };
@@ -178,7 +219,10 @@ export async function registerNameTagRoutes(app: FastifyInstance, options: NameT
         // guessing another, and the policy stops the file from running anything if it is opened
         // at its own address (docs/PLAN.md, "The event graphic").
         .header('x-content-type-options', 'nosniff')
-        .header('content-security-policy', "default-src 'none'; sandbox");
+        .header('content-security-policy', "default-src 'none'; sandbox")
+        // Only this site's own pages may load it, so another site's page can't embed a paired
+        // screen's picture (https://developer.mozilla.org/docs/Web/HTTP/Reference/Headers/Cross-Origin-Resource-Policy).
+        .header('cross-origin-resource-policy', 'same-origin');
       if (request.headers['if-none-match'] === etag) return reply.code(304).send();
       let bytes: Buffer;
       try {
@@ -196,7 +240,11 @@ export async function registerNameTagRoutes(app: FastifyInstance, options: NameT
   app.get<{ Reply: TagsAnswer }>(
     '/api/tags',
     { onRequest: access.requireHost, schema: { response: { 200: objectSchema({ tags: { type: 'array', items: tagSchema } }), 401: notSignedIn } } },
-    async () => ({ tags: tags.list() }),
+    async (_request, reply) => {
+      // The answer holds plain PINs, so no browser or proxy keeps a copy.
+      reply.header('cache-control', 'no-store');
+      return { tags: tags.list() };
+    },
   );
 
   app.post<{ Body: TagBody; Reply: TagAnswer | ApiError }>(
@@ -224,7 +272,7 @@ export async function registerNameTagRoutes(app: FastifyInstance, options: NameT
       schema: { body: printedBody, response: { 204: { type: 'null' }, 400: badRequest, 401: notSignedIn } },
     },
     async (request, reply) => {
-      if (tags.printed(request.body.playerIds) > 0) onTagsChanged();
+      if (tags.printed(request.body.tags) > 0) onTagsChanged();
       return reply.code(204).send();
     },
   );

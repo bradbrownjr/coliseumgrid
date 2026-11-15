@@ -242,11 +242,16 @@ export const MIGRATIONS: readonly string[] = [
   // M8: name tags (docs/PLAN.md, section 7). The event's graphic is the file's random name in
   // DATA_DIR/graphics (also its version), its type, and its size read from its header; all four
   // are null for none and written together. A new event copies them, so a file can belong to
-  // several events, and the index finds whether any event still uses one.
+  // several events, and the index finds the events that name one (events.ts clears a replaced
+  // file from all of them).
   // `tag_queue` holds at most one tag per player, deleted with the player. `pin` is the plain PIN
   // (4 digits), kept only until the tag prints or for 12 hours (tag-queue.ts); `pin_stored_at` is
   // when it was stored, both or neither. Like `event_players`, the queue belongs to the current
   // event: a new event empties it, so it has no event column.
+  // `version` is a number that goes up on every queueing of a tag, taken from the one row of
+  // `tag_queue_counter`, which only grows. The host's "Yes, they printed" names the version it
+  // printed, so a tag queued again after that (a new PIN) isn't deleted unprinted. A counter
+  // row, not MAX(version), so a deleted tag's number is never handed out again.
   `
   ALTER TABLE events ADD COLUMN graphic_file TEXT;
   ALTER TABLE events ADD COLUMN graphic_type TEXT CHECK (graphic_type IN ('image/png', 'image/jpeg', 'image/webp'));
@@ -258,8 +263,14 @@ export const MIGRATIONS: readonly string[] = [
     pin           TEXT CHECK (pin IS NULL OR (length(pin) = 4 AND pin NOT GLOB '*[^0-9]*')),
     pin_stored_at TEXT,
     queued_at     TEXT NOT NULL,
+    version       INTEGER NOT NULL,
     CHECK ((pin IS NULL) = (pin_stored_at IS NULL))
   );
+  CREATE TABLE tag_queue_counter (
+    id   INTEGER PRIMARY KEY CHECK (id = 1),
+    last INTEGER NOT NULL
+  );
+  INSERT INTO tag_queue_counter (id, last) VALUES (1, 0);
   `,
 ];
 

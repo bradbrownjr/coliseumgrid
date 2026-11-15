@@ -115,6 +115,18 @@ describe('a PIN reset while a check is running', () => {
     expect(count('event_players')).toBe(0);
   });
 
+  it('queues no name tag with the old PIN when a claim straddles the reset: only the reset\'s tag is queued', async () => {
+    const held = holdNextCheck();
+    const pending = callers.signup('POST', '/api/signup/claim', { handle: 'Player1', pin: PIN });
+    await held.inFlight;
+    endGate();
+    const reset = (await host('POST', `/api/players/${ids[0]}/reset-pin`)).json().pin as string;
+    held.release();
+    expect((await pending).statusCode).toBe(401);
+    expect(db.prepare('SELECT player_id, pin FROM tag_queue').all()).toEqual([{ player_id: ids[0], pin: reset }]);
+    expect(reset).not.toBe(PIN);
+  });
+
   it('refuses a follow that straddles a rename of the player too', async () => {
     const held = holdNextCheck();
     const pending = from(app, PHONE_IP)('POST', '/api/phone/follow', { handle: 'Player1', pin: PIN });

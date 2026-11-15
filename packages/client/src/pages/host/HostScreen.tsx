@@ -38,7 +38,7 @@ import { playersInHeats } from './groupWords.ts';
 import { HandleDialog } from './HandleDialog.tsx';
 import { MergeDialog } from './MergeDialog.tsx';
 import { NameTagsPanel } from './NameTagsPanel.tsx';
-import { NAME_TAGS_TITLE, REPRINT_ADDED } from './nameTagWords.ts';
+import { NAME_TAGS_TITLE, reprintAddedWords } from './nameTagWords.ts';
 import { PairingPanel } from './PairingPanel.tsx';
 import { PinDialog } from './PinDialog.tsx';
 import { PlayerActions } from './PlayerActions.tsx';
@@ -153,7 +153,7 @@ export function HostScreen({ onSignedOut }: HostScreenProps) {
 
   const reprint = async (player: Player) => {
     const result = await queueTag(player.id);
-    say(result.ok ? REPRINT_ADDED : failureWords(result));
+    say(result.ok ? reprintAddedWords(result.data.tag.pin) : failureWords(result));
   };
 
   const addToCompetition = async (player: Player) => {

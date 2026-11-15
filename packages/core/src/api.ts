@@ -199,6 +199,11 @@ export interface NameTag {
   playerId: number;
   handle: string;
   pin: string | null;
+  /**
+   * Goes up each time the tag is queued again (a new PIN, a claim, a reprint). "Printed" names
+   * it, so a tag queued after the host printed isn't deleted by that answer.
+   */
+  version: number;
 }
 
 /** GET /api/tags: sorted by handle. */
@@ -216,9 +221,15 @@ export interface TagAnswer {
   tag: NameTag;
 }
 
-/** POST /api/tags/printed: those tags and their PINs are deleted. */
+/** One tag the host printed: the player and the `version` the host's copy had. */
+export interface PrintedTag {
+  playerId: number;
+  version: number;
+}
+
+/** POST /api/tags/printed: a tag and its PIN are deleted only if its version is still the one named. */
 export interface TagsPrintedBody {
-  playerIds: number[];
+  tags: PrintedTag[];
 }
 
 /** Messages the server sends on GET /api/live. */

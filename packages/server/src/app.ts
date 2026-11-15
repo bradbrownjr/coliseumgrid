@@ -173,7 +173,7 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
   const heatStore = createHeatStore(db);
   const competition = createCompetition(db, store, heatStore, players, events, options.onAnswerBuilt);
   const followCodes = createFollowCodes(db, now);
-  const tags = createTagQueue(db, now);
+  const tags = createTagQueue(db, now, (message) => app.log.warn(message));
   // The print queue's news goes to host screens only (docs/PLAN.md, "Name tags API").
   const onTagsChanged = (): void => hub.broadcastToHosts({ type: 'tags' });
   // Plain PINs queued 12 hours ago go at startup and hourly; the tags stay.

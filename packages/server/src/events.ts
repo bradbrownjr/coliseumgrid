@@ -4,7 +4,7 @@
 
 import { EVENT_NAME_MAX, isEventPlan, type EventInfo, type EventPlan, type ImageType } from '@coliseumgrid/core';
 import { iso, type Clock } from './clock.ts';
-import type { Database } from './database.ts';
+import { inTransaction, type Database } from './database.ts';
 
 /**
  * The name of an event that a sign-up or a bracket made before the host named one. It is what
@@ -69,12 +69,14 @@ export interface Events {
   graphic(): StoredGraphic | null;
   /**
    * Gives the current event this graphic, or none, and returns the file it replaced (null when
-   * there was none or it is the same). A graphic makes an event named DEFAULT_EVENT_NAME if
-   * there is none; removing one never makes an event.
+   * there was none or it is the same). Only the current event's graphic is ever shown, so a
+   * replaced file is cleared from past events too, and the caller deletes it: nothing names it
+   * any more. A graphic makes an event named DEFAULT_EVENT_NAME if there is none; removing one
+   * never makes an event.
    */
   setGraphic(graphic: StoredGraphic | null): { created: boolean; event: EventInfo | null; replaced: string | null };
-  /** True if any event, current or past, still uses the file. */
-  graphicInUse(file: string): boolean;
+  /** Every graphic file some event names, for deleting the files nothing names. */
+  graphicFiles(): Set<string>;
 }
 
 /** A stored plan that isn't JSON, or doesn't pass `isEventPlan`, is as good as none, so a hand-edited database can't break the page. */
@@ -100,7 +102,8 @@ export function createEvents(db: Database, now: Clock): Events {
   );
   const storePlan = db.prepare('UPDATE events SET plan = ? WHERE id = ?');
   const storeGraphic = db.prepare('UPDATE events SET graphic_file = ?, graphic_type = ?, graphic_width = ?, graphic_height = ? WHERE id = ?');
-  const fileInUse = db.prepare('SELECT 1 FROM events WHERE graphic_file = ? LIMIT 1');
+  const clearFile = db.prepare('UPDATE events SET graphic_file = NULL, graphic_type = NULL, graphic_width = NULL, graphic_height = NULL WHERE graphic_file = ?');
+  const allFiles = db.prepare('SELECT DISTINCT graphic_file FROM events WHERE graphic_file IS NOT NULL');
 
   const idOf = (): number | null => {
     const row = newest.get();
@@ -186,11 +189,14 @@ export function createEvents(db: Database, now: Clock): Events {
       if (graphic === null && newest.get() === undefined) return { created: false, event: null, replaced: null };
       const { id, created } = events.ensureCurrent();
       const before = events.graphic();
-      storeGraphic.run(graphic?.file ?? null, graphic?.type ?? null, graphic?.width ?? null, graphic?.height ?? null, id);
       const replaced = before !== null && before.file !== graphic?.file ? before.file : null;
+      inTransaction(db, () => {
+        storeGraphic.run(graphic?.file ?? null, graphic?.type ?? null, graphic?.width ?? null, graphic?.height ?? null, id);
+        if (replaced !== null) clearFile.run(replaced);
+      });
       return { created, event: events.current(), replaced };
     },
-    graphicInUse: (file) => fileInUse.get(file) !== undefined,
+    graphicFiles: () => new Set(allFiles.all().map((row) => row['graphic_file'] as string)),
   };
   return events;
 }

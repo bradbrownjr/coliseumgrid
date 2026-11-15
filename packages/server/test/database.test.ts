@@ -598,7 +598,8 @@ describe('migration 9 (name tags)', () => {
       { graphic_file: null, graphic_type: null, graphic_width: null, graphic_height: null },
       { graphic_file: null, graphic_type: null, graphic_width: null, graphic_height: null },
     ]);
-    expect(columns(db, 'tag_queue')).toEqual(['player_id', 'pin', 'pin_stored_at', 'queued_at']);
+    expect(columns(db, 'tag_queue')).toEqual(['player_id', 'pin', 'pin_stored_at', 'queued_at', 'version']);
+    expect(db.prepare('SELECT id, last FROM tag_queue_counter').all()).toEqual([{ id: 1, last: 0 }]);
     expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
     expect(db.prepare('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' });
   });
@@ -614,15 +615,22 @@ describe('migration 9 (name tags)', () => {
   it('holds one tag per player, a PIN of 4 digits with its time or neither, and drops the tag with the player', () => {
     const db = m8Database();
     migrate(db);
-    const insert = db.prepare("INSERT INTO tag_queue (player_id, pin, pin_stored_at, queued_at) VALUES (1, ?, ?, 'q')");
+    const insert = db.prepare("INSERT INTO tag_queue (player_id, pin, pin_stored_at, queued_at, version) VALUES (1, ?, ?, 'q', 1)");
     for (const [pin, at] of [['482', 't'], ['48210', 't'], ['48a1', 't'], ['4821', null], [null, 't']] as const) {
       expect(() => insert.run(pin, at), `${pin} ${at}`).toThrow(/CHECK/);
     }
     insert.run('0482', 't');
     expect(() => insert.run(null, null)).toThrow(/UNIQUE|PRIMARY/);
-    expect(() => db.exec("INSERT INTO tag_queue (player_id, pin, pin_stored_at, queued_at) VALUES (99, NULL, NULL, 'q')")).toThrow(/FOREIGN KEY/);
+    expect(() => db.exec("INSERT INTO tag_queue (player_id, pin, pin_stored_at, queued_at, version) VALUES (99, NULL, NULL, 'q', 1)")).toThrow(/FOREIGN KEY/);
     db.exec('DELETE FROM event_players; DELETE FROM players');
     expect(dump(db, 'tag_queue')).toEqual([]);
+  });
+
+  it('needs a version, and keeps one counter row', () => {
+    const db = m8Database();
+    migrate(db);
+    expect(() => db.exec("INSERT INTO tag_queue (player_id, queued_at) VALUES (1, 'q')")).toThrow(/NOT NULL/);
+    expect(() => db.exec('INSERT INTO tag_queue_counter (id, last) VALUES (2, 0)')).toThrow(/CHECK/);
   });
 });
 

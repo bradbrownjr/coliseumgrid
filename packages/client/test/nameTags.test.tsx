@@ -8,7 +8,7 @@ import { EventPicture } from '../src/components/EventPicture.tsx';
 import { NameTagsPanel } from '../src/pages/host/NameTagsPanel.tsx';
 import { PlayerActions } from '../src/pages/host/PlayerActions.tsx';
 import { TagFace } from '../src/pages/host/PrintSheet.tsx';
-import { NAME_TAGS_TITLE, printButtonWords, printedHelp, printedQuestion, REPRINT_ADDED } from '../src/pages/host/nameTagWords.ts';
+import { NAME_TAGS_TITLE, printButtonWords, printedHelp, printedQuestion, reprintAddedWords } from '../src/pages/host/nameTagWords.ts';
 import { theme } from '../src/theme/theme.ts';
 
 const render = (element: ReactElement) => renderToString(<ThemeProvider theme={theme}>{element}</ThemeProvider>);
@@ -25,7 +25,8 @@ describe('the words', () => {
     expect(printedQuestion(1)).toBe('Did the tag print?');
     expect(printedHelp(3)).toContain('Pick No to keep them.');
     expect(NAME_TAGS_TITLE).toBe('Name tags');
-    expect(REPRINT_ADDED).toBe('Added to the print list. Reprints have no PIN.');
+    expect(reprintAddedWords(null)).toBe('Added to the print list. Reprints have no PIN.');
+    expect(reprintAddedWords('4821')).toBe('Added to the print list.');
   });
 });
 
@@ -151,14 +152,14 @@ describe('the name tag calls', () => {
     answer(200, { event: { name: 'A', game: null, graphic: null } });
     await removeGraphic();
     expect(fetchMock.mock.calls.at(-1)?.[1]?.method).toBe('DELETE');
-    answer(201, { tag: { playerId: 4, handle: 'Zap', pin: null } });
+    answer(201, { tag: { playerId: 4, handle: 'Zap', pin: null, version: 7 } });
     await queueTag(4);
     expect(fetchMock.mock.calls.at(-1)?.[1]?.body).toBe('{"playerId":4}');
     answer(204);
-    const printed = await markTagsPrinted([4, 5]);
+    const printed = await markTagsPrinted([{ playerId: 4, version: 7 }, { playerId: 5, version: 2 }]);
     expect(printed.ok).toBe(true);
     const [path, init] = fetchMock.mock.calls.at(-1) ?? [];
     expect(path).toBe('/api/tags/printed');
-    expect(init?.body).toBe('{"playerIds":[4,5]}');
+    expect(init?.body).toBe('{"tags":[{"playerId":4,"version":7},{"playerId":5,"version":2}]}');
   });
 });

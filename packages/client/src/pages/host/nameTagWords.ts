@@ -3,7 +3,9 @@ import { GRAPHIC_BYTES_MAX, LABEL_CUSTOM_MAX_MM, LABEL_CUSTOM_MIN_MM } from '@co
 // The words of the Name tags panel (docs/DESIGN.md, "Name tags"), apart from the screen so a test can read them.
 
 export const NAME_TAGS_TITLE = 'Name tags';
-export const REPRINT_ADDED = 'Added to the print list. Reprints have no PIN.';
+
+/** What the reprint snackbar says. A PIN already waiting in the list prints; otherwise the tag has none. */
+export const reprintAddedWords = (pin: string | null): string => (pin === null ? 'Added to the print list. Reprints have no PIN.' : 'Added to the print list.');
 
 const plural = (count: number, one: string, many: string): string => (count === 1 ? one : many);
 

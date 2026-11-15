@@ -1,6 +1,6 @@
 // Calls for the name tags (docs/PLAN.md, "Name tags API"): the print queue and the event graphic.
 
-import type { EventAnswer, EventGraphic, TagAnswer, TagBody, TagsAnswer, TagsPrintedBody } from '@coliseumgrid/core';
+import type { EventAnswer, EventGraphic, PrintedTag, TagAnswer, TagBody, TagsAnswer, TagsPrintedBody } from '@coliseumgrid/core';
 import { call } from './request.ts';
 
 /** Tags waiting to print, sorted by handle. Host only. */
@@ -9,8 +9,11 @@ export const listTags = () => call<TagsAnswer>('GET', '/api/tags');
 /** A reprint: the tag joins the queue with no PIN (a PIN still waiting stays). */
 export const queueTag = (playerId: number) => call<TagAnswer>('POST', '/api/tags', { playerId } satisfies TagBody);
 
-/** The host said these tags printed, so the server deletes them and their PINs. */
-export const markTagsPrinted = (playerIds: number[]) => call<void>('POST', '/api/tags/printed', { playerIds } satisfies TagsPrintedBody);
+/**
+ * The host said these tags printed. The server deletes each with its PIN only if it is still at
+ * the version printed, so a tag queued again meanwhile stays.
+ */
+export const markTagsPrinted = (printed: PrintedTag[]) => call<void>('POST', '/api/tags/printed', { tags: printed } satisfies TagsPrintedBody);
 
 /** Uploads the picked file as the event's graphic. The file's own type goes in `Content-Type`. */
 export const uploadGraphic = (file: File) => call<EventAnswer>('PUT', '/api/event/graphic', file);

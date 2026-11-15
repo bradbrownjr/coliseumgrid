@@ -4,7 +4,7 @@
 // tested in packages/core (image-info.test.ts) with the same fixture files.
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { EventInfo } from '@coliseumgrid/core';
@@ -235,14 +235,51 @@ describe('the stored file', () => {
     expect(files()).toEqual([current]);
   });
 
-  it('is kept while an earlier event uses it', async () => {
+  // Only the current event's graphic is ever shown (docs/PLAN.md, "Storing"), so a past event
+  // that names the file doesn't keep it.
+  it('is deleted when replaced or removed even though an earlier event names it, and that event forgets it', async () => {
     const first = (await upload(fixture('graphic.png'), 'image/png')).json().event.graphic.version as string;
     expect((await callers.host('POST', '/api/events', { name: 'Saturday' })).statusCode).toBe(201);
     const second = (await upload(fixture('lossy.webp'), 'image/webp')).json().event.graphic.version as string;
-    // Friday still uses the first file.
-    expect(files()).toEqual([first, second].sort());
+    expect(files()).toEqual([second]);
+    expect(db.prepare('SELECT graphic_file, graphic_type, graphic_width, graphic_height FROM events WHERE id = 1').get()).toEqual({
+      graphic_file: null,
+      graphic_type: null,
+      graphic_width: null,
+      graphic_height: null,
+    });
     await removeGraphic();
+    expect(files()).toEqual([]);
+    expect(first).not.toBe(second);
+  });
+
+  it('is kept while the current event uses it, whatever a past event does', async () => {
+    await upload(fixture('graphic.png'), 'image/png');
+    await callers.host('POST', '/api/events', { name: 'Saturday' });
+    // Nothing changed the graphic, so both events still name the file.
+    expect(files()).toHaveLength(1);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM events WHERE graphic_file IS NOT NULL').get()).toEqual({ n: 2 });
+  });
+
+  it('is deleted when the database refuses the new graphic, and the old one stays', async () => {
+    const first = (await upload(fixture('graphic.png'), 'image/png')).json().event.graphic.version as string;
+    db.exec("CREATE TRIGGER refuse BEFORE UPDATE ON events BEGIN SELECT RAISE(ABORT, 'refused'); END");
+    expect((await upload(fixture('lossy.webp'), 'image/webp')).statusCode).toBe(500);
     expect(files()).toEqual([first]);
+  });
+
+  it('is deleted when it can not be written', async (context) => {
+    // A folder nobody can write to; root ignores the permission, so the check is skipped for it.
+    if (process.getuid?.() === 0) return context.skip();
+    await mkdir(graphicsDir(), { recursive: true });
+    await chmod(graphicsDir(), 0o500);
+    try {
+      expect((await upload(fixture('graphic.png'), 'image/png')).statusCode).toBe(500);
+    } finally {
+      await chmod(graphicsDir(), 0o700);
+    }
+    expect(files()).toEqual([]);
+    expect(await eventOf()).toBeNull();
   });
 
   it('removing when there is no graphic, or no event, changes nothing', async () => {
@@ -250,6 +287,42 @@ describe('the stored file', () => {
     expect(await eventOf()).toBeNull();
     await callers.host('PUT', '/api/event', { name: 'Friday' });
     expect((await removeGraphic()).json()).toEqual({ event: { name: 'Friday', game: null, graphic: null } });
+  });
+});
+
+describe('files nothing names, at startup', () => {
+  const TOKEN_A = 'A'.repeat(43);
+
+  /** A server on the same folder and database, as after a restart. */
+  async function restart(): Promise<void> {
+    await app.close();
+    db = openDatabase(':memory:');
+    app = await buildApp({ db, dataDir: dir });
+    await app.ready();
+  }
+
+  it('deletes a file of the server\'s own kind that no event names, and keeps the ones an event names', async () => {
+    const { version } = (await upload(fixture('graphic.png'), 'image/png')).json().event.graphic as { version: string };
+    await writeFile(join(graphicsDir(), TOKEN_A), 'orphan');
+    // The app closed the database it was given, so the restart is a new one that still names the file.
+    await app.close();
+    db = openDatabase(':memory:');
+    db.prepare("INSERT INTO events (name, created_at, graphic_file, graphic_type, graphic_width, graphic_height) VALUES ('Friday', 't', ?, 'image/png', 48, 32)").run(version);
+    app = await buildApp({ db, dataDir: dir });
+    await app.ready();
+    expect(files()).toEqual([version]);
+  });
+
+  it('leaves a file whose name is not one the server makes', async () => {
+    await mkdir(graphicsDir(), { recursive: true });
+    for (const name of ['notes.txt', 'A'.repeat(42), 'A'.repeat(44), `${'A'.repeat(42)}.`]) await writeFile(join(graphicsDir(), name), 'mine');
+    await restart();
+    expect(files()).toHaveLength(4);
+  });
+
+  it('is fine with no folder yet', async () => {
+    await restart();
+    expect(files()).toEqual([]);
   });
 });
 
@@ -283,6 +356,7 @@ describe('GET /api/event/graphic', () => {
     expect(res.headers['content-security-policy']).toBe("default-src 'none'; sandbox");
     expect(res.headers['etag']).toBe(`"${version}"`);
     expect(res.headers['cache-control']).toBe('private, no-cache');
+    expect(res.headers['cross-origin-resource-policy']).toBe('same-origin');
 
     const again = await fetchGraphic(laptop, { 'if-none-match': `"${version}"` });
     expect(again.statusCode).toBe(304);

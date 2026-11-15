@@ -27,11 +27,15 @@ beforeEach(async () => {
 });
 afterEach(() => app.close());
 
-const tags = async (): Promise<NameTag[]> => {
+/** The queue as the host reads it, with each tag's version. */
+const listed = async (): Promise<NameTag[]> => {
   const res = await host('GET', '/api/tags');
   expect(res.statusCode).toBe(200);
   return res.json().tags;
 };
+/** The same without versions, for the tests about who is queued and with which PIN. */
+const tags = async (): Promise<Omit<NameTag, 'version'>[]> => (await listed()).map(({ version: _version, ...tag }) => tag);
+const printed = (...of: NameTag[]) => host('POST', '/api/tags/printed', { tags: of.map(({ playerId, version }) => ({ playerId, version })) });
 const count = (table: string): number => (db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
 const queueRows = () => db.prepare('SELECT player_id, pin, pin_stored_at FROM tag_queue ORDER BY player_id').all();
 
@@ -80,7 +84,7 @@ describe('what queues a tag', () => {
 
   it('a PIN reset of a player whose tag already printed', async () => {
     const id = await signUp('Zap', '4821');
-    await host('POST', '/api/tags/printed', { playerIds: [id] });
+    await printed(...(await listed()));
     const pin = (await host('POST', `/api/players/${id}/reset-pin`)).json().pin as string;
     expect(await tags()).toEqual([{ playerId: id, handle: 'Zap', pin }]);
   });
@@ -110,8 +114,8 @@ describe('POST /api/tags (a reprint)', () => {
     const [id] = addPinPlayers(db, 1);
     const res = await host('POST', '/api/tags', { playerId: id });
     expect(res.statusCode).toBe(201);
-    expect(res.json()).toEqual({ tag: { playerId: id, handle: 'Player1', pin: null } });
-    expect(Object.keys(res.json().tag).sort()).toEqual(['handle', 'pin', 'playerId']);
+    expect(res.json()).toEqual({ tag: { playerId: id, handle: 'Player1', pin: null, version: expect.any(Number) } });
+    expect(Object.keys(res.json().tag).sort()).toEqual(['handle', 'pin', 'playerId', 'version']);
     expect(queueRows()).toEqual([{ player_id: id, pin: null, pin_stored_at: null }]);
   });
 
@@ -119,7 +123,7 @@ describe('POST /api/tags (a reprint)', () => {
     const id = await signUp('Zap', '4821');
     const stored = queueRows();
     const res = await host('POST', '/api/tags', { playerId: id });
-    expect(res.json()).toEqual({ tag: { playerId: id, handle: 'Zap', pin: '4821' } });
+    expect(res.json()).toEqual({ tag: { playerId: id, handle: 'Zap', pin: '4821', version: expect.any(Number) } });
     // The 12 hours still count from when the PIN was seen.
     expect(queueRows()).toEqual(stored);
   });
@@ -136,21 +140,97 @@ describe('POST /api/tags (a reprint)', () => {
 });
 
 describe('POST /api/tags/printed ("Yes")', () => {
-  it('deletes those tags and their PINs, and keeps the others', async () => {
+  it('deletes the tags whose id and version match, with their PINs, and keeps the others', async () => {
     const a = await signUp('Arrow', '1111');
     const b = await signUp('Bolt', '2222');
-    const res = await host('POST', '/api/tags/printed', { playerIds: [a, 999] });
+    const [arrow, bolt] = await listed();
+    const res = await host('POST', '/api/tags/printed', { tags: [{ playerId: a, version: arrow!.version }, { playerId: 999, version: 1 }] });
     expect(res.statusCode).toBe(204);
     expect(res.body).toBe('');
-    expect(await tags()).toEqual([{ playerId: b, handle: 'Bolt', pin: '2222' }]);
+    expect(await listed()).toEqual([bolt]);
+    expect(bolt).toMatchObject({ playerId: b, pin: '2222' });
     expect(db.prepare('SELECT pin FROM tag_queue').all()).toEqual([{ pin: '2222' }]);
   });
 
+  it('keeps a tag when only its id or only its version matches', async () => {
+    const id = await signUp('Zap', '4821');
+    const [tag] = await listed();
+    await host('POST', '/api/tags/printed', { tags: [{ playerId: id, version: tag!.version + 1 }, { playerId: id + 1, version: tag!.version }] });
+    expect(await listed()).toEqual([tag]);
+  });
+
+  it('gives every queueing a higher version, and never reuses a deleted tag\'s', async () => {
+    const id = await signUp('Zap', '4821');
+    const seen = [(await listed())[0]!.version];
+    await host('POST', '/api/tags', { playerId: id });
+    seen.push((await listed())[0]!.version);
+    await printed(...(await listed()));
+    await host('POST', '/api/tags', { playerId: id });
+    seen.push((await listed())[0]!.version);
+    expect(seen).toEqual([...seen].sort((x, y) => x - y));
+    expect(new Set(seen).size).toBe(3);
+  });
+
+  // The host reads the queue, prints, and answers Yes some time later. A tag queued again in
+  // between is a new tag, possibly with a new PIN that was never on the paper.
+  describe('a change between the host reading the queue and answering Yes', () => {
+    it('a PIN reset leaves the new tag and its new PIN queued', async () => {
+      const id = await signUp('Zap', '4821');
+      const read = await listed();
+      const pin = (await host('POST', `/api/players/${id}/reset-pin`)).json().pin as string;
+      expect((await printed(...read)).statusCode).toBe(204);
+      expect(await tags()).toEqual([{ playerId: id, handle: 'Zap', pin }]);
+    });
+
+    it('a claim leaves the new tag queued', async () => {
+      const [id] = addPinPlayers(db, 1);
+      await host('POST', '/api/tags', { playerId: id });
+      const read = await listed();
+      expect((await callers.signup('POST', '/api/signup/claim', { handle: 'Player1', pin: PIN })).statusCode).toBe(200);
+      expect((await printed(...read)).statusCode).toBe(204);
+      expect(await tags()).toEqual([{ playerId: id, handle: 'Player1', pin: PIN }]);
+    });
+
+    it('a reprint leaves the tag queued', async () => {
+      const id = await signUp('Zap', '4821');
+      const read = await listed();
+      expect((await host('POST', '/api/tags', { playerId: id })).statusCode).toBe(201);
+      expect((await printed(...read)).statusCode).toBe(204);
+      expect(await tags()).toEqual([{ playerId: id, handle: 'Zap', pin: '4821' }]);
+    });
+
+    it('nothing changed: the matching pair is deleted', async () => {
+      await signUp('Zap', '4821');
+      expect((await printed(...(await listed()))).statusCode).toBe(204);
+      expect(await tags()).toEqual([]);
+    });
+  });
+
   it('takes an empty list, and refuses a body outside the schema', async () => {
-    expect((await host('POST', '/api/tags/printed', { playerIds: [] })).statusCode).toBe(204);
-    for (const body of [{}, { playerIds: [0] }, { playerIds: ['1'] }, { playerIds: [1], all: true }, { playerIds: Array.from({ length: 1001 }, (_, i) => i + 1) }]) {
+    expect((await host('POST', '/api/tags/printed', { tags: [] })).statusCode).toBe(204);
+    const one = { playerId: 1, version: 1 };
+    const tooMany = Array.from({ length: 1001 }, (_, i) => ({ playerId: i + 1, version: 1 }));
+    for (const body of [
+      {},
+      { playerIds: [1] },
+      { tags: [{ playerId: 0, version: 1 }] },
+      { tags: [{ playerId: 1, version: 0 }] },
+      { tags: [{ playerId: '1', version: 1 }] },
+      { tags: [{ playerId: 1 }] },
+      { tags: [{ ...one, pin: '1234' }] },
+      { tags: [one], all: true },
+      { tags: tooMany },
+    ]) {
       expect((await host('POST', '/api/tags/printed', body)).statusCode, JSON.stringify(body).slice(0, 40)).toBe(400);
     }
+  });
+});
+
+describe('GET /api/tags', () => {
+  it('is never stored by a browser or a proxy, because it holds plain PINs', async () => {
+    await signUp('Zap', '4821');
+    const res = await host('GET', '/api/tags');
+    expect(res.headers['cache-control']).toBe('no-store');
   });
 });
 
@@ -188,7 +268,7 @@ describe('who may use the tags routes', () => {
   it.each([
     ['GET', '/api/tags', undefined],
     ['POST', '/api/tags', { playerId: 1 }],
-    ['POST', '/api/tags/printed', { playerIds: [1] }],
+    ['POST', '/api/tags/printed', { tags: [{ playerId: 1, version: 1 }] }],
   ] as const)('%s %s answers 401 not-signed-in to a phone, a Sign-up device, a Display, and a stranger', async (method, url, payload) => {
     await signUp('Zap', '4821');
     const before = queueRows();
@@ -242,7 +322,7 @@ describe('the tags live message', () => {
     await eventually(() => expect(tagMessages(laptop)).toBe(1));
     await host('POST', `/api/players/${id}/reset-pin`);
     await host('POST', '/api/tags', { playerId: id });
-    await host('POST', '/api/tags/printed', { playerIds: [id] });
+    await printed(...(await listed()));
     await callers.signup('POST', '/api/signup/claim', { handle: 'Zap', pin: (await host('POST', `/api/players/${id}/reset-pin`)).json().pin });
     await host('POST', '/api/players', { handle: 'Added' });
     await host('POST', '/api/events', { name: 'Saturday' });
@@ -261,7 +341,7 @@ describe('the tags live message', () => {
 
   it('is not sent when nothing in the queue changed', async () => {
     const laptop = await connect(undefined, '127.0.0.1');
-    await host('POST', '/api/tags/printed', { playerIds: [1, 2] });
+    await host('POST', '/api/tags/printed', { tags: [{ playerId: 1, version: 1 }, { playerId: 2, version: 1 }] });
     await host('POST', '/api/events', { name: 'Saturday' });
     await eventually(() => expect(laptop.messages.some((m) => m.type === 'plan')).toBe(true));
     expect(tagMessages(laptop)).toBe(0);

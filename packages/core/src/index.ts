@@ -39,6 +39,7 @@ export type {
   EventGraphic,
   EventInfo,
   NameTag,
+  PrintedTag,
   TagAnswer,
   TagBody,
   TagsAnswer,
