@@ -252,10 +252,23 @@ after the M7 deploy.
 
 ### Label printer (after M8)
 
-Why: label sizes and printer margins vary by printer and driver.
+Why: whether the driver offers the label size in the browser's print dialog, and what the
+dialog does with it, couldn't be verified from published sources (`PLAN.md`, "The printer").
+This needs the Brother QL-800 and DK-11202 labels (62 x 100 mm).
 
-- Print a name tag from each preset. Is anything cut off? Is the PIN readable up close and
-  hard to read from two meters?
+- Install the printer on the Windows laptop and on the Fedora laptop (Brother's driver; on
+  Fedora, `ptouch-driver` if Brother's doesn't work). Is 62x100 listed as a paper size? Set it
+  as the default.
+- Print the test tag from Chrome, Edge, and Firefox, on each laptop. Is anything cut off at
+  the 3 mm outline? Does the tag read across when worn?
+- In Chrome, try the dialog's Margins on Default, None, and Minimum. Which print the tag full
+  size? The source suggests only Default.
+- Print 5 new tags in one job. Do they come out one per label, with none blank between?
+- Is the PIN readable up close and hard to read from two meters? Is the longest handle
+  readable from across the room?
+- Print a tag with a color graphic. Does it come out clear in black and white?
+- Answer **No, keep them** after a cancelled print. Are the tags still there? Answer **Yes**
+  after a real print. Are they gone?
 
 ### Offline bundle (after M9)
 

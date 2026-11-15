@@ -1390,12 +1390,139 @@ both, so a player in heats of the current event can't be merged away.
 
 ## 7. Name tags
 
+Planned in M8 (2026-11-15). Brad's decisions that day: the host prints every new tag with
+one tap, with a reprint on each player; each event can have its own graphic, shown on the
+tags and the TV; the PIN waits in a print queue until its tag prints; a thermal label printer
+comes first, with sheet labels later.
+
 - Printed through the browser's print dialog, so any printer with an operating system
   driver works. Label sizes are CSS `@page` presets.
 - A tag has the event graphic, the handle in large type, the event name, and the PIN small
   in a corner.
-- Which printer and label size to support first is checked on real hardware (see
-  `PLAYTEST.md`).
+
+### The printer
+
+The first printer is a Brother QL-800 with DK-11202 labels, 62 by 100 mm. Brad hasn't bought
+it yet (2026-11-15). The reasons, from the driver files themselves:
+
+- Brother's Linux driver, `ql800pdrv-3.1.5-0.i386.rpm` from
+  [download.brother.com](https://download.brother.com/welcome/dlfp100336/ql800pdrv-3.1.5-0.i386.rpm),
+  lists `62x100` as a paper size in its PPD (`PaperDimension` 175.68 by 282.96 points), with an
+  imageable area inset 4.32 points at the left and 8.4 at the bottom. The default size is
+  `29x90`, so the host sets 62x100 as the printer's default once. Despite the file name, it
+  ships a 64-bit `x86_64` filter that links only to `libc`, so Fedora needs no 32-bit
+  libraries, only Perl for the wrapper scripts (inspected 2026-11-15). Fedora's
+  `ptouch-driver` package is the fallback.
+- DK labels have no chip, so any DK-11202 roll works. Brother lists the QL-800 at $124.99,
+  USB only ([brother-usa.com](https://www.brother-usa.com/products/ql800), 2026-11-15).
+- The DYMO LabelWriter 450 driver (Fedora `dymo-cups-drivers`) lists the 30857 badge label as
+  `w167h288.2`, 166.56 by 288 points. The LabelWriter 550 needs DYMO's own labels with a
+  recognition chip, by a reseller's account, not DYMO's
+  ([LabelValue](https://www.labelvalue.com/blog/what-labels-can-i-use-with-the-dymo-550-series-printers)).
+- Unverified: whether the Windows drivers offer these sizes in the browser's dialog. Brad's
+  play-test checks it.
+
+**How Chrome treats the page size.** Read in Chromium's
+[`print_render_frame_helper.cc`](https://github.com/chromium/chromium/blob/main/components/printing/renderer/print_render_frame_helper.cc)
+(2026-11-15): with the dialog's Margins on "Default", Chrome lays the page out at the CSS
+`@page` size. Any other Margins choice ignores the CSS size (`ShouldIgnoreCssPageSize`). The
+default scaling then centres and shrinks the page to the paper picked in the dialog. Chrome
+doesn't pick the paper to match the CSS size, as far as the source shows, so the printer's
+default paper size has to be the label. Firefox honors `@page` size in print preview from
+version 112 ([bug 1793220](https://bugzilla.mozilla.org/show_bug.cgi?id=1793220)); its
+scaling when the page is larger than the paper is an open bug
+([1763030](https://bugzilla.mozilla.org/show_bug.cgi?id=1763030)).
+
+### Label sizes
+
+| Preset | Page (`@page size`) | For |
+|---|---|---|
+| 62 x 100 mm (the default) | `62mm 100mm` | Brother DK-11202 |
+| 2-1/4 x 4 in | `58.76mm 101.6mm` (the PPD's 166.56 by 288 points) | DYMO 30857 |
+| Custom | the width and height the host types, 25 to 150 mm each | any other label |
+
+A thermal label runs through the printer narrow side first, so the page is taller than it
+is wide. The tag is drawn wide (100 by 62 mm) and turned a quarter turn to fit the page, so
+it reads across when worn. Every preset keeps its text and graphic 3 mm inside the edge,
+clear of the imageable area insets. `@page { margin: 0 }` keeps Chrome's header and footer
+off the page ([Chrome blog](https://developer.chrome.com/blog/print-margins)). The preset
+choice is a per-laptop setting kept in the browser, because it follows the printer, not the
+event. Badge sheets for an ordinary printer come later (`ROADMAP.md`, "Later").
+
+### The tag
+
+- The handle is the largest thing on the tag, on one line, sized to fit its width: up to
+  72 points, and never under 28, which fits 16 wide characters (`HANDLE_MAX`) across 94 mm.
+- The event graphic sits at the left, up to a third of the width, kept in its own proportions.
+- The event name and the game name are small under the handle.
+- The PIN is small in a corner, "PIN 4821", so it can be read up close and not across the
+  room. A tag with no PIN to print leaves the corner empty.
+- Black on white, so a one-color printer prints it as designed. The graphic prints as the
+  printer's driver renders it.
+
+### The print queue
+
+The server stores only a hash of each PIN (`pin_hash`), so it can print a PIN only at the
+moments it sees one in plain form. A 4-digit PIN has 10,000 values, so its hash can be
+reversed offline in moments; the protection is the limit on wrong tries. A short-lived plain
+PIN therefore adds little risk (Brad's decision, 2026-11-15).
+
+- **What queues a tag.** A sign-up, a claim on the Sign-up screen (a returning player signs
+  in to a new event), a host-added player, and a host PIN reset each queue the player's tag
+  with the plain PIN. **Reprint** queues it with no PIN. A player has at most one queued tag;
+  a newer one replaces it, keeping the newest PIN.
+- **Leaving the queue.** After the print dialog closes, the host page asks "Did all 5 tags
+  print?" A browser can't tell a printed page from a cancelled one (`afterprint` fires either
+  way), so the host answers. **Yes** deletes those tags and their PINs. **No** keeps them for
+  another try.
+- **The 12-hour limit.** A PIN still queued 12 hours after it was stored is wiped, and its tag
+  prints with no PIN. The server checks at startup and every hour, beside the phone purge
+  (`phone-purge.ts`, which runs daily).
+- A merged or deleted player's tag leaves the queue. A new event empties it.
+- The queue is never sent to a phone or a Sign-up device.
+
+### The event graphic
+
+- **Upload.** The host picks a PNG, JPEG, or WebP. The server takes it as a raw body of up to
+  2 MB with its type in `Content-Type`, and refuses it unless the file's first bytes match
+  that type, and its width and height, read from the file's own header, are each 16 to 4000
+  pixels. SVG is refused: an SVG opened at its own address can run script, and the limits on
+  script apply only when it's shown as an image
+  ([MDN](https://developer.mozilla.org/en-US/docs/Web/SVG/Guides/SVG_as_an_image)).
+- **Reading the size.** PNG: the signature, then the `IHDR` width and height at bytes 16 and
+  20 ([PNG spec](https://www.w3.org/TR/png/)). WebP: `RIFF` and `WEBP`, then the `VP8X`,
+  `VP8`, or `VP8L` chunk ([WebP container](https://developers.google.com/speed/webp/docs/riff_container)).
+  JPEG: `FF D8`, then the first start-of-frame marker. The VP8, VP8L, and JPEG layouts are
+  read from RFC 6386, the WebP lossless spec, and ITU-T T.81 before the parser is written,
+  and cited in it.
+- **Storing.** The file goes in `DATA_DIR/graphics` under a random name the server makes. The
+  event keeps the name, type, width, and height. A new event keeps the last event's graphic. A
+  replaced file is deleted once no event uses it.
+- **Serving.** `GET /api/event/graphic` answers with the stored type, `X-Content-Type-Options:
+  nosniff`, and `Content-Security-Policy: default-src 'none'; sandbox`, for the host and paired
+  devices. The page shows it only through `<img>`.
+- **Not re-encoded.** The OWASP
+  [File Upload Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html)
+  recommends re-encoding images. That needs an image library, and a native one breaks the
+  portable bundle (section 8). Only the host can upload, the type is checked, and the headers
+  above keep a browser from running the file, so the risk is accepted.
+- **On the TV.** The Display screen shows it beside the event name.
+
+### Name tags API
+
+| Request | Who | Answer |
+|---|---|---|
+| `PUT /api/event/graphic` (raw image body) | host | `{ event }`; 400 `bad-image`; 413 `too-large`; 415 `bad-type` |
+| `DELETE /api/event/graphic` | host | `{ event }` |
+| `GET /api/event/graphic` | host or paired device | the image; 404 when there's none |
+| `GET /api/tags` | host | `{ tags: [{ playerId, handle, pin }] }`, `pin` a string or null, sorted by handle |
+| `POST /api/tags` `{ playerId }` | host | 201 `{ tag }`, a reprint with no PIN; 404 |
+| `POST /api/tags/printed` `{ playerIds }` | host | 204; those tags and their PINs are deleted |
+
+An event becomes `{ name, game, graphic }`, where `graphic` is `{ width, height, version }`
+or null, and `version` changes with each upload so the page reloads the file. Uploading or
+removing the graphic broadcasts `event`. A change to the queue broadcasts `{ type: "tags" }`
+with no payload, to host screens only.
 
 ## 8. Deployment
 

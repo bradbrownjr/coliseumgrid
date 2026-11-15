@@ -84,17 +84,49 @@ are unverified (`PLAN.md`, "Player view").
 
 ## M8 Name tags
 
+Printed name tags from the host laptop, and an event graphic on the tags and the TV (Brad,
+2026-11-15). Design: `PLAN.md` section 7, `DESIGN.md` "Name tags".
+
 Tasks:
 
-- Event graphic upload.
-- The print layout and label size presets.
+- **Core.** The label presets and the tag's safe edge; `imageInfo`, which reads the type,
+  width, and height from a PNG, JPEG, or WebP header and refuses anything else, pure and
+  tested against real files of each kind (lossy, lossless, and extended WebP; baseline and
+  progressive JPEG); the new fields and the `tags` message in `api.ts`.
+- **Server.** Migration 9 (the event's graphic, and the `tag_queue` table with its plain PIN);
+  the graphic routes, with a raw body limited to 2 MB, files under random names in
+  `DATA_DIR/graphics`, a replaced file deleted once no event uses it, and the serving headers;
+  queuing a tag on sign-up, claim, host add, and PIN reset; the tags routes; the 12-hour PIN
+  wipe at startup and hourly; a new event keeping the graphic and emptying the queue.
+- **Client.** The Name tags panel, **Print tag** on each player, the print page with its
+  `@page` size and the quarter turn, the handle sized to fit, the "Did all 5 tags print?"
+  dialog, the test tag, and the graphic on the Display screen.
+- **Review.** A review of the whole milestone, security first (the upload and the plain
+  PINs), against `PLAN.md` and `DESIGN.md`.
+- **Docs finish.** `DEVELOPMENT.md` (layout, migration 9, tests), `PLAYTEST.md`, and the
+  changelog entry once Brad has checked the milestone.
 
 Acceptance checks:
 
-- A Playwright test prints each preset to PDF; the pages are rasterized and checked by eye
-  (the MEPN lesson: an export isn't verified until its pages are opened).
+- A Playwright test prints the tags for each preset, the test tag, and a 16-character handle
+  to PDF against a production build. Each page's size matches the preset within 0.5 mm. The
+  pages are turned into images with `pdftoppm` and looked at by the agent (the MEPN lesson: an
+  export isn't verified until its pages are opened).
+- A sign-up, a claim, a host add, and a PIN reset each queue a tag with the right PIN. After
+  **Yes**, the PIN is gone from the database file itself, not only from the answer. A PIN
+  stored 12 hours ago is wiped and its tag stays queued. A reprint has no PIN. A new event
+  empties the queue.
+- The upload takes a PNG, a baseline and a progressive JPEG, and lossy, lossless, and
+  extended WebP files. It refuses an SVG, a file whose bytes don't match its `Content-Type`, a
+  cut-off header, a file over 2 MB (413), and sizes of 0, 15, and 4001 pixels. The graphic is
+  served with `nosniff` and the sandbox policy.
+- A phone, a Sign-up device, and a signed-out caller are refused the tags routes and the
+  graphic upload. A phone is refused the graphic too. Every new answer lists its fields and
+  every new body has a closed schema.
+- Screenshots of the Name tags panel and the TV with a graphic at 1366x768, 1024x768,
+  768x1024, 412 wide, and 320 wide, in light and dark, looked at by the agent.
 
-**Docs:** `PLAN.md` section 7, `DESIGN.md`, `PLAYTEST.md`.
+**Docs:** `PLAN.md` section 7, `DESIGN.md`, `DEVELOPMENT.md`, `PLAYTEST.md`.
 
 ## M9 Packaging
 
@@ -146,6 +178,8 @@ Acceptance checks:
 - **Swiss and pools:** Swiss rounds, and pools that feed a bracket.
 - **Season standings:** points across a series of events.
 - **Public results page:** a read-only event page when hosted online.
+- **Badge sheets:** name tags on 8-per-page badge sheets for an ordinary printer, with a
+  nudge setting to line them up (Brad chose a thermal printer first, 2026-11-15).
 
 ## Open decisions
 

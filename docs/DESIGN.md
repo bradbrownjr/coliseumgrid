@@ -399,3 +399,20 @@ iOS fills a transparent icon with black. `tools/make-icons.ts` makes them.
 - The print layout is its own page, sized by CSS `@page` for the label preset.
 - The handle is the largest thing on the tag. The PIN is small in a corner, so it isn't read
   from across the room.
+- The tag is black on white, with no theme colors, so a one-color thermal printer prints it
+  as designed (`PLAN.md`, "The tag"). The print page has no app bar and no controls.
+- **The Name tags panel** (M8) is on `/host` in setup and play mode. In order: the label size
+  select, **Print 5 new tags** (a contained button whose count is the queue, turned off at 0),
+  **Print a test tag**, and the event graphic with **Choose a picture** and **Remove**. The
+  test tag prints "SampleName", "PIN 0000", and a thin outline at the 3 mm safe edge, so the
+  host can see whether anything is cut off.
+- After the print dialog closes, a dialog asks "Did all 5 tags print?" with **Yes** and **No,
+  keep them**. The question names the count, because a browser can't tell a printed page from
+  a cancelled one.
+- Each player row in the players list has a **Print tag** icon button with that label as its
+  tooltip and accessible name. It adds the tag to the print list and says so in a snackbar:
+  "Added to the print list. Reprints have no PIN."
+- A refused picture says why in words: "Use a PNG, JPEG, or WebP picture.", "That picture is
+  over 2 MB.", or "That picture is too small or too big. Use one from 16 to 4000 pixels on each
+  side."
+- The Display screen shows the graphic beside the event name, no taller than the name's line.
