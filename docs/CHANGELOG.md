@@ -8,6 +8,24 @@ use **New Features**, **Improvements**, and **Bug Fixes**, in that order.
 
 ---
 
+# November 17, 2026
+
+## Milestones
+
+* **M8 Name tags.** The host prints name tags from the host laptop through the browser's print
+  dialog. The Name tags panel on `/host` has **Print 5 new tags** (the count is the print
+  list, and the button is off at 0), **Print a test tag**, and a label size select, and each
+  player has a **Print tag** button for a reprint. The sizes are 62 x 100 mm (the default,
+  for a thermal label printer), 2-1/4 x 4 in, and a custom size from 25 to 150 mm. The handle
+  is sized to fit on one line inside a 3 mm safe edge, and the 4-digit PIN sits small in a
+  corner with no "PIN" word. A sign-up, a claim, a host add, and a PIN reset each add a tag
+  with the plain PIN to the print list. The PIN stays there only until the host answers
+  **Yes** to "Did all 5 tags print?" or 12 hours pass, and then it is gone from the database
+  file. A reprint has no PIN. The host can add an event picture (PNG, JPEG, or WebP, up to
+  2 MB), which shows on the tags and on the TV, and a new event keeps it. `pnpm print-check`
+  prints every size to PDF in headless Chromium and checks each page size within 0.5 mm. The
+  printer isn't bought yet, so the printer hand tests in `PLAYTEST.md` are still to run.
+
 # November 15, 2026
 
 ## Milestones
