@@ -1556,6 +1556,8 @@ with no payload, to host screens only.
 
 ## 8. Deployment
 
+The steps for running it are in [`SELF-HOSTING.md`](SELF-HOSTING.md).
+
 ### Online: Docker image
 
 - `ghcr.io/bradbrownjr/coliseumgrid`: the server and the built client in one image, with

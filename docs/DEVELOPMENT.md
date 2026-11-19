@@ -43,7 +43,7 @@ Also run `pnpm audit --audit-level high` before a milestone is done; CI fails on
 ### Server settings
 
 The server reads these environment variables at startup (`packages/server/src/config.ts`).
-A bad value stops it with a message.
+A bad value stops it with a message. [`SELF-HOSTING.md`](SELF-HOSTING.md) lists them for someone running the app.
 
 | Variable | Default | What it does |
 |---|---|---|
@@ -614,6 +614,8 @@ MUI 9.5.0, checked 2026-11-12. The color values and rules are in
 - The Display page never calls `setMode`, so it can't change the host's choice.
 
 ## Docker
+
+For running the image, see [`SELF-HOSTING.md`](SELF-HOSTING.md); this section is about building and checking it.
 
 The image is the online deployment (`PLAN.md` section 8): the server and the built client,
 on Node 26 alpine, running as the non-root `node` user.

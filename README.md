@@ -34,6 +34,7 @@ comes next is in [`docs/ROADMAP.md`](docs/ROADMAP.md).
 | [`docs/DESIGN.md`](docs/DESIGN.md) | The UI rules |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | What comes next, in order |
 | [`docs/CHANGELOG.md`](docs/CHANGELOG.md) | What is finished |
+| [`docs/SELF-HOSTING.md`](docs/SELF-HOSTING.md) | How to run it, offline and online |
 | [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | Setup, commands, conventions, and process |
 | [`docs/PLAYTEST.md`](docs/PLAYTEST.md) | Tests run by hand on real hardware |
 | [`docs/DOC-STYLE.md`](docs/DOC-STYLE.md) | The writing rules |
