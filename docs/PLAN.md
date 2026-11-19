@@ -1557,11 +1557,16 @@ with no payload, to host screens only.
   release: the Node runtime, the built app, and a launcher that starts the server and opens
   the host screen.
 - Node's single executable applications feature would make this one file, but its Node
-  26.13.1 docs mark it "Active development" (checked 2026-11-12). The bundle ships the Node
+  26.13.1 docs mark it "Active development" (checked 2026-11-18). The bundle ships the Node
   runtime beside the app until that changes.
 - The database is `node:sqlite`, built into Node, so the bundle has no native modules to
   build for each operating system. Its Node 26.13.1 docs mark it "Release candidate"
-  (checked 2026-11-12). The fallback is `better-sqlite3`.
+  (checked 2026-11-18). The fallback is `better-sqlite3`.
+- The data lives in the user's own folder, not in the bundle, so unzipping a new version
+  keeps every event: `%LOCALAPPDATA%\ColiseumGrid` on Windows and `~/.coliseumgrid` on Linux
+  (Brad, 2026-11-18). The launcher sets `DATA_DIR` to it and prints the path.
+- The launcher uses port 3000, or the next free port when 3000 is taken. When ColiseumGrid is
+  already running, it opens the host screen instead of starting a second server.
 - Windows Firewall asks to allow the server on private networks the first time it runs.
 - On Fedora, Podman can run the Docker image instead.
 
@@ -1575,7 +1580,7 @@ with no payload, to host screens only.
 
 ## 9. Tech stack
 
-Versions checked 2026-11-12 at the start of M1. Pin exact versions in the lockfile; recheck at the start of each
+Versions checked 2026-11-18 at the start of M9. Pin exact versions in the lockfile; recheck at the start of each
 milestone.
 
 | Concern | Choice | Notes |
@@ -1583,7 +1588,7 @@ milestone.
 | Runtime | Node 26 LTS (26.13.1) | Runs TypeScript directly (type stripping), as in Pattern Break |
 | Package manager | pnpm 12.21.0 | Workspaces: `core`, `server`, `client` |
 | Language | TypeScript 7.0.2, strict | `erasableSyntaxOnly` on, so Node can run every file |
-| Lint | Oxlint 1.93.0 | TypeScript 7 has no compiler API yet, so no typescript-eslint |
+| Lint | Oxlint 1.94.0 | TypeScript 7 has no compiler API yet, so no typescript-eslint |
 | Tests | Vitest 5.1.0; Playwright 1.65.1 | Playwright for screen tests and screenshots |
 | Server | Fastify 5.12.8 | With `@fastify/websocket` 11.3.7, `@fastify/static` 10.1.11, `@fastify/rate-limit` 11.2.2 |
 | Database | `node:sqlite` | See section 8 |
@@ -1594,12 +1599,14 @@ milestone.
 | Fonts | `@fontsource/roboto` 5.3.0 | Bundled for offline use |
 | QR codes | `lean-qr` 2.7.4 | MIT, no dependencies, SVG output through `lean-qr/extras/svg`; released 2026-09-07. Replaces `qrcode`, whose last release was 2024-08-05. Its code makes no network requests (checked 2026-11-12) |
 
-**Known advisory.** `brackets-manager` depends on `uuid ^9.0.0`, which has a medium
-advisory, GHSA-w5hq-g745-h8pq (<https://github.com/advisories/GHSA-w5hq-g745-h8pq>): the v3,
-v5, and v6 functions misbehave when given an output buffer. The library calls only `v4`.
-`pnpm audit --audit-level high` passes. With an npm override to uuid 14.0.3 the library runs
-and the audit is clean; the server task will try pnpm's `overrides` setting
-(<https://pnpm.io/settings#overrides>), which hasn't been tried yet.
+**Known advisory.** `brackets-manager` 1.11.1, still the latest release (checked 2026-11-18),
+depends on `uuid ^9.0.0`, which has a medium advisory, GHSA-w5hq-g745-h8pq
+(<https://github.com/advisories/GHSA-w5hq-g745-h8pq>): the v3, v5, and v6 functions
+misbehave when given an output buffer. The library calls only `v4`. The advisory lists the
+fixes as uuid 11.1.1, 12.0.1, and 13.0.1; no uuid 9 patch is listed. Without a fix, `pnpm
+audit --audit-level high` still passes, because the advisory is medium. `pnpm-workspace.yaml`
+sets a pnpm `overrides` entry (<https://pnpm.io/settings#overrides>) that moves the library
+to uuid 14.0.3; the bracket tests pass and `pnpm audit` reports no vulnerabilities.
 
 ### Packages
 
