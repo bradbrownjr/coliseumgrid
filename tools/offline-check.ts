@@ -4,7 +4,8 @@
 // It has two parts.
 //
 // 1. Static: every absolute http(s) URL in packages/client/dist must have a host on a short,
-//    explained allow-list. Each entry is text in a library's error message, a namespace, or an
+//    explained allow-list. A template placeholder host (`http://${x}`) is skipped and listed
+//    in the summary. Each entry is text in a library's error message, a namespace, or an
 //    example, never something the page fetches.
 // 2. Browser: it starts the real server (offline mode, a free port, a temporary data folder),
 //    drives every screen in headless Chromium, and records every request the pages, the
@@ -38,7 +39,7 @@ const check = (ok: boolean, what: string): void => {
 /**
  * Hosts allowed to appear in the built client as text. None is a request: each is in a string a
  * library shows in an error message, in a code comment, or in a namespace name, and the last
- * three ("localhost", "192.168.1.20", "${n}") belong to this app's address handling.
+ * two ("localhost", "192.168.1.20") belong to this app's address handling.
  */
 const ALLOWED_TEXT: Record<string, string> = {
   'www.w3.org': 'XML namespace names (SVG, MathML, xlink, xml). They name a vocabulary and are never fetched.',
@@ -48,7 +49,6 @@ const ALLOWED_TEXT: Record<string, string> = {
   'github.com': 'Link text in a React Router warning that names a polyfill. Never fetched.',
   localhost: 'The base that React Router resolves a relative path against with `new URL`. Parsing only, never fetched.',
   '192.168.1.20': 'The example address in the pairing panel help text (PairingPanel).',
-  '${n}': 'A template that puts "http://" in front of the address the host typed in the pairing panel. The host is the laptop on this network.',
 };
 
 if (!statSync(dist, { throwIfNoEntry: false })?.isDirectory()) {
@@ -61,14 +61,29 @@ const walk = (dir: string): string[] =>
 const textFile = /\.(js|css|html|webmanifest|json|svg|txt|map)$/;
 const urlPattern = /https?:\/\/([^\s/:"'`)<>\\?#]+)/g;
 const foundHosts = new Map<string, string>();
+// A host that is a template placeholder (`http://${x}`) is not a fixed host: its value is only
+// known at run time, and the minifier renames the variable on every build, so no allow-list
+// entry could key on it. The browser pass checks the real requests such a template makes. Each
+// one is listed in the summary so a reviewer still sees it.
+const skippedTemplates = new Set<string>();
 let scanned = 0;
 for (const file of walk(dist).filter((f) => textFile.test(f))) {
   scanned++;
-  for (const [, host = ''] of readFileSync(file, 'utf8').matchAll(urlPattern)) {
+  const text = readFileSync(file, 'utf8');
+  for (const match of text.matchAll(urlPattern)) {
+    const host = match[1] ?? '';
+    if (host.startsWith('${')) {
+      const at = match.index ?? 0;
+      const around = text.slice(Math.max(0, at - 20), at + match[0].length + 20).replace(/\s+/g, ' ');
+      skippedTemplates.add(`${file.slice(dist.length + 1)}: ...${around}...`);
+      continue;
+    }
     if (!foundHosts.has(host)) foundHosts.set(host, file.slice(dist.length + 1));
   }
 }
 console.log(`static: ${scanned} built text files, ${foundHosts.size} distinct hosts in absolute URLs`);
+console.log(`static: ${skippedTemplates.size} template host(s) skipped (a placeholder has no fixed value; the browser pass checks the requests it makes)`);
+for (const template of skippedTemplates) console.log(`  skipped template: ${template}`);
 for (const [host, file] of foundHosts) {
   const why = ALLOWED_TEXT[host];
   check(why !== undefined, `static: ${host} (first seen in ${file})${why ? ` is text only: ${why}` : ' is not on the allow-list. Remove the URL or explain it in ALLOWED_TEXT.'}`);

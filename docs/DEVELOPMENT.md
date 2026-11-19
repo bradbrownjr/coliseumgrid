@@ -516,7 +516,9 @@ about a minute.
 - **Static pass.** Every absolute `http(s)` URL in `packages/client/dist` must have a host in
   `ALLOWED_TEXT`, each with the reason it isn't a request (library error messages, XML
   namespaces, the pairing panel's example address). A new host fails the check until it is
-  removed or explained.
+  removed or explained. A host that is a template placeholder (`http://${x}`) is skipped,
+  because its value is only known at run time and the minifier renames the variable on every
+  build; the browser pass checks the requests it makes. The summary lists each skipped template.
 - **Browser pass.** It starts the real server in offline mode on a free port with a temporary
   data folder and drives every route in headless Chromium: the join page, `/host` (sign-in, the
   wizard, the pairing panel, name tags and printing, a started and a finished bracket, groups),
