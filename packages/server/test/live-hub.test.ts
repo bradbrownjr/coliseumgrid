@@ -79,10 +79,10 @@ describe('a connection that stops reading', () => {
     expect(socket.terminated).toBe(false);
   });
 
-  it('is terminated after a sign-out close that the client never answers', () => {
-    const socket = attach({ sessionHash: 'abc' });
+  it('is terminated a couple of seconds after a host sign-out, when its send never finishes', () => {
+    const socket = attach({ sessionHash: 'abc', hostAllowed: () => true });
     hub.endSession('abc');
-    expect(socket.closedWith).toBe(1008);
+    expect(socket.sent).toEqual(['{"type":"unpaired"}']);
     expect(socket.terminated).toBe(false);
     vi.advanceTimersByTime(2_100);
     expect(socket.terminated).toBe(true);
@@ -138,6 +138,37 @@ describe('a connection with more than one identity', () => {
     vi.advanceTimersByTime(2_100);
     for (const socket of [withPhone, withSession, laptop]) expect(socket.terminated).toBe(false);
     expect(deviceOnly.terminated).toBe(true);
+  });
+
+  it('signing out the host session drops only the session when it is also a device, a phone, or the laptop', () => {
+    const withDevice = attach({ sessionHash: 'abc', deviceId: 1, hostAllowed: () => true });
+    const withPhone = attach({ sessionHash: 'abc', phoneId: 1, hostAllowed: () => true });
+    const laptop = attach({ sessionHash: 'abc', local: true, hostAllowed: () => true });
+    const hostOnly = attach({ sessionHash: 'abc', hostAllowed: () => true });
+    const otherSession = attach({ sessionHash: 'xyz', hostAllowed: () => true });
+    hub.endSession('abc');
+    for (const socket of [withDevice, withPhone, laptop, otherSession]) expect(socket.sent).toEqual([]);
+    expect(hostOnly.sent).toEqual(['{"type":"unpaired"}']);
+    hostOnly.stuck[0]?.();
+    expect(hostOnly.closedWith).toBe(1000);
+    vi.advanceTimersByTime(2_100);
+    for (const socket of [withDevice, withPhone, laptop, otherSession]) expect(socket.terminated).toBe(false);
+    expect(hostOnly.terminated).toBe(true);
+  });
+
+  it('a device whose host session ended keeps getting broadcasts, but no longer the host-only ones', () => {
+    // hostAllowed stays true here, so only the sign-out itself can take the host messages away.
+    const both = attach({ sessionHash: 'abc', deviceId: 1, hostAllowed: () => true });
+    const laptop = attach({ sessionHash: 'abc', local: true, hostAllowed: () => true });
+    hub.endSession('abc');
+    hub.broadcast({ type: 'players' });
+    hub.broadcastToHosts({ type: 'tags' });
+    expect(both.sent).toEqual(['{"type":"players"}']);
+    // The laptop is still the host without its session.
+    expect(laptop.sent).toEqual(['{"type":"players"}', '{"type":"tags"}']);
+    // The session is gone from the connection: unpairing the device now ends it.
+    hub.unpair(1);
+    expect(both.sent).toEqual(['{"type":"players"}', '{"type":"unpaired"}']);
   });
 
   it('ends the connection once its last identity goes, and still receives broadcasts before that', () => {

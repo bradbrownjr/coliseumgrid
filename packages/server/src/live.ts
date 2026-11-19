@@ -42,7 +42,7 @@ export interface LiveConnectionInfo {
   deviceId?: number;
   /** Set for a phone, so signing it out closes this connection. */
   phoneId?: number;
-  /** Set for a cookie host session, so signing out closes this connection. */
+  /** Set for a cookie host session, so signing out takes the host away from this connection. */
   sessionHash?: string;
   /** Set for the laptop itself (offline, from localhost), which is the host with no session. */
   local?: boolean;
@@ -76,7 +76,11 @@ export interface LiveHub {
    * connection that is also the host or a device only loses the phone and stays open.
    */
   signOutPhone(phoneId: number): void;
-  /** Closes the connections that signed in with this session. */
+  /**
+   * Tells the session's connections they are signed out (`unpaired`), then closes them. A
+   * connection that is also a device, a phone, or the laptop itself only loses the session and
+   * stays open, and no longer gets `broadcastToHosts` unless it is the laptop.
+   */
   endSession(sessionHash: string): void;
   /** Stops the heartbeat. Open sockets are closed by the WebSocket plugin on app close. */
   stop(): void;
@@ -187,13 +191,15 @@ export function createLiveHub(heartbeatMs: number = HEARTBEAT_MS): LiveHub {
           delete connection.phoneId;
         },
       ),
-    endSession(sessionHash) {
-      for (const connection of connections) {
-        if (connection.sessionHash !== sessionHash) continue;
-        connections.delete(connection);
-        closeSocket(connection.socket, CLOSE_POLICY, 'not-signed-in');
-      }
-    },
+    endSession: (sessionHash) =>
+      endIdentity(
+        (connection) => connection.sessionHash === sessionHash,
+        (connection) => {
+          delete connection.sessionHash;
+          // The laptop stays the host without a session; any other connection stops being one.
+          if (connection.local !== true) delete connection.hostAllowed;
+        },
+      ),
     stop: () => clearInterval(timer),
   };
 }

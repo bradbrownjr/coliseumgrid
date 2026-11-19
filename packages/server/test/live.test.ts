@@ -246,11 +246,28 @@ describe('unpairing', () => {
 });
 
 describe('host sessions', () => {
-  it('closes the host connection on sign-out', async () => {
+  it('tells a host-only connection it is signed out on sign-out, then closes it', async () => {
     const connection = await connect(host);
     await withCookie(app, host, { method: 'POST', url: '/api/host/sign-out' });
     await vi.waitFor(() => expect(connection.closed).toBeDefined());
-    expect(connection.closed?.code).toBe(1008);
+    expect(connection.messages).toEqual([{ type: 'unpaired' }]);
+    expect(connection.closed?.code).toBe(1000);
+  });
+
+  it('keeps a Display open on sign-out in the same browser, with broadcasts but no host-only messages', async () => {
+    const display = await pairDevice(app, host, 'display');
+    const tablet = await pairDevice(app, host, 'signup');
+    const both = await connect(`${display.cookie}; ${host}`);
+    const hostOnly = await connect(host);
+    await withCookie(app, host, { method: 'POST', url: '/api/host/sign-out' });
+    await vi.waitFor(() => expect(hostOnly.closed).toBeDefined());
+
+    // A sign-up queues a name tag: the tags message goes to hosts, the players message to all.
+    const res = await withCookie(app, tablet.cookie, { method: 'POST', url: '/api/signup', payload: { handle: 'Zap', pin: '1234' } });
+    expect(res.statusCode).toBe(201);
+    await vi.waitFor(() => expect(both.messages).toContainEqual({ type: 'players' }));
+    expect(both.messages.filter((m) => m.type === 'tags' || m.type === 'unpaired')).toEqual([]);
+    expect(both.closed).toBeUndefined();
   });
 
   it('closes a host connection at the next heartbeat after the 12-hour session ends', async () => {
