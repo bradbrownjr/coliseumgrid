@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { bracketSchema, nullableBracketSchema } from '../src/api-schemas.ts';
 import { buildApp } from '../src/app.ts';
 import { openDatabase, type Database } from '../src/database.ts';
-import { addPlayers, caller, expectContractShape, makeCallers, onStations, type Api } from './bracket-api-helpers.ts';
+import { addPlayers, caller, expectContractShape, loggedHost, makeCallers, onStations, type Api } from './bracket-api-helpers.ts';
 import { HOST_PASSWORD, signInHost } from './helpers.ts';
 
 let app: FastifyInstance;
@@ -340,6 +340,15 @@ describe('POST /api/bracket/results', () => {
     expect(again.statusCode).toBe(409);
     expect(again.json()).toEqual({ error: 'not-on-station' });
     expect(db.prepare('SELECT COUNT(*) AS n FROM bracket_results').get()).toEqual({ n: 1 });
+  });
+
+  it('answers a refused result once, with no error logged from the handler', async () => {
+    const bracket = await make('single', 8, 1);
+    const waiting = bracket.matches.find((m) => m.status === 'waiting');
+    const logged = await loggedHost(db);
+    const res = await logged.host('POST', '/api/bracket/results', { matchId: waiting?.id, winnerId: ids[0] });
+    expect(res.statusCode).toBe(409);
+    expect(logged.errorLines()).toEqual([]);
   });
 
   it('answers 400 bad-request when the winner is not in the match, or the body is malformed', async () => {

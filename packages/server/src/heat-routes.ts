@@ -193,7 +193,9 @@ export async function registerHeatRoutes(app: FastifyInstance, options: HeatRout
           recordHeatResult(state, { id: store.nextResultId(), heatId, order, ...(missing !== undefined && { missing }), at: iso(now()) }, handles, noShow),
         { 'not-found': 404, 'not-on-station': 409, 'bad-request': 400 },
       );
-      if (!('heats' in answer)) return answer;
+      // `change` sent a refusal itself. The reply is thenable, so awaiting it gives `undefined`
+      // (Fastify's `Reply.prototype.then` fulfils with no value); hand back `reply` instead.
+      if (reply.sent || !('heats' in answer)) return reply;
       // The result just recorded is the last one in the log.
       return { heats: answer.heats, resultId: answer.heats.lastResultId as number, now: answer.now };
     },

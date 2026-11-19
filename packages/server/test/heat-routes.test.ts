@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { heatsSchema, nullableHeatsSchema } from '../src/api-schemas.ts';
 import { buildApp } from '../src/app.ts';
 import { openDatabase, type Database } from '../src/database.ts';
-import { addPlayers, caller, makeCallers, type Api } from './bracket-api-helpers.ts';
+import { addPlayers, caller, loggedHost, makeCallers, type Api } from './bracket-api-helpers.ts';
 import { expectHeatsShape, heatsBody, heatsOnStations, makeHeats, playListed, recordListed } from './heat-api-helpers.ts';
 import { HOST_PASSWORD, signInHost } from './helpers.ts';
 
@@ -329,6 +329,15 @@ describe('POST /api/heats/results', () => {
     const missing = await host('POST', '/api/heats/results', { heatId: 777, order: [1, 2] });
     expect(missing.statusCode).toBe(404);
     expect(missing.json()).toEqual({ error: 'not-found' });
+  });
+
+  it('answers a refused result once, with no error logged from the handler', async () => {
+    const heats = await make(10, { stations: 1 });
+    const waiting = heats.upNext[0] as Heat;
+    const logged = await loggedHost(db);
+    const res = await logged.host('POST', '/api/heats/results', { heatId: waiting.id, order: waiting.players.map((p) => p.id) });
+    expect(res.statusCode).toBe(409);
+    expect(logged.errorLines()).toEqual([]);
   });
 
   it('answers 409 not-on-station for a heat that is waiting or already done', async () => {

@@ -206,7 +206,9 @@ export async function registerBracketRoutes(app: FastifyInstance, options: Brack
           recordResult(state, { id: store.nextResultId(), matchId, winnerId, at: iso(now()), ...(forfeit !== undefined && { forfeit }) }, handles, noShow),
         { 'not-found': 404, 'not-on-station': 409, 'bad-request': 400 },
       );
-      if (!('bracket' in answer)) return answer;
+      // `change` sent a refusal itself. The reply is thenable, so awaiting it gives `undefined`
+      // (Fastify's `Reply.prototype.then` fulfils with no value); hand back `reply` instead.
+      if (reply.sent || !('bracket' in answer)) return reply;
       // The result just recorded is the last one in the log.
       return { bracket: answer.bracket, resultId: answer.bracket.lastResultId as number, now: answer.now };
     },

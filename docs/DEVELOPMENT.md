@@ -270,6 +270,12 @@ The rules are in `PLAN.md`, sections 5 and 6. These are the facts a change has t
   `grep -rn "brackets-" packages/server/src`.
 - **Every change runs on the write chain.** A route that changes a bracket runs its work through
   `createWriteChain` (`write-chain.ts`), so two taps can't interleave.
+- **A sent reply can't be awaited for a value.** `fail` and `refuse` return the Fastify reply, and
+  a reply is thenable: `await reply` runs `Reply.prototype.then`, which fulfils with no value
+  (`fastify/lib/reply.js`). A route that inspects what `change` gave back checks `reply.sent`
+  first and returns `reply`, or the handler throws after it has answered and Fastify logs
+  "Promise errored, but reply.sent = true was set". `loggedHost` in
+  `test/bracket-api-helpers.ts` catches it by watching the error lines.
 - **Seeding takes the caller's random source.** `seedPlayers` in `packages/core/src/bracket-seeding.ts`
   takes it as an argument, so the tests fix the order.
 - **Late joins fill the first empty slot.** `addLatePlayer` in core does it. The engine accepts the

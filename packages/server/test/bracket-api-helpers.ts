@@ -3,6 +3,7 @@
 import type { Bracket, BracketMatch } from '@coliseumgrid/core';
 import type { FastifyInstance, InjectOptions, LightMyRequestResponse } from 'fastify';
 import { expect } from 'vitest';
+import { buildApp } from '../src/app.ts';
 import type { Database } from '../src/database.ts';
 import { withCookie } from './helpers.ts';
 
@@ -91,4 +92,20 @@ export async function makeCallers(app: FastifyInstance): Promise<Callers> {
     return from(app, STRANGER, cookie);
   };
   return { host, display: await pair('display'), signup: await pair('signup'), nobody: from(app, STRANGER) };
+}
+
+/**
+ * An app on `db` that logs, and the host's caller for it, with the lines Fastify logged at
+ * error level so far. A handler that throws after it has replied shows up there, not in the
+ * answer. The app is not closed here: it shares `db`, which the test closes with its own app.
+ */
+export async function loggedHost(db: Database): Promise<{ host: Api; errorLines: () => string[] }> {
+  const app = await buildApp({ db, logger: true });
+  const lines: string[] = [];
+  const streamKey = Object.getOwnPropertySymbols(app.log).find((key) => key.description === 'pino.stream');
+  const stream = streamKey && (app.log as unknown as Record<symbol, { write: (line: string) => void }>)[streamKey];
+  if (!stream) throw new Error('the logger has no stream to watch');
+  const write = stream.write.bind(stream);
+  stream.write = (line) => (lines.push(line), write(line));
+  return { host: (await makeCallers(app)).host, errorLines: () => lines.filter((line) => line.includes('"level":50')) };
 }
