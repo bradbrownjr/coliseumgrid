@@ -48,6 +48,7 @@ export type {
   PlanAnswer,
   PlanBody,
   PlanNowAnswer,
+  HostAddressesAnswer,
   HostSessionAnswer,
   JoinBody,
   LiveMessage,

@@ -104,7 +104,8 @@ A bad value stops it with a message.
   send first, so `access.ts` takes the first value that is a real session or device.
 - **Live updates.** `GET /api/live` is a WebSocket (`@fastify/websocket`). `live.ts` keeps the
   open connections, pings them every 30 seconds, drops the ones that don't answer or whose
-  sign-in ended, and sends `unpaired` before closing a device the host removed. Routes
+  sign-in ended, and sends `unpaired` before closing a device the host removed or a host
+  session that signed out. Routes
   announce changes with `hub.broadcast`. Tests connect with the plugin's `app.injectWS`, which
   runs the real upgrade path over in-memory streams: call `await app.ready()` first, give it
   the peer address as `{ socket: { remoteAddress } }`, and close each socket at the end.
@@ -135,9 +136,10 @@ A bad value stops it with a message.
   pairing codes and follow codes, so a right code calls `refund` for its own try. `clear`
   would also forget the wrong codes of the other kind.
 - **Live connections hold identities.** A connection can be the host, the laptop, a device, and
-  a phone at once (one browser, several cookies). `hub.signOutPhone` and `hub.unpair` take away
-  that one identity and close the connection only when none is left, so pass every identity
-  the request has to `hub.attach`.
+  a phone at once (one browser, several cookies). `hub.signOutPhone`, `hub.unpair`, and
+  `hub.endSession` take away that one identity and close the connection only when none is
+  left, so pass every identity the request has to `hub.attach`. `hub.endSession` also drops
+  `hostAllowed` unless the connection is the laptop, so `broadcastToHosts` stops reaching it.
 - **Phones that go idle.** `phones.touch` refreshes `last_seen` from `access.identify`, at
   most once a minute. `phone-purge.ts` deletes phones not seen for 90 days at startup and
   daily; follows and subscriptions go by cascade. `push-subscriptions.ts` keeps at most 10
@@ -213,8 +215,14 @@ How the client talks to the server (`packages/client/src`).
   connect, so a screen reloads what it shows; messages sent while it was down are lost. In
   `pnpm dev`, the Vite proxy needs `ws: true` for `/api`, which `vite.config.ts` sets.
 - **The join address.** The pairing panel builds it from `window.location.origin`. On `localhost`
-  no other screen can reach that, so the panel asks the host to type the laptop's network
-  address; the server doesn't report one.
+  no other screen can reach that, so with each new code the panel asks `GET /api/host/addresses`
+  and shows the first address (`networkAddresses` in `pairing.ts`), with a select when there
+  are several. When the list is empty (online, or no network) the host types the address.
+  On the server, `network-addresses.ts` finds the default route's address by calling
+  `connect` on a UDP socket to 192.0.2.1 (RFC 5737, an address no host has) and reading the
+  socket's local address. A UDP `connect` only records the peer and sends no packet; the
+  sources are in the file. Tests pass a stand-in `network` to `buildApp`, and the route tests
+  listen on port 0, because the port comes from the listening server.
 - **QR codes.** `lean-qr` makes one SVG path (`pairing.ts`, `components/QrCode.tsx`). The code is
   always dark on light, in both color modes.
 - **Screens in tests.** Client tests need no DOM, so the pure parts are in `api/live.ts` and

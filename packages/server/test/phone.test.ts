@@ -477,6 +477,7 @@ describe('who may call which route', () => {
     ['POST', '/api/heats/tie-break'],
     ['DELETE', '/api/heats'],
     ['POST', '/api/host/sign-out'],
+    ['GET', '/api/host/addresses'],
   ];
   const SIGNUP_ROUTES: [string, string, object][] = [
     ['POST', '/api/signup/check', { handle: 'Fresh' }],

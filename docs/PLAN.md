@@ -299,6 +299,11 @@ The host screen shows the join address, a 6-character code, and a QR code.
 
 - The address opens straight to the join screen, so a TV remote only types the host and
   port (for example `http://10.0.0.5:8080`).
+- On the laptop itself the host screen is at `localhost`, which no other screen can reach,
+  so the panel shows the laptop's network address from `GET /api/host/addresses` instead.
+  With several (Wi-Fi and a cable, or a VM adapter), the one on the default route comes
+  first and the host can pick another. With none, the host types the address. Anywhere else
+  the page's own address is the join address.
 - The code uses letters and digits that can't be mistaken for each other (no 0, O, 1, I,
   or L) and is shown as two groups of three: `K7M-4QX`. A code works once, expires after 10
   minutes, and wrong guesses are rate limited.
@@ -345,7 +350,8 @@ host unpairs it.
 | `GET /api/host/session` | anyone | `{ signedIn, passwordSet, canSetUp }`; `canSetUp` is true only offline, from `localhost`, with no password yet |
 | `POST /api/host/setup` `{ password }` | offline `localhost`, no password yet | 204 and a session; otherwise 403 `{ error: "forbidden" }` |
 | `POST /api/host/sign-in` `{ password }` | anyone | 204 and a session; 401 `wrong-password`; 429 `too-many-tries` |
-| `POST /api/host/sign-out` | host | 204 |
+| `POST /api/host/sign-out` | host | 204; the session's live connections lose the host (see "Live messages") |
+| `GET /api/host/addresses` | host | `{ addresses, port }`: offline, the laptop's private IPv4 addresses and the port the server listens on; online `{ addresses: [], port: null }` |
 | `POST /api/pairing/codes` `{ role }` | host | 201 `{ code, role, expiresAt }`; `role` is `"display"` or `"signup"` |
 | `POST /api/devices/join` `{ code }` | anyone | 201 `{ device }` and the device cookie; 404 `wrong-code` for unknown, used, or expired; 429 `too-many-tries` |
 | `GET /api/devices/me` | device | `{ device }`; 401 `not-paired` |
@@ -390,7 +396,19 @@ route answers 401 `{ error: "not-signed-in" }`.
 `{ type: "players" }` when the player list changes (the host page reloads it),
 `{ type: "plan" }` when the event's plan changes or a new event starts (no payload: a host
 screen reads the plan itself), and `{ type: "unpaired" }` just before the server closes an unpaired device's connection. A
+host sign-out works the same way: a connection that was only that host session gets
+`unpaired` and is closed, and one that is also a device, a phone, or the laptop itself loses
+only the host and stays open (no more host-only messages, such as `tags`). A
 client reconnects with a growing delay after a drop.
+
+**The laptop's addresses.** `GET /api/host/addresses` lists the private IPv4 addresses of
+RFC 1918 (10/8, 172.16/12, 192.168/16) from the laptop's network interfaces, each once, with
+the address on the default route first and the rest in interface order. Loopback, IPv6,
+link-local (169.254/16), and the shared range 100.64/10 that Tailscale uses are left out,
+because a TV on the venue network can't open them. A server bound to one address (`HOST`)
+lists only that one, and one bound to loopback lists none. The answer lists its two fields.
+Online the list is empty and `port` is null: behind the proxy the server's own addresses
+are no use to a TV and aren't shown to anyone.
 
 **The Display frame** in M3 shows the event name, live. "Up next" and the match timer have
 their places on the screen but show a waiting message until M4 brings matches.

@@ -23,6 +23,7 @@ import { createHeatStore } from './heat-store.ts';
 import { createHostStore } from './host-store.ts';
 import { createLiveHub } from './live.ts';
 import { registerNameTagRoutes } from './name-tag-routes.ts';
+import { systemNetwork, type NetworkSource } from './network-addresses.ts';
 import { startPhonePurge } from './phone-purge.ts';
 import { createPhones } from './phones.ts';
 import { registerPhoneRoutes } from './phone-routes.ts';
@@ -66,6 +67,8 @@ export interface AppOptions {
   push?: PushOptions;
   /** Called each time the phones' answer is built rather than read from the kept one. For tests. */
   onAnswerBuilt?: () => void;
+  /** The network interfaces and default route behind GET /api/host/addresses. Tests stand in for them. Default the system's. */
+  network?: NetworkSource;
 }
 
 declare module 'fastify' {
@@ -196,6 +199,7 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
   const chain = createWriteChain();
 
   await registerHostRoutes(app, {
+    mode,
     access,
     devices,
     events,
@@ -207,6 +211,7 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
     tags,
     onEventChanged: () => competition.drop(),
     onTagsChanged,
+    network: options.network ?? systemNetwork,
     ...(options.trustedProxy && { trustedProxy: options.trustedProxy }),
   });
 

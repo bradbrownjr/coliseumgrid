@@ -11,6 +11,7 @@ import {
   type DevicesAnswer,
   type EventAnswer,
   type EventBody,
+  type HostAddressesAnswer,
   type HostSessionAnswer,
   type JoinBody,
   type NewEventAnswer,
@@ -36,10 +37,11 @@ import {
 import { getClientKey } from './client-ip.ts';
 import type { Clock } from './clock.ts';
 import type { Competition } from './competition.ts';
-import { HOST_PASSWORD_MAX, HOST_PASSWORD_MIN } from './config.ts';
+import { HOST_PASSWORD_MAX, HOST_PASSWORD_MIN, type Mode } from './config.ts';
 import type { Devices } from './devices.ts';
 import { cleanEventName, cleanGameName, type Events } from './events.ts';
 import type { LiveHub } from './live.ts';
+import { privateAddresses, type NetworkSource } from './network-addresses.ts';
 import type { TagQueue } from './tag-queue.ts';
 import { ALL_CALLERS, FailureLimiter, GUESS_WINDOW_MS, SIGN_IN_MAX_WRONG_PER_IP, type JoinLimits } from './rate-limit.ts';
 import { secureRandom } from './secure-random.ts';
@@ -47,6 +49,7 @@ import { hashToken, newToken } from './tokens.ts';
 import type { WriteChain } from './write-chain.ts';
 
 export interface HostRoutesOptions {
+  mode: Mode;
   access: Access;
   devices: Devices;
   events: Events;
@@ -66,6 +69,8 @@ export interface HostRoutesOptions {
   joinLimits: JoinLimits;
   /** See getClientKey. */
   trustedProxy?: string;
+  /** The laptop's network interfaces and default route, for GET /api/host/addresses. */
+  network: NetworkSource;
 }
 
 const deviceSchema = objectSchema({
@@ -92,7 +97,7 @@ const badRequest = errorSchema(['bad-request']);
 const tooManyTries = errorSchema(['too-many-tries']);
 
 export async function registerHostRoutes(app: FastifyInstance, options: HostRoutesOptions): Promise<void> {
-  const { access, devices, events, competition, hub, chain, now, joinLimits, onEventChanged, tags, onTagsChanged, trustedProxy } = options;
+  const { mode, access, devices, events, competition, hub, chain, now, joinLimits, onEventChanged, tags, onTagsChanged, trustedProxy, network } = options;
 
   // Wrong passwords and wrong codes per client IP, in both modes (CLAUDE.md, rule 7). An
   // attempt is reserved before the slow check and cleared when it is right, so requests
@@ -169,6 +174,35 @@ export async function registerHostRoutes(app: FastifyInstance, options: HostRout
   );
 
   // Pairing and devices -----------------------------------------------------------------
+
+  // The join address for the pairing panel on the laptop, which opens the host screen at
+  // localhost (docs/PLAN.md, "Pairing a device"). Online the server sits behind a proxy: its
+  // own addresses are no use to a TV and stay private, so the list is empty and the page keeps
+  // its own address.
+  app.get<{ Reply: HostAddressesAnswer | ApiError }>(
+    '/api/host/addresses',
+    {
+      onRequest: access.requireHost,
+      schema: {
+        response: {
+          200: objectSchema({
+            addresses: { type: 'array', items: { type: 'string' } },
+            port: { type: ['integer', 'null'] },
+          }),
+          401: notSignedIn,
+        },
+      },
+    },
+    async () => {
+      const none: HostAddressesAnswer = { addresses: [], port: null };
+      if (mode !== 'offline') return none;
+      // Null until the server listens, which only happens in tests that use inject.
+      const bound = app.server.address();
+      if (bound === null || typeof bound === 'string') return none;
+      const addresses = privateAddresses(network.interfaces(), bound.address, await network.defaultRoute());
+      return addresses.length === 0 ? none : { addresses, port: bound.port };
+    },
+  );
 
   app.post<{ Body: PairingCodeBody; Reply: PairingCodeAnswer | ApiError }>(
     '/api/pairing/codes',

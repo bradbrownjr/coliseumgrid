@@ -124,6 +124,16 @@ export interface HostSessionAnswer {
   canSetUp: boolean;
 }
 
+/**
+ * GET /api/host/addresses: the laptop's private IPv4 addresses on the venue network, the one on
+ * the default route first, and the port the server listens on. Other screens open
+ * `http://address:port`. Online, or when no address fits, `addresses` is empty and `port` null.
+ */
+export interface HostAddressesAnswer {
+  addresses: string[];
+  port: number | null;
+}
+
 /** POST /api/host/setup and POST /api/host/sign-in */
 export interface PasswordBody {
   password: string;

@@ -1,6 +1,17 @@
 import { parseJoinCode } from '@coliseumgrid/core';
 import { describe, expect, it } from 'vitest';
-import { followUrl, formatCountdown, isLoopbackHost, joinUrl, lastSeenWords, qrPath, shownAddress, tidyCodeInput } from '../src/pairing.ts';
+import {
+  followUrl,
+  formatCountdown,
+  isLoopbackHost,
+  joinUrl,
+  keepPick,
+  lastSeenWords,
+  networkAddresses,
+  qrPath,
+  shownAddress,
+  tidyCodeInput,
+} from '../src/pairing.ts';
 
 describe('code entry', () => {
   it('shows capitals with the dash after the third character', () => {
@@ -115,5 +126,28 @@ describe('the follow address', () => {
   it('is null on the machine itself, where a phone cannot follow it', () => {
     expect(followUrl({ origin: 'http://localhost:3000', hostname: 'localhost' }, 'K7M4QX')).toBeNull();
     expect(followUrl({ origin: 'http://[::1]:3000', hostname: '[::1]' }, 'K7M4QX')).toBeNull();
+  });
+});
+
+describe('the laptop\'s network addresses', () => {
+  it('turns the server\'s answer into addresses a screen can open, in its order', () => {
+    expect(networkAddresses({ addresses: ['10.0.0.5', '192.168.56.1'], port: 3000 })).toEqual(['http://10.0.0.5:3000', 'http://192.168.56.1:3000']);
+  });
+
+  it('is empty when the server names none (online)', () => {
+    expect(networkAddresses({ addresses: [], port: null })).toEqual([]);
+  });
+
+  it('gives addresses the join URL and the shown address accept', () => {
+    const [first] = networkAddresses({ addresses: ['10.0.0.5'], port: 8080 });
+    expect(joinUrl(first as string, 'K7M4QX')).toBe('http://10.0.0.5:8080/?code=K7M4QX');
+    expect(shownAddress(first as string)).toBe('http://10.0.0.5:8080');
+  });
+
+  it('keeps the address picked before while the list still has it, else takes the first', () => {
+    const choices = ['http://10.0.0.5:3000', 'http://192.168.56.1:3000'];
+    expect(keepPick('http://192.168.56.1:3000', choices)).toBe('http://192.168.56.1:3000');
+    expect(keepPick('http://localhost:3000', choices)).toBe('http://10.0.0.5:3000');
+    expect(keepPick('http://localhost:3000', [])).toBe('http://localhost:3000');
   });
 });

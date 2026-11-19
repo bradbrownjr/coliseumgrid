@@ -8,6 +8,7 @@ import type {
   EventAnswer,
   EventBody,
   EventPlan,
+  HostAddressesAnswer,
   HostSessionAnswer,
   JoinBody,
   NewEventAnswer,
@@ -33,6 +34,9 @@ export const signOutHost = () => call<void>('POST', '/api/host/sign-out');
 
 export const makePairingCode = (role: DeviceRole) =>
   call<PairingCodeAnswer>('POST', '/api/pairing/codes', { role } satisfies PairingCodeBody);
+
+/** The laptop's network addresses for the join address. Empty online. */
+export const getHostAddresses = () => call<HostAddressesAnswer>('GET', '/api/host/addresses');
 
 export const listDevices = () => call<DevicesAnswer>('GET', '/api/devices');
 

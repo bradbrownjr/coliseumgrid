@@ -2,7 +2,7 @@
 // types, building the join address, and the words for time. No React in here, so tests can
 // call them directly.
 
-import { JOIN_CODE_LENGTH, formatJoinCode } from '@coliseumgrid/core';
+import { JOIN_CODE_LENGTH, formatJoinCode, type HostAddressesAnswer } from '@coliseumgrid/core';
 import { generate } from 'lean-qr';
 import { toSvgPath } from 'lean-qr/extras/svg';
 
@@ -19,6 +19,21 @@ export function tidyCodeInput(raw: string): string {
 /** localhost and the loopback addresses only work on the machine itself. */
 export function isLoopbackHost(hostname: string): boolean {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '::1';
+}
+
+/**
+ * The addresses another screen can open, from GET /api/host/addresses: "http://10.0.0.5:3000".
+ * The server speaks plain HTTP on the venue network; HTTPS is only behind the online proxy,
+ * where the list is empty.
+ */
+export function networkAddresses(answer: HostAddressesAnswer): string[] {
+  const { port } = answer;
+  return port === null ? [] : answer.addresses.map((address) => `http://${address}:${port}`);
+}
+
+/** The address to show from a new list: the one picked before if it is still there, else the first. */
+export function keepPick(picked: string, choices: readonly string[]): string {
+  return choices.includes(picked) ? picked : (choices[0] ?? picked);
 }
 
 /**

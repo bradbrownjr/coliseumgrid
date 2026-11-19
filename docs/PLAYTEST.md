@@ -278,6 +278,12 @@ This needs the Brother QL-800 and DK-11202 labels (62 x 100 mm).
 - On the Windows laptop with no network: run the launcher. Does Windows Firewall ask, and
   do the tablets and TV connect after allowing it?
 - The same on the Fedora laptop.
+- On the laptop, open the host screen from the launcher (it opens at `localhost`) and tap
+  **Add a TV**. Type the address the panel shows into the TV's browser. Does the join screen
+  open? With the laptop on Wi-Fi and a cable at once, or with a VM or VPN adapter, is the
+  first address in the list the one the TV can reach?
+- In one browser, pair the laptop as a Display and sign in as the host in another tab, then
+  tap **Sign out** on the host tab. Does the Display tab keep updating without a reload?
 
 ### Dress rehearsal (after M10)
 
