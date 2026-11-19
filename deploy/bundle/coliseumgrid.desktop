@@ -1,0 +1,13 @@
+[Desktop Entry]
+# A menu entry for the Linux bundle. Change both paths to the folder you unpacked, then copy
+# this file to ~/.local/share/applications/ (the menu spec reads $XDG_DATA_DIRS/applications,
+# https://specifications.freedesktop.org/menu/latest/paths.html, and ~/.local/share is the
+# default $XDG_DATA_HOME). Terminal=true opens a window that shows the server's log, and Icon
+# takes an absolute path (https://specifications.freedesktop.org/desktop-entry/latest/recognized-keys.html).
+Type=Application
+Name=ColiseumGrid
+Comment=Run a game tournament
+Exec=/home/you/ColiseumGrid/coliseumgrid.sh
+Icon=/home/you/ColiseumGrid/app/packages/client/dist/icons/icon-512.png
+Terminal=true
+Categories=Game;

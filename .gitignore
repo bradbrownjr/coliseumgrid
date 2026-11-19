@@ -14,3 +14,5 @@ data/
 Thumbs.db
 *.tsbuildinfo
 .vitest/
+# The offline bundle build (tools/build-bundle.ts).
+bundle-out/

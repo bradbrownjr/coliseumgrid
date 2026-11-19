@@ -1,0 +1,113 @@
+name: Offline bundle
+
+# Builds the offline bundles (tools/build-bundle.ts; docs/DEVELOPMENT.md, "Offline bundle").
+#   pull request            builds both, smoke-tests each, uploads them as workflow artifacts
+#   push to default branch  the same
+#   push of a v* tag        the same, then creates the GitHub release with both attached
+# The repository's default branch is not necessarily called main, so the push case compares
+# the branch with github.event.repository.default_branch, as docker.yml does.
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # A push to any other branch is skipped; pull requests cover branches.
+    if: >-
+      github.event_name != 'push'
+      || github.ref_name == github.event.repository.default_branch
+      || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # The pnpm version comes from "packageManager" in package.json.
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      # Both targets build here; the bundle has no native modules. A tag names the files after
+      # itself, anything else after the commit.
+      - name: Build the bundles
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then label="$GITHUB_REF_NAME"; else label="sha-${GITHUB_SHA::7}"; fi
+          node tools/build-bundle.ts linux-x64 win-x64 --label "$label"
+      # The archives are already compressed, so the artifact zip only stores them.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bundle-linux-x64
+          path: bundle-out/ColiseumGrid-*-linux-x64.tar.gz
+          if-no-files-found: error
+          compression-level: 0
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bundle-win-x64
+          path: bundle-out/ColiseumGrid-*-win-x64.zip
+          if-no-files-found: error
+          compression-level: 0
+
+  # The Linux bundle on Fedora with no network at all: Docker's "none" network leaves the
+  # container only a loopback device (https://docs.docker.com/engine/network/drivers/none/).
+  # The repo is mounted for the check script only; the bundle runs from its own folder.
+  smoke-linux:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: bundle-linux-x64
+          path: download
+      - name: Run the bundle with no network
+        run: |
+          mkdir unpacked
+          tar -xzf download/ColiseumGrid-*-linux-x64.tar.gz -C unpacked
+          test -z "$(find unpacked -type l)"
+          docker run --rm --network none \
+            -v "$PWD/unpacked:/bundle" -v "$PWD:/repo:ro" \
+            fedora:latest \
+            /bundle/ColiseumGrid/node/node /repo/tools/bundle-smoke.ts /bundle/ColiseumGrid
+
+  # The Windows bundle, started through ColiseumGrid.cmd as a host would, with --no-browser.
+  smoke-windows:
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: bundle-win-x64
+          path: download
+      - name: Unzip and run the bundle
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem download\ColiseumGrid-*-win-x64.zip
+          Expand-Archive -Path $zip.FullName -DestinationPath unpacked
+          unpacked\ColiseumGrid\node\node.exe tools\bundle-smoke.ts unpacked\ColiseumGrid
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, smoke-linux, smoke-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: bundle-*
+          path: download
+          merge-multiple: true
+      # https://cli.github.com/manual/gh_release_create
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" download/* \
+            --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes \
+            --title "ColiseumGrid $GITHUB_REF_NAME"

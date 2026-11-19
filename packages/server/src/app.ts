@@ -131,7 +131,8 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
   );
 
   // The response schema lists each field, so a field added to the handler later can't
-  // leave the server unless it is added here too (CLAUDE.md, rule 1).
+  // leave the server unless it is added here too (CLAUDE.md, rule 1). `app` lets the offline
+  // launcher tell ColiseumGrid from another program on the same port (launch.ts).
   app.get(
     '/api/health',
     {
@@ -139,14 +140,17 @@ export async function buildApp(options: AppOptions = {}): Promise<FastifyInstanc
         response: {
           200: {
             type: 'object',
-            properties: { status: { type: 'string', enum: ['ok'] } },
-            required: ['status'],
+            properties: {
+              status: { type: 'string', enum: ['ok'] },
+              app: { type: 'string', enum: ['coliseumgrid'] },
+            },
+            required: ['status', 'app'],
             additionalProperties: false,
           },
         },
       },
     },
-    () => ({ status: 'ok' }),
+    () => ({ status: 'ok', app: 'coliseumgrid' }),
   );
 
   const hostStore = createHostStore(db, now);

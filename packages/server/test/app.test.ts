@@ -15,12 +15,13 @@ describe('without a built client', () => {
   });
   afterAll(() => app.close());
 
-  it('answers /api/health with exactly { status: "ok" }', async () => {
+  // The launcher reads `app` to tell ColiseumGrid from another program on the port.
+  it('answers /api/health with exactly { status: "ok", app: "coliseumgrid" }', async () => {
     const res = await app.inject({ url: '/api/health' });
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('application/json');
-    expect(res.json()).toEqual({ status: 'ok' });
-    expect(res.body).toBe('{"status":"ok"}');
+    expect(res.json()).toEqual({ status: 'ok', app: 'coliseumgrid' });
+    expect(res.body).toBe('{"status":"ok","app":"coliseumgrid"}');
   });
 
   it('answers an unknown /api path with a JSON 404', async () => {
@@ -86,7 +87,7 @@ describe('with a built client', () => {
 
   it('keeps /api/health working', async () => {
     const res = await app.inject({ url: '/api/health' });
-    expect(res.json()).toEqual({ status: 'ok' });
+    expect(res.json()).toEqual({ status: 'ok', app: 'coliseumgrid' });
   });
 
   it('answers an unknown /api path with a JSON 404, not the page', async () => {
