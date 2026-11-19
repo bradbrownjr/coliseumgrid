@@ -15,6 +15,7 @@
     "check:docs": "node tools/check-docs.ts",
     "check:palette": "node tools/check-palette.ts",
     "print-check": "node tools/print-check.ts",
+    "check:offline": "node tools/offline-check.ts",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm check:docs && pnpm check:palette",
     "dev": "pnpm -r --parallel --if-present dev",
     "start": "pnpm --filter @coliseumgrid/server start",

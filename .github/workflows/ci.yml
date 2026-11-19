@@ -34,3 +34,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @coliseumgrid/core exec playwright install --with-deps chromium
       - run: pnpm test:browser
+      # M9's acceptance check: the built app makes no request off the local network.
+      - run: pnpm build
+      - run: pnpm check:offline

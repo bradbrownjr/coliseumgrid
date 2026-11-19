@@ -30,6 +30,7 @@ Run `pnpm install` once first.
 | `pnpm test` | Vitest in every package (`vitest run`). In `core` it runs the `node` project only. |
 | `pnpm test:browser` | The `core` `browser` project: the handle rules and the vulgarity filter in headless Chromium. Not part of `pnpm check`; CI runs it as its own job. Once per machine, run `pnpm --filter @coliseumgrid/core exec playwright install chromium`. |
 | `pnpm print-check <folder>` | Prints name tags in headless Chromium against a production build and checks the pages and the print dialog (see "Name tags", "Checking a print"). Run `pnpm build` first. Not part of `pnpm check` or CI. |
+| `pnpm check:offline` | The offline check (see "Checking offline"). Run `pnpm build` first. Not part of `pnpm check`; CI runs it in the `browser` job. |
 | `pnpm check:docs` | The writing-rules check (see "The docs check"). Same as `node tools/check-docs.ts`. |
 | `pnpm check:palette` | The palette contrast check. Imports `packages/client/src/theme/palette.ts`; exits non-zero on any failing row (see `DESIGN.md`, "Colors"). |
 | `pnpm check` | `lint`, `typecheck`, `test`, `check:docs`, and `check:palette`, in that order, stopping at the first failure. Run it before every commit. |
@@ -495,6 +496,32 @@ The rules are in `PLAN.md` section 7. These are the facts a change has to keep.
   posts exactly the printed ids and versions, No and Escape keep the tags, the test tag never
   posts, and a PIN reset while the dialog is open leaves the new tag queued. Chrome rounds a page to whole points, so sizes agree to about
   0.2 mm, inside the 0.5 mm the roadmap allows.
+
+### Checking offline
+
+`pnpm check:offline` (`tools/offline-check.ts`) checks hard rule 3, "Offline first", against a
+production build. It needs Chromium through Playwright, like `pnpm test:browser`, and takes
+about a minute.
+
+- **Static pass.** Every absolute `http(s)` URL in `packages/client/dist` must have a host in
+  `ALLOWED_TEXT`, each with the reason it isn't a request (library error messages, XML
+  namespaces, the pairing panel's example address). A new host fails the check until it is
+  removed or explained.
+- **Browser pass.** It starts the real server in offline mode on a free port with a temporary
+  data folder and drives every route in headless Chromium: the join page, `/host` (sign-in, the
+  wizard, the pairing panel, name tags and printing, a started and a finished bracket, groups),
+  `/signup` and `/display` paired through the real API, `/follow` signed out and signed in, and
+  the redirect for an unknown path. Every request from a page, worker, or service worker, and
+  every WebSocket, is recorded. A host that isn't this machine fails the check; `data:` and
+  `blob:` are fine.
+- **No push.** Push runs only online over HTTPS, so there is no allow-list entry for it: the
+  check fails on a request for the push worker or any service worker.
+- **Tablets, TVs, and phones** use the name `lan.test`, which Chromium maps to `127.0.0.1`,
+  because the server treats a `127.0.0.1` caller as the host laptop. Chromium resolves no other
+  name, and an off-machine request is aborted, so a failing run still sends nothing out.
+- **Not reachable here.** The first-run password panel never shows on the laptop, because the
+  laptop already counts as the host; the check sets the password through the API and signs in
+  from `lan.test`.
 
 ## Layout
 
