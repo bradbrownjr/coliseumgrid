@@ -1571,9 +1571,11 @@ with no payload, to host screens only.
 
 ### Offline: portable bundle
 
-- A download for Windows x64 and Linux x64 (Fedora), built in CI and attached to each GitHub
-  release: the Node runtime, the built app, and a launcher that starts the server and opens
-  the host screen.
+- A download for Windows x64 (`.zip`) and Linux x64 (`.tar.gz`, for Fedora), built in CI and
+  attached to each GitHub release: the official Node runtime, the server and core source with
+  their production dependencies, the built client, and a start script (`ColiseumGrid.cmd` on
+  Windows, `coliseumgrid.sh` on Linux) that runs the launcher. How it is built and why it is
+  laid out that way is in `DEVELOPMENT.md`, "Offline bundle".
 - Node's single executable applications feature would make this one file, but its Node
   26.13.1 docs mark it "Active development" (checked 2026-11-18). The bundle ships the Node
   runtime beside the app until that changes.
@@ -1583,10 +1585,49 @@ with no payload, to host screens only.
 - The data lives in the user's own folder, not in the bundle, so unzipping a new version
   keeps every event: `%LOCALAPPDATA%\ColiseumGrid` on Windows and `~/.coliseumgrid` on Linux
   (Brad, 2026-11-18). The launcher sets `DATA_DIR` to it and prints the path.
-- The launcher uses port 3000, or the next free port when 3000 is taken. When ColiseumGrid is
-  already running, it opens the host screen instead of starting a second server.
-- Windows Firewall asks to allow the server on private networks the first time it runs.
+- The launcher uses port 3000, or the next free port up to 3009 when 3000 is taken, and says
+  which. When ColiseumGrid is already running on one of those ports, it opens the host screen
+  there instead of starting a second server. It tells ColiseumGrid from another program by
+  `GET /api/health`, which answers `{"status":"ok","app":"coliseumgrid"}`.
+- It runs in offline mode, opens `http://localhost:<port>/host` in the default browser, and
+  stays open showing the server's log. Closing the window or pressing Ctrl+C stops the server.
 - On Fedora, Podman can run the Docker image instead.
+
+#### What Windows shows the host
+
+- **Windows Defender Firewall.** The server listens on every address so tablets and the TV
+  can reach it, and Windows blocks incoming connections by default. The first time `node.exe`
+  listens, Windows asks whether to allow it. Microsoft's rules
+  ([Windows Firewall rules](https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/windows-firewall/rules),
+  "Applications rules", checked 2026-11-19): an administrator who allows it gets allow rules;
+  an administrator who answers No or cancels gets block rules; a user who isn't an
+  administrator gets block rules whatever they choose. Once made, the rules stay until they
+  are deleted, and a rule names the program's full path. So an adult signed in as an
+  administrator allows it once; a kid's standard account can't. Windows keeps firewall
+  settings per network profile (Domain, Private, Public; same page). Which profiles the
+  question offers, and whether a new folder for a newer bundle (a new path) asks again, are
+  not on that page (unverified; the hand test records both).
+- **Files from the internet.** Windows marks downloaded files as from the internet (the Mark
+  of the Web, a `Zone.Identifier` stream with zone 3), and Attachment Manager may warn or block
+  before opening a marked file
+  ([Attachment Manager](https://support.microsoft.com/help/883260)). Microsoft Defender
+  SmartScreen warns about a downloaded file of a dangerous type that isn't well known
+  ([SmartScreen](https://learn.microsoft.com/en-us/windows/security/operating-system-security/virus-and-threat-protection/microsoft-defender-smartscreen/)).
+  Unblocking the zip before unzipping removes its mark, so there is none to copy onto the
+  unzipped files: right-click it, **Properties**, tick **Unblock**, **OK**. PowerShell's
+  `Unblock-File` does the same
+  ([Unblock-File](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/unblock-file)).
+  Not found in Microsoft's published docs, so unverified until the hand test: that File
+  Explorer's **Extract All** copies the mark onto the unzipped files (Eric Lawrence, a
+  Microsoft program manager, says it does, on his own blog:
+  [Downloads and the Mark of the Web](https://textslashplain.com/2016/04/04/downloads-and-the-mark-of-the-web/)),
+  and which warning, if any, a marked `ColiseumGrid.cmd` brings up.
+- **Smart App Control** (Windows 11) blocks unsigned code that Microsoft's cloud service
+  can't vouch for, and lets code signed by a trusted certificate authority run
+  ([Smart App Control](https://learn.microsoft.com/en-us/windows/apps/develop/smart-app-control/overview)).
+  The bundled `node.exe` carries an Authenticode signature naming the OpenJS Foundation (the
+  signature's validity was not checked on Linux). Whether it blocks the unsigned
+  `ColiseumGrid.cmd` is not published (unverified).
 
 ### The TV
 

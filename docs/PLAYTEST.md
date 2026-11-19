@@ -275,9 +275,56 @@ This needs the Brother QL-800 and DK-11202 labels (62 x 100 mm).
 
 ### Offline bundle (after M9)
 
-- On the Windows laptop with no network: run the launcher. Does Windows Firewall ask, and
-  do the tablets and TV connect after allowing it?
-- The same on the Fedora laptop.
+Why: what Windows shows for a downloaded `ColiseumGrid.cmd`, and which network types the
+firewall question offers, aren't in Microsoft's published docs (`PLAN.md`, "What Windows
+shows the host"). CI runs both bundles, but not on a clean machine, not offline on Windows,
+and not with a browser. Download the bundles from the GitHub release first, then take the
+laptops off the internet: Wi-Fi to the travel router only, with no uplink. The tablets and
+the TV join the same router.
+
+Windows (a clean Windows 11 laptop, with an administrator account and a standard account):
+
+- Download the zip in Edge. Without unblocking it, **Extract All**, then double-click
+  `ColiseumGrid.cmd`. What appears: SmartScreen ("Windows protected your PC"), an "Open File"
+  security warning, a Smart App Control block, or nothing? Write down the exact words and
+  what it took to go on.
+- Delete the folder, right-click the zip, **Properties**, tick **Unblock**, **OK**, then
+  **Extract All** again. Does `ColiseumGrid.cmd` now start with no warning?
+- Signed in as the administrator, first run: does Windows Firewall ask about "Node.js
+  JavaScript Runtime" or `node.exe`? Which network types does it offer? Allow it. Do a tablet
+  and the TV reach the laptop's address?
+- Signed in as the standard account (on a laptop where nobody allowed it yet): what does the
+  question offer, and can the tablets connect afterwards? Microsoft says the rule is a block
+  either way.
+- Does the window print where the events are saved (`%LOCALAPPDATA%\ColiseumGrid`) and open
+  the host screen in the default browser by itself? Can the host set the password and run a
+  short event?
+- With the server running, double-click `ColiseumGrid.cmd` again. Does the second window
+  say ColiseumGrid is already running, open the same host screen, and close?
+- Close the window. Does the host screen stop answering?
+- Hold port 3000 with another program first: in a Command Prompt in the unzipped folder, run
+  `node\node.exe -e "require('http').createServer().listen(3000)"` and leave it open (a clean
+  Windows has no Python). Then start ColiseumGrid. Does it say port 3000 is in use and run
+  on 3001? Do the tablets and TV reach 3001, or does the firewall ask again?
+- Unzip a newer bundle into a different folder and start it. Is every event from before
+  still there? Does the firewall ask again for the new folder's `node.exe`?
+- Press Ctrl+C in the window. Does it stop cleanly, and is the "Terminate batch job (Y/N)?"
+  question confusing for a kid?
+
+Fedora (a clean Fedora Workstation laptop):
+
+- Unpack the `.tar.gz` in Files, then run `./coliseumgrid.sh` in a terminal. Does it print
+  `~/.coliseumgrid` and open the host screen in the default browser?
+- Does firewalld block the tablets and the TV? If so, what does it take to let them in
+  (`firewall-cmd`, or the Firewall app)?
+- Copy `coliseumgrid.desktop` to `~/.local/share/applications/`, with both paths changed to
+  the unpacked folder. Does ColiseumGrid appear in the app menu with its icon, and does it
+  open a terminal window with the log?
+- The second launch, port 3000 in use (`python3 -m http.server 3000`), and the newer bundle
+  in a different folder, as on Windows.
+
+Both laptops:
+
 - On the laptop, open the host screen from the launcher (it opens at `localhost`) and tap
   **Add a TV**. Type the address the panel shows into the TV's browser. Does the join screen
   open? With the laptop on Wi-Fi and a cable at once, or with a VM or VPN adapter, is the

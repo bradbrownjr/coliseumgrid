@@ -528,9 +528,10 @@ about a minute.
 | Path | What it holds |
 |---|---|
 | `packages/core` | `@coliseumgrid/core`: rules shared by the browser and the server (see `PLAN.md` section 9): the seeded random source, handles and the vulgarity filter, PINs, join codes, bracket seeding, the station queue, tie ranking, heats (`heats.ts`), the event plan (`event-plan.ts`), the time estimate (`estimate.ts`), the name dice word lists (`event-names.ts`), the label sizes and graphic limits (`name-tags.ts`), the image header reader (`image-info.ts`), and the API types. `test/fixtures/` holds the image files the core and server tests read, with a README saying how each was made. |
-| `packages/server` | `@coliseumgrid/server`: `src/app.ts` builds the Fastify app (`buildApp`), `src/config.ts` reads the settings, `src/main.ts` starts it, `src/database.ts` holds the schema, `src/players-routes.ts` the players API, `src/pin-hash.ts` PIN and password hashing (scrypt), `src/client-ip.ts` and `src/rate-limit.ts` the client address and the guessing limits, `src/access.ts`, `src/host-routes.ts`, `src/devices.ts`, `src/host-store.ts`, `src/events.ts` (events, their game and plan), and `src/live.ts` host sign-in, pairing, the event and plan routes, and live updates. The bracket files are `src/bracket-engine.ts` (a bracket's state and each change to it), `src/bracket-library.ts` (the only file that calls brackets-manager), `src/bracket-store.ts` (its tables), `src/bracket-routes.ts` (the bracket API), `src/write-chain.ts` (one write at a time), and `src/event-players.ts` (who is in the event). Arrivals ("They're here") are in `bracket_arrivals` and `heat_arrivals`, saved by the two stores. The group files are `src/heat-engine.ts` (a group's state and each change to it), `src/heat-store.ts` (its tables), `src/heat-routes.ts` (the groups API), and `src/competition.ts` (one competition per event, for brackets and groups, and the kept answer the phones read). The phone files are `src/phone-routes.ts`, `src/phones.ts`, `src/follow-codes.ts`, `src/pin-guard.ts` (the one PIN check), `src/push-notify.ts`, `src/push-subscriptions.ts`, `src/web-push.ts` (the sender on `node:crypto`), and `src/vapid-keys.ts`. The name tag files are `src/name-tag-routes.ts` (the graphic and tags routes), `src/tag-queue.ts` (the print queue), and `src/tag-pin-wipe.ts` (the 12-hour PIN wipe); the graphic's columns are in `src/events.ts`. |
+| `packages/server` | `@coliseumgrid/server`: `src/app.ts` builds the Fastify app (`buildApp`), `src/config.ts` reads the settings, `src/main.ts` starts it, `src/database.ts` holds the schema, `src/players-routes.ts` the players API, `src/pin-hash.ts` PIN and password hashing (scrypt), `src/client-ip.ts` and `src/rate-limit.ts` the client address and the guessing limits, `src/access.ts`, `src/host-routes.ts`, `src/devices.ts`, `src/host-store.ts`, `src/events.ts` (events, their game and plan), and `src/live.ts` host sign-in, pairing, the event and plan routes, and live updates. The bracket files are `src/bracket-engine.ts` (a bracket's state and each change to it), `src/bracket-library.ts` (the only file that calls brackets-manager), `src/bracket-store.ts` (its tables), `src/bracket-routes.ts` (the bracket API), `src/write-chain.ts` (one write at a time), and `src/event-players.ts` (who is in the event). Arrivals ("They're here") are in `bracket_arrivals` and `heat_arrivals`, saved by the two stores. The group files are `src/heat-engine.ts` (a group's state and each change to it), `src/heat-store.ts` (its tables), `src/heat-routes.ts` (the groups API), and `src/competition.ts` (one competition per event, for brackets and groups, and the kept answer the phones read). The phone files are `src/phone-routes.ts`, `src/phones.ts`, `src/follow-codes.ts`, `src/pin-guard.ts` (the one PIN check), `src/push-notify.ts`, `src/push-subscriptions.ts`, `src/web-push.ts` (the sender on `node:crypto`), and `src/vapid-keys.ts`. The offline launcher is `src/launcher.ts`, with its decisions in `src/launch.ts` (see "Offline bundle"). The name tag files are `src/name-tag-routes.ts` (the graphic and tags routes), `src/tag-queue.ts` (the print queue), and `src/tag-pin-wipe.ts` (the 12-hour PIN wipe); the graphic's columns are in `src/events.ts`. |
 | `packages/client` | `@coliseumgrid/client`: Vite, React, and MUI. `src/theme/` holds the palette and the theme, `src/pages/` the Host (`/host`), Sign-up (`/signup`), and Display (`/display`) screens, `src/components/` shared pieces (`useNow.ts` is the timer hook, counting in the server's time), `src/api/` the calls (`bracket.ts` for brackets, `heats.ts` for groups, `clock.ts` the offset between this device's clock and the server's, read from the `now` in each answer), `src/pages/host/SetupWizard.tsx` the setup wizard (its steps are in `WizardSteps.tsx`, its words and small calculations in `wizardWords.ts`), `src/pages/host/planSaves.ts` the queue that saves the wizard's plan one change after another, `src/noShow.ts` when a station's wait is over and the call line, `src/random.ts` the page's random source for the name dice, `src/pages/host/` and `src/pages/display/` the bracket and group pieces of the Host and the TV, `src/heatsWords.ts` and `src/handles.ts` the words and handle lists both screens read, `test/` the Vitest tests. `src/pages/phone/` the player page at `/follow` (cards, alerts, the push control and its client), `src/worker/` the push service worker (checked by `tsconfig.worker.json`), `public/icons/` the Home Screen icons, `vite.push-assets.ts` the plugin that builds the worker and the manifest. `/` is the join screen and `/host` is the host's entry; an unknown path goes to `/`. |
-| `tools/` | Scripts run by hand or in CI, type-checked by `tools/tsconfig.json`. `make-icons.ts` makes the Home Screen icons (see "Phones and push"). |
+| `tools/` | Scripts run by hand or in CI, type-checked by `tools/tsconfig.json`. `make-icons.ts` makes the Home Screen icons (see "Phones and push"). `build-bundle.ts` builds the offline bundle and `bundle-smoke.ts` checks one (see "Offline bundle"). |
+| `deploy/` | `unraid/coliseumgrid.xml`, the Unraid template (see "Docker"), and `bundle/`, the offline bundle's start scripts and Linux menu entry (see "Offline bundle"). |
 | `docs/` | The docs listed in `DOC-STYLE.md`, "Where things go". |
 
 ## TypeScript
@@ -624,7 +625,7 @@ The image starts in online mode, which stops at startup without a host password,
 database and the uploaded graphics, so mount a volume there.
 
 `.github/workflows/docker.yml` is the Docker check. It builds the image, runs it, waits for
-`/api/health` to return `{"status":"ok"}`, and fetches `/` to confirm it is the client's
+`/api/health` to return `"status":"ok"`, and fetches `/` to confirm it is the client's
 HTML. Only then, and only on the default branch, does it push
 `ghcr.io/bradbrownjr/coliseumgrid:edge` and a `sha-` tag. Pull requests build and test
 without pushing. The dev box has no Docker, so this CI job is the only place the image runs.
@@ -644,6 +645,143 @@ front of plain HTTP works.
 
 The Dockerfile installs pnpm with `npm install --global pnpm@<version>`, because Node 26 has
 no corepack. Keep that version in step with `packageManager` in `package.json`.
+
+## Offline bundle
+
+The offline download for Windows x64 and Linux x64 (`PLAN.md` section 8, "Offline: portable
+bundle"). Built by `tools/build-bundle.ts`, checked by `tools/bundle-smoke.ts`, and built,
+checked, and released in CI by `.github/workflows/bundle.yml`.
+
+```sh
+pnpm build
+node tools/build-bundle.ts linux-x64 win-x64            # bundle-out/ColiseumGrid-dev-<target>.*
+node tools/build-bundle.ts win-x64 --label v0.9.0       # bundle-out/ColiseumGrid-v0.9.0-win-x64.zip
+```
+
+Options: `--label` (the file name part, default `dev`), `--node <version>` (default: the
+newest release matching `.nvmrc`), `--out <folder>` (default `bundle-out/`, which git
+ignores), `--cache <folder>` (default `~/.cache/coliseumgrid/node`, outside the repo so every
+worktree shares it). It needs `pnpm`, `tar` with `xz`, `zip`, and `unzip`. Both targets build
+on Linux.
+
+### What is in it
+
+```text
+ColiseumGrid/
+  ColiseumGrid.cmd                  Windows: starts the launcher (CRLF line endings)
+  coliseumgrid.sh, .desktop         Linux: starts the launcher; a menu entry to copy and edit
+  LICENSE                           ColiseumGrid's
+  node/node.exe or node/node        Node, with node/LICENSE
+  app/node_modules/                 the server's production dependencies, flat, no symlinks
+  app/packages/core/src/            core's source, run by type stripping
+  app/packages/server/src/          the server's source and the launcher
+  app/packages/client/dist/         the built client
+```
+
+The `app/` folder is the same for both targets; only `node/` and the start scripts differ.
+Sizes on 2026-11-19 with Node 26.13.1: the Windows zip 43.4 MiB, the Linux `.tar.gz` 52.5
+MiB. Node's Linux binary is 144 MB unpacked (it keeps its debug symbols), the Windows one 96
+MB, and `node_modules` 26 MB.
+
+### Node
+
+The version is the newest release matching `.nvmrc` in <https://nodejs.org/dist/index.json>,
+the same index `actions/setup-node` reads. The archive (`node-v<version>-linux-x64.tar.xz` or
+`node-v<version>-win-x64.zip`) and `SHASUMS256.txt` come from
+`https://nodejs.org/dist/v<version>/` over HTTPS, and the archive is checked against
+`SHASUMS256.txt` on every build, cached or not, as Node's README describes
+(<https://github.com/nodejs/node#verifying-binaries>). The README's further step, checking the
+PGP signature on `SHASUMS256.txt.asc` with `gpgv`, is not done. Only the Node binary and its
+`LICENSE` are kept; npm is left out.
+
+### Two facts that shape the layout
+
+- **Node won't strip types under `node_modules`.** Node's TypeScript docs: "Node.js refuses
+  to handle TypeScript files inside folders under a `node_modules` path"
+  (<https://nodejs.org/docs/latest-v26.x/api/typescript.html>), with the error
+  `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` (checked 2026-11-19 against Node 26.13.1, and
+  reproduced with a copy of core under `node_modules`). In the repo it works because
+  `node_modules/@coliseumgrid/core` is a pnpm symlink, and Node loads the real path,
+  `packages/core/src`. So core and the server stay in `packages/` in the bundle too.
+- **No symlinks.** A zip made on Linux doesn't give Windows usable symlinks, and pnpm's
+  default `isolated` node_modules is made of them. pnpm's `nodeLinker: hoisted` makes "a flat
+  `node_modules` without symlinks", like npm's (<https://pnpm.io/settings/node-modules#nodelinker>).
+
+The route: `build-bundle.ts` copies the workspace's `package.json` files, the lockfile, and
+the core and server source into a staging folder and runs `pnpm install --frozen-lockfile
+--prod --filter "@coliseumgrid/server..." --config.node-linker=hoisted` there, as the Dockerfile
+installs production dependencies. Even hoisted, pnpm links the workspace packages
+(`node_modules/@coliseumgrid/*`) and the command shims (`.bin`), so the script deletes those
+and pnpm's bookkeeping files, then fails if any symlink is left anywhere in the bundle. It
+also fails if a dependency declares `os` or `cpu` in its `package.json`, since that package
+would be installed for the build machine only.
+
+With the workspace link gone, `@coliseumgrid/core` resolves through a resolve hook that
+`launcher.ts` registers with `module.registerHooks` before it imports `main.ts`. The hook
+sends that one specifier to `packages/core/src/index.ts`, the file the symlink reaches in the
+repo, so it changes nothing there. `module.registerHooks` is "Release candidate" in the Node
+26.13.1 docs; the older `module.register` is deprecated
+(<https://nodejs.org/docs/latest-v26.x/api/module.html#moduleregisterhooksoptions>, checked
+2026-11-19). The server and its tests import core as before; only a process started through
+the launcher needs the hook. No bundler or compile step was needed.
+
+### The launcher
+
+`packages/server/src/launcher.ts` runs the server in its own process, so the window shows the
+server's log, and Ctrl+C or closing the window stops it (`main.ts` closes the server on
+SIGINT). Steps: set the data folder (`dataDirFor` in `launch.ts`) and create it; probe ports
+3000 to 3009 with `GET /api/health`; open the host screen on a port that answers with
+`"app":"coliseumgrid"` and exit; otherwise take the first port where nothing answers and a
+test listen on `HOST` (default `0.0.0.0`) succeeds, which catches a program bound to only one
+address; set `PORT`, `DATA_DIR`, and `CLIENT_DIST`; register the hook; import `main.ts`; wait
+for `/api/health`; open `http://localhost:<port>/host`. It never sets `COLISEUMGRID_MODE`, so
+it runs offline.
+
+- `--no-browser` skips opening the browser. CI and `bundle-smoke.ts` use it.
+- The browser opens with `cmd.exe /d /c start "" <url>` on Windows (`start` takes the first
+  quoted argument as the window title) and `xdg-open <url>` on Linux. The sources are in
+  `launch.ts`.
+- `/api/health` answers `{"status":"ok","app":"coliseumgrid"}`. `app` was added for the
+  launcher; an older ColiseumGrid without it counts as another program.
+- `packages/server/test/launch.test.ts` covers the data folder per platform, the port choice,
+  the health check, and the browser command.
+
+From the repo, `node packages/server/src/launcher.ts --no-browser` runs it against
+`packages/client/dist` and your real data folder.
+
+### Checking a bundle
+
+`node tools/bundle-smoke.ts <unpacked ColiseumGrid folder>` runs the folder's start script
+with `--no-browser`, then checks that `/api/health` is ColiseumGrid's, that `/` is the
+client's page, that the printed data folder holds the database, and that a second launch finds
+the first and exits 0. `--node <binary>` runs that binary on `app/packages/server/src/launcher.ts`
+instead, which is what the start scripts do. It uses the real per-user data folder, so set
+`HOME` to a scratch folder on a machine you use. Unpack bundles outside the repo: inside it,
+Node's module lookup would climb into the repo's `node_modules` and hide a missing
+dependency.
+
+Checked on the dev box on 2026-11-19 (`$S` is a scratch folder, `$R` the repo):
+
+```sh
+# The Linux bundle through coliseumgrid.sh, in a new network namespace with only loopback.
+unshare -rn sh -c "ip link set lo up; HOME=$S/home $S/linux/ColiseumGrid/node/node \
+  $R/tools/bundle-smoke.ts $S/linux/ColiseumGrid"
+# The Windows zip's app tree, run by Linux's Node the way ColiseumGrid.cmd runs node.exe.
+unshare -rn sh -c "ip link set lo up; HOME=$S/home $S/linux/ColiseumGrid/node/node \
+  $R/tools/bundle-smoke.ts $S/win/ColiseumGrid --node $S/linux/ColiseumGrid/node/node"
+```
+
+`find <unpacked folder> -type l` finds nothing in either bundle.
+
+### CI
+
+`bundle.yml` runs on pull requests, pushes to the default branch, and `v*` tags. `build`
+builds both bundles (named `sha-<short sha>`, or the tag) and uploads each as an artifact.
+`smoke-linux` runs the Linux bundle in a `fedora:latest` container with `--network none`.
+`smoke-windows` unzips the Windows bundle on `windows-latest` with `Expand-Archive` and runs
+`bundle-smoke.ts` with the bundled `node.exe`, which starts `ColiseumGrid.cmd`. On a `v*` tag,
+`release` creates the GitHub release with `gh release create --verify-tag --generate-notes`
+and attaches both files; only that job has `contents: write`.
 
 ## Tests
 
