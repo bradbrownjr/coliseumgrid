@@ -329,6 +329,9 @@ Both laptops:
   **Add a TV**. Type the address the panel shows into the TV's browser. Does the join screen
   open? With the laptop on Wi-Fi and a cable at once, or with a VM or VPN adapter, is the
   first address in the list the one the TV can reach?
+- On the laptop, open **Sign-up** at `localhost` and sign up a player. Scan the QR code on the
+  done screen with a phone on the venue Wi-Fi. Does the player page open? Does the address
+  under the code in the phone's browser match the laptop's address from the step above?
 - In one browser, pair the laptop as a Display and sign in as the host in another tab, then
   tap **Sign out** on the host tab. Does the Display tab keep updating without a reload?
 

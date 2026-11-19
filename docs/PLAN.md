@@ -128,11 +128,15 @@ routes, so it never sees a roster (`CLAUDE.md`, rule 1). The routes are in "Phon
   code doesn't get around the limit on the other. A right code (a follow code or a pairing
   code) gives back its own try and leaves the counts of wrong ones alone. A phone that already follows 6 players gets
   409 before the code is spent, so a full phone doesn't burn a good code. The QR code holds
-  `${location.origin}/follow?code=K7M4QX`. The page uses the code at once and removes it from
+  `${origin}/follow?code=K7M4QX`, where `origin` is `location.origin`, or on the laptop at
+  `localhost` the laptop's first network address from `GET /api/host/addresses` (see "The
+  laptop's addresses"). The page uses the code at once and removes it from
   the address, like the join screen. The done screen stays up for 30 seconds when it shows the
   QR code (Brad, 2026-11-14) and 15 seconds without one, so a kid has time to scan it. There
-  is no QR code when the Sign-up page is on `localhost` or a loopback address, because a phone
-  can't reach it and the code would be spent on a dead link.
+  is no QR code when the Sign-up page is on `localhost` or a loopback address and the route
+  names no address (online, or no private address), because a phone can't reach `localhost`
+  and the code would be spent on a dead link. A paired Sign-up tablet is never on a loopback
+  host, so it keeps `location.origin` and never asks the route.
 
 **Several handles.** A phone follows up to 6 players (`PHONE_FOLLOWS_MAX`); a parent with two
 kids signs in twice, or scans two codes. "Follow another player" on the page takes a handle

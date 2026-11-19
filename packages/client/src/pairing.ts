@@ -54,11 +54,18 @@ export function joinUrl(address: string, code: string): string | null {
 
 /**
  * The address the QR code on the Sign-up done screen opens: the player page with the follow
- * code filled in (docs/PLAN.md, "Player view"). Null on `localhost` and the loopback addresses,
- * because a phone can't reach them and the code would only be spent on a dead link.
+ * code filled in (docs/PLAN.md, "Player view"). On `localhost` and the loopback addresses a
+ * phone can't reach the page's own origin, so the laptop's first network address
+ * (`laptopOrigin`, from `networkAddresses`) stands in. Null when there is none, so no QR code
+ * shows and the code is never put in front of a phone on a dead link.
  */
-export function followUrl(location: Pick<Location, 'origin' | 'hostname'>, code: string): string | null {
-  return isLoopbackHost(location.hostname) ? null : `${location.origin}/follow?code=${encodeURIComponent(code)}`;
+export function followUrl(
+  location: Pick<Location, 'origin' | 'hostname'>,
+  code: string,
+  laptopOrigin: string | null = null,
+): string | null {
+  const origin = isLoopbackHost(location.hostname) ? laptopOrigin : location.origin;
+  return origin === null ? null : `${origin}/follow?code=${encodeURIComponent(code)}`;
 }
 
 /** The address as shown, without the path a person might have typed after it. */

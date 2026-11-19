@@ -219,6 +219,10 @@ How the client talks to the server (`packages/client/src`).
   no other screen can reach that, so with each new code the panel asks `GET /api/host/addresses`
   and shows the first address (`networkAddresses` in `pairing.ts`), with a select when there
   are several. When the list is empty (online, or no network) the host types the address.
+  The Sign-up page at `localhost` is the laptop itself, so it passes `requireHost` and asks
+  the same route for its QR code (`useLaptopOrigin` in `SignupPage.tsx`, `followUrl` in
+  `pairing.ts`), once per player while the handle screen shows, and uses the first address.
+  With no address there is no QR code.
   On the server, `network-addresses.ts` finds the default route's address by calling
   `connect` on a UDP socket to 192.0.2.1 (RFC 5737, an address no host has) and reading the
   socket's local address. A UDP `connect` only records the peer and sends no packet; the

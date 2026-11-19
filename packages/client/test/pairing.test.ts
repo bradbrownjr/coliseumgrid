@@ -123,7 +123,17 @@ describe('the follow address', () => {
     expect(followUrl({ origin: 'https://grid.example.org', hostname: 'grid.example.org' }, 'K7M4QX')).toBe('https://grid.example.org/follow?code=K7M4QX');
   });
 
-  it('is null on the machine itself, where a phone cannot follow it', () => {
+  it('uses the laptop\'s first network address on the machine itself', () => {
+    const [first] = networkAddresses({ addresses: ['10.0.0.5', '192.168.56.1'], port: 3000 });
+    expect(followUrl({ origin: 'http://localhost:3000', hostname: 'localhost' }, 'K7M4QX', first as string)).toBe('http://10.0.0.5:3000/follow?code=K7M4QX');
+    expect(followUrl({ origin: 'http://127.0.0.1:3000', hostname: '127.0.0.1' }, 'K7M4QX', first as string)).toBe('http://10.0.0.5:3000/follow?code=K7M4QX');
+  });
+
+  it('keeps the page\'s own address off the machine itself, whatever the laptop address', () => {
+    expect(followUrl({ origin: 'http://10.6.26.20:8080', hostname: '10.6.26.20' }, 'K7M4QX', 'http://10.0.0.5:3000')).toBe('http://10.6.26.20:8080/follow?code=K7M4QX');
+  });
+
+  it('is null on the machine itself with no laptop address, where a phone cannot follow it', () => {
     expect(followUrl({ origin: 'http://localhost:3000', hostname: 'localhost' }, 'K7M4QX')).toBeNull();
     expect(followUrl({ origin: 'http://[::1]:3000', hostname: '[::1]' }, 'K7M4QX')).toBeNull();
   });

@@ -2,7 +2,7 @@ import type { EventInfo, FollowCode } from '@coliseumgrid/core';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { useCallback, useEffect, useState } from 'react';
-import { getEvent } from '../api/host.ts';
+import { getEvent, getHostAddresses } from '../api/host.ts';
 import { AccessGate, useGoToJoin } from '../components/AccessGate.tsx';
 import { EntryHeader } from '../components/EntryFrame.tsx';
 import { useLive } from '../components/useLive.ts';
@@ -11,7 +11,7 @@ import { DoneStep } from './signup/DoneStep.tsx';
 import { HandleStep } from './signup/HandleStep.tsx';
 import { PinStep } from './signup/PinStep.tsx';
 import { TakenStep } from './signup/TakenStep.tsx';
-import { followUrl } from '../pairing.ts';
+import { followUrl, isLoopbackHost, networkAddresses } from '../pairing.ts';
 
 type Step =
   | { name: 'handle' }
@@ -55,9 +55,29 @@ function SignupEvent() {
   );
 }
 
+/**
+ * The laptop's first network address, for the QR code when Sign-up runs on the laptop itself
+ * (`localhost`, where a phone can't follow the page's own address). Only the laptop is asked: a
+ * paired tablet is never on a loopback host and keeps `location.origin`. Asked again for each
+ * player, so a laptop that joined another network since shows the new address. Null until
+ * answered, and when the server names none (online, or no private address): then no QR code.
+ */
+function useLaptopOrigin(nextPlayer: boolean): string | null {
+  const [origin, setOrigin] = useState<string | null>(null);
+  useEffect(() => {
+    if (!nextPlayer || !isLoopbackHost(window.location.hostname)) return;
+    void getHostAddresses().then((result) => {
+      setOrigin(result.ok ? (networkAddresses(result.data)[0] ?? null) : null);
+    });
+  }, [nextPlayer]);
+  return origin;
+}
+
 /** One task per screen (docs/DESIGN.md, "Sign-up"): handle, then PIN, then done. */
 function SignupSteps() {
   const [step, setStep] = useState<Step>({ name: 'handle' });
+  // Looked up while the next player types a handle, so it is there by the done screen.
+  const laptopOrigin = useLaptopOrigin(step.name === 'handle');
   const restart = useCallback(() => setStep({ name: 'handle' }), []);
   const taken = useCallback((handle: string) => setStep({ name: 'taken', handle }), []);
   const done = useCallback(
@@ -99,7 +119,7 @@ function SignupSteps() {
         <DoneStep
           handle={step.handle}
           {...(step.pin !== undefined && { pin: step.pin })}
-          followUrl={followUrl(window.location, step.followCode.code)}
+          followUrl={followUrl(window.location, step.followCode.code, laptopOrigin)}
           onNext={restart}
         />
       );
