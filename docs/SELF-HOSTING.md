@@ -7,12 +7,48 @@ design is in [`PLAN.md`](PLAN.md) section 8; the settings are listed in
 ## Offline on a laptop
 
 Offline mode is for a venue with no internet: a laptop, a travel router, and the devices on
-its Wi-Fi. It is the default (`COLISEUMGRID_MODE=offline`).
+its Wi-Fi. The bundle is a download with its own copy of Node, so the laptop needs nothing
+installed. It is built for Windows x64 and Linux x64 (Fedora). `PLAN.md` section 8, "Offline:
+portable bundle", has the design, and `DEVELOPMENT.md`, "Offline bundle", has what is in it.
 
-The portable bundle for Windows x64 and Linux x64 is planned for M9 and isn't built yet, so
-there is no download, launcher, or release zip to describe. Its design is in `PLAN.md`
-section 8, "Offline: portable bundle". Until it exists, run from source (Node 26 or later
-and pnpm; see `DEVELOPMENT.md`, "Requirements"):
+1. **Download** `ColiseumGrid-<version>-win-x64.zip` (Windows) or
+   `ColiseumGrid-<version>-linux-x64.tar.gz` (Linux) from the project's GitHub releases
+   (names from `tools/build-bundle.ts` and `.github/workflows/bundle.yml`). Do it while you
+   have internet; the bundle itself never needs it.
+2. **Windows: unblock the zip before unzipping.** Right-click the zip, choose **Properties**,
+   tick **Unblock**, and press **OK**. Then right-click it and choose **Extract All**.
+   Windows marks downloaded files, and unblocking first leaves no mark on the unzipped
+   files. Why, and what is still unverified, is in `PLAN.md` section 8, "What Windows shows the
+   host". On Linux, unpack with `tar -xzf`.
+3. **Start it.** On Windows, open `ColiseumGrid.cmd` in the unzipped `ColiseumGrid` folder. On
+   Linux, run `./coliseumgrid.sh`; `coliseumgrid.desktop` is a menu entry to copy and edit.
+   A window opens and shows the server's log, and the host screen opens in your browser at
+   `http://localhost:<port>/host`.
+4. **Set the host password** on that first visit. Only the laptop itself can set it. From
+   any other device, the host screens ask for it (`PLAN.md` section 3, "Host sign-in").
+5. **Pair the tablets and the TV** from the host screen. It shows the laptop's address and the
+   port for them to type.
+6. **Stop it** by closing the window or pressing Ctrl+C.
+
+What the launcher does, from `PLAN.md` section 8:
+
+- **Port**: 3000, or the next free port up to 3009 if 3000 is taken. It says which.
+- **A second launch** finds the running ColiseumGrid (by `GET /api/health`) and opens its
+  host screen instead of starting another server.
+- **Data**: in your own folder, not the bundle, so unzipping a newer bundle keeps every
+  event: `%LOCALAPPDATA%\ColiseumGrid` on Windows, `~/.coliseumgrid` on Linux. The launcher
+  prints the path. See "Updating and backups" for what is inside.
+- **Firewall**: Windows blocks incoming connections by default, and tablets and the TV need to
+  reach the laptop. The first time, Windows asks whether to allow `node.exe`. An
+  administrator has to answer Yes; a standard account can't, whatever it chooses. Whether the
+  question appears again for a newer bundle in a new folder is unverified (`PLAN.md`
+  section 8). On Fedora, `firewalld` may block the port; this guide didn't check that.
+- **Phones**: a phone joins the venue Wi-Fi to reach the laptop. Over plain `http` it gets the
+  page alert only, not push or the wake lock (`PLAN.md`, section 3, "Player view").
+
+### Running from source
+
+For developers: Node 26 or later and pnpm (`DEVELOPMENT.md`, "Requirements").
 
 ```sh
 pnpm install
@@ -20,19 +56,9 @@ pnpm build
 pnpm start
 ```
 
-- **Address and port**: the server listens on every address, port 3000. Tablets, the TV, and
-  phones open `http://<the laptop's address>:3000`. The host opens `http://localhost:3000/host`
-  on the laptop itself.
-- **Host password**: the first visit to `/host` from `localhost` asks you to set it. From any
-  other device the host screens need that password (`PLAN.md`, section 3, "Host sign-in").
-  Set `COLISEUMGRID_HOST_PASSWORD` to skip first-run setup.
-- **Data**: a `data` folder under the folder you start the server from, or `DATA_DIR`. See
-  "Updating and backups" for what is in it.
-- **Firewall**: the laptop's firewall has to allow incoming connections on port 3000 from the
-  venue network, or other devices can't reach it. `PLAN.md` section 8 expects Windows
-  Firewall to ask about this on the first run.
-- **Phones**: a phone joins the venue Wi-Fi to reach the laptop. Over plain `http` it gets the
-  page alert only, not push or the wake lock (`PLAN.md`, section 3, "Player view").
+The server listens on port 3000 and keeps its data in `./data` unless `DATA_DIR` is set.
+Open `http://localhost:3000/host` on the laptop to set the host password, or set
+`COLISEUMGRID_HOST_PASSWORD` to skip that.
 
 ## Online with Docker
 
@@ -99,7 +125,7 @@ volumes:
 ```
 
 Put the password in a `.env` file beside the Compose file, not in the YAML. The image has a
-health check on `/api/health`.
+health check on `/api/health`, which answers `{"status":"ok","app":"coliseumgrid"}`.
 
 ### The data folder and its owner
 
@@ -184,7 +210,10 @@ Caddy gets the certificate for a public name itself. Checked against the
 - It passes incoming headers, `Host` included, to the backend unchanged. It changes `Host`
   on its own only for an HTTPS upstream, so keep the upstream plain HTTP, as above, and don't
   add `header_up Host`.
-- This page didn't check Caddy's default request body limit. Not verified.
+- Caddy sets no request body limit unless you add `request_body { max_size ... }`: the
+  [`request_body` docs](https://caddyserver.com/docs/caddyfile/directives/request_body) name no
+  default, and a request over a set limit gets 413. So the 2 MB picture needs no Caddy
+  setting. Don't add a `max_size` below 2 MB.
 
 ### nginx
 
@@ -227,8 +256,10 @@ Checked against the nginx docs on 2026-11-19:
   that page also shows `proxy_http_version 1.1;`, because 1.0 was the default then; add it on
   an older nginx.
 - The proxied connection closes after 60 seconds with no data unless the server sends pings
-  or `proxy_read_timeout` is raised (same page). Not verified: whether ColiseumGrid sends
-  pings. If the live screens drop when idle, raise `proxy_read_timeout`.
+  or `proxy_read_timeout` is raised (same page). ColiseumGrid pings every live connection every
+  30 seconds (`HEARTBEAT_MS` in `packages/server/src/live.ts`, which sends a WebSocket ping
+  frame), so idle screens stay under that limit and need no change. A raised
+  `proxy_read_timeout` below 30 seconds would break this.
 - `client_max_body_size` defaults to `1m` and answers 413 above it
   ([ngx_http_core_module](https://nginx.org/en/docs/http/ngx_http_core_module.html#client_max_body_size)),
   so the picture upload fails without the `2m` line.
