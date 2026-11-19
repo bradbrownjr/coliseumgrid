@@ -90,6 +90,9 @@ Tasks:
 - The join address on the laptop. The launcher opens the host screen at `localhost`, which
   a TV can't use, so for now the pairing panel asks the host to type the laptop's address.
   The server tells the host screen its network address instead.
+- The phone QR code on the laptop. When the laptop itself runs Sign-up at `localhost`, the
+  Sign-up done screen uses the laptop's network address for the phone QR code (Brad,
+  2026-11-19).
 - Host sign-out in a shared browser. When the host signs out, the server closes every live
   connection of that session, so a player page or a paired screen open in the same browser
   loses its connection too. Like a phone sign-out since M6, it takes away only the host
